@@ -1,0 +1,9 @@
+title: mndmap
+description: Published read-only views of the mndmap document ledger
+repo_url: https://github.com/kotulc/mndmap
+content: ./.publication/content
+output: ./dist/site
+toc: true
+theme:
+  color: blue
+  typeset: sans

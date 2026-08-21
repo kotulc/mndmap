@@ -1,0 +1,5 @@
+node_modules/
+dist/
+.mndmap/
+coverage/
+.publication/

@@ -1,0 +1,48 @@
+name: Verify and publish docs
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    env:
+      BASE_PATH: ${{ vars.BASE_PATH || '/mndmap' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm run publish -- --out-dir .publication
+      - name: Build mdsite
+        run: |
+          docker run --rm \
+            -e BASE_PATH \
+            -v "${{ github.workspace }}:/workspace" \
+            ghcr.io/kotulc/mdsite:latest \
+            build --config /workspace/mdsite.yaml
+      - run: npm run publish:copy -- --input .publication/mndmap --site-output dist/site
+      - run: npm run publish:verify -- --input dist/site/mndmap
+      - uses: actions/upload-pages-artifact@v3
+        if: github.event_name != 'pull_request'
+        with:
+          path: dist/site
+      - uses: actions/deploy-pages@v4
+        if: github.event_name != 'pull_request'
