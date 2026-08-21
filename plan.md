@@ -33,25 +33,43 @@ flowchart LR
 ## Structural import and inference
 
 - Parse Markdown and MDX headings, sections, tables, lists, task items, links, and frontmatter while retaining exact source locations and untouched bytes.
-- Infer only document structure:
-  - tables become collections, headers become fields, and rows become records;
-  - repeated structured lists may become collections;
-  - headings and nested sections retain hierarchy;
-  - checkboxes retain their raw checked state;
-  - frontmatter contributes fields to its document or configured record.
+- A collection is a logical ordered set of records, not a physical SQL table. It carries a stable ID, one or more source regions, a fixed source-backed field catalog, a record identity and ordering strategy, configured scratch fields, and adapter capabilities for safe write-back.
+- A Markdown table is one source representation of a collection: headers become fields, body rows become records, and cells and complete rows are safely writable.
+- Infer a list collection only when at least two sibling items share a consistent record shape and one strong structural signal exists:
+  - GFM task checkboxes;
+  - repeated labeled child fields such as `Status: queued`;
+  - repeated definition-style labels;
+  - an explicit configured selector.
+- List adapters expose reserved structural fields such as `$checked` and `$text`; the reserved namespace prevents collisions with labels written in the document.
+- Nested child lists consumed as fields of an outer record are not also inferred as collections.
+- Keep simple prose lists and medium-confidence candidates as ordinary document content, with diagnostics where useful.
+- Headings and nested sections retain hierarchy, but repeated sections do not automatically become collections in the MVP; configuration may select them explicitly.
+- Frontmatter contributes fields to its document or configured record.
 - Do not infer workflow meaning, dependency semantics, ownership semantics, state transitions, enums, or acceptance rules.
 - Treat unsupported MDX expressions and ambiguous prose as opaque content that can be read but not surgically rewritten.
 - Choose record identity in this order: configured key, explicit source ID, unique table/list value, then stable source locator. Report unstable inferred identities.
 - Allow one logical record to map to multiple source locations when configuration identifies repeated keyed representations. Diagnose conflicting source values and update all mapped locations on export.
+- Without configuration, every detected table or structured-list region is a separate collection; never merge collections across documents by similarity alone.
+
+### Inferred write capabilities
+
+- Tables support updates to existing cells, record creation, and record deletion.
+- Task lists support toggling `$checked`, replacing complete `$text`, and deleting complete items.
+- Repeated labeled-child lists support updating existing labeled values and deleting complete items.
+- Creating complex list items, adding missing child labels, or editing a substring extracted from `$text` requires explicit configuration.
+- Regex extraction may identify a list record key, but extracted substrings remain read-only unless the adapter has a configured safe rendering rule.
+- Each collection reports its supported operations and writable fields through the same query surface.
 
 ## Optional configuration
 
 `mndmap.yaml` is a partial override for ambiguities; it is not required for ordinary documents. It may define:
 
 - source include/exclude globs;
-- collection selectors;
+- collection selectors using document path, heading path, node kind, expected headers or list shape, and an optional occurrence number;
 - record identity fields;
 - preferred record ordering;
+- source-to-API field mappings and writable fields;
+- list record shapes and safe creation templates;
 - repeated source regions that represent the same logical collection;
 - generated document regions or files;
 - claim lease defaults;
@@ -71,9 +89,22 @@ collections:
   work:
     sources:
       - document: docs/plan.md
-        table_headers: [ID, Status, Waits, Owns]
-    id: ID
-    order: [ID]
+        select:
+          kind: table
+          under: [The plan]
+          headers: [ID, Status, Waits, Owns]
+        key:
+          field: ID
+        fields:
+          id:
+            column: ID
+          status:
+            column: Status
+          waits:
+            column: Waits
+          owns:
+            column: Owns
+    order: [id]
 
 claims:
   default_lease_seconds: 900
@@ -88,6 +119,18 @@ scratch_fields:
 ```
 
 Scratch aliases must not collide with source-backed field names or with one another.
+
+Configured selectors use document structure rather than line numbers. A selector that unexpectedly matches zero or multiple regions fails clearly instead of guessing. If field mappings are omitted, table headers and repeated list labels remain available under their original names.
+
+Configuration may map multiple tables or lists into one logical collection and normalize differently named source fields to stable API field IDs. Matching configured record keys then identify one logical record with multiple source locations; conflicting values are import diagnostics, never silently resolved.
+
+### Minimal source value model
+
+- Markdown table cells, list text, labeled child values, and section bodies remain Markdown strings.
+- `$checked` is the only automatically typed boolean.
+- Frontmatter retains the scalar or list structure already supplied by YAML syntax.
+- Configuration maps and aliases fields but does not assign workflow semantics or create new source fields.
+- Scratch fields remain free-form Markdown strings.
 
 ## Closed source schema and scratch fields
 
@@ -177,6 +220,8 @@ The MCP layer is a thin wrapper over the same service methods and validation as 
 
 - No YAML source-document adapter in the MVP.
 - No dynamic creation of source or scratch fields by agents.
+- No automatic collection inference for simple prose lists or repeated heading sections.
+- No automatic merging of collections across source regions.
 - No workflow/rules DSL, semantic role system, scheduler, authentication, real-time collaboration, or automatic three-way merge.
 - No semantic extraction from arbitrary prose.
 - No direct dependency on mndflow internals until it publishes stable package boundaries.
@@ -185,7 +230,7 @@ The MCP layer is a thin wrapper over the same service methods and validation as 
 ## Implementation sequence
 
 1. Bootstrap TypeScript, SQLite, tests, and configuration loading.
-2. Implement Markdown/MDX structural parsing, source maps, identity, repeated-record mapping, and conservative diagnostics.
+2. Implement Markdown/MDX structural parsing, source maps, table collections, task/repeated-label list collections, identity, adapter capabilities, and conservative diagnostics.
 3. Implement SQLite collections, records, predefined scratch fields, staged changes, and deterministic queries.
 4. Implement lease claims with expiration and fencing tokens.
 5. Implement atomic generic mutations, history, reversal, and claim enforcement.
