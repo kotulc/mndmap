@@ -1,0 +1,6 @@
+{
+  "mndflowCommit": "pinned-local",
+  "kitVersion": "0.0.0",
+  "kitPath": "../mndflow/packages/kit",
+  "mdsiteImage": "ghcr.io/kotulc/mdsite:latest"
+}

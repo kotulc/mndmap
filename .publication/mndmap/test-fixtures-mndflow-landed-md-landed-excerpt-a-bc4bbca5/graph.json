@@ -1,0 +1,49 @@
+{
+  "edges": [
+    {
+      "id": "order:**B.5 ◐**:**N.2**",
+      "kind": "order",
+      "source": "**B.5 ◐**",
+      "target": "**N.2**"
+    }
+  ],
+  "elements": [
+    {
+      "data": {
+        "claimed": false,
+        "collectionId": "test/fixtures/mndflow-landed.md#landed-excerpt-archived-table-1",
+        "scratch": {},
+        "staged": false,
+        "values": {
+          "$column1": "**B.5 ◐**",
+          "Does": "Historical containment wording",
+          "Owns": "`src/graph/`",
+          "Waits": "⊘"
+        }
+      },
+      "id": "**B.5 ◐**",
+      "kind": "record",
+      "label": "**B.5 ◐**",
+      "order": 0
+    },
+    {
+      "data": {
+        "claimed": false,
+        "collectionId": "test/fixtures/mndflow-landed.md#landed-excerpt-archived-table-1",
+        "scratch": {},
+        "staged": false,
+        "values": {
+          "$column1": "**N.2**",
+          "Does": "Move between projects",
+          "Owns": "`src/actions/`",
+          "Waits": "B.5"
+        }
+      },
+      "id": "**N.2**",
+      "kind": "record",
+      "label": "**N.2**",
+      "order": 1
+    }
+  ],
+  "id": "test/fixtures/mndflow-landed.md#landed-excerpt-archived-table-1"
+}

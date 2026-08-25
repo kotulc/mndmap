@@ -7,55 +7,60 @@ export interface SourceRange {
   column: number;
 }
 
-export interface SourceLocation {
-  document: string;
-  region: SourceRange;
-  record: SourceRange;
-  fields: Record<string, SourceRange>;
-  adapter: "table" | "task-list" | "labeled-list" | "plain-list" | "section" | "frontmatter";
-}
-
-export interface FieldDefinition {
-  id: string;
-  sourceName: string;
-  sourceBacked: boolean;
-  writable: boolean;
-  kind: "markdown" | "boolean";
-}
-
-export interface Capabilities {
-  create: boolean;
-  delete: boolean;
-  writableFields: string[];
-}
-
-export interface ParsedRecord {
-  id: string;
-  values: Record<string, FieldValue>;
-  order: number;
-  identityConfidence: "configured" | "explicit" | "unique" | "locator";
-  locations: SourceLocation[];
-}
-
-export interface ParsedCollection {
-  id: string;
-  name: string;
-  fields: FieldDefinition[];
-  records: ParsedRecord[];
-  capabilities: Capabilities;
-  sourceRegions: Array<{
-    document: string;
-    range: SourceRange;
-    generated?: { template: string; framed?: boolean };
-  }>;
-}
-
 export interface Diagnostic {
   code: string;
   severity: "info" | "warning" | "error";
   message: string;
   document?: string;
   range?: SourceRange;
+  organizationNodeId?: string;
+  sourceNodeId?: string;
+}
+
+export type SourceNodeKind =
+  | "folder"
+  | "page"
+  | "section"
+  | "table"
+  | "row"
+  | "list"
+  | "item"
+  | "term"
+  | "link";
+
+export type ResolutionState = "resolved" | "unresolved" | "missing";
+
+export interface SourceNode {
+  id: string;
+  kind: SourceNodeKind;
+  explicitKey?: string;
+  sourcePath: string;
+  sourceLocator: string;
+  contentFingerprint: string;
+  shapeFingerprint: string;
+  sourceData: Record<string, unknown>;
+  scanId: string;
+  resolution: ResolutionState;
+  candidates?: string[];
+}
+
+export type OrganizationKind = "source" | "group";
+
+export interface OrganizationNode {
+  id: string;
+  sourceNodeId: string | null;
+  kind: OrganizationKind;
+  parentId: string | null;
+  position: number;
+  title: string;
+  outputSlug: string | null;
+  diagramRoot: boolean;
+  diagramDepth: number | null;
+}
+
+export interface OrganizationSnapshot {
+  rootId: string;
+  nodes: OrganizationNode[];
 }
 
 export interface StructuralNode {
@@ -71,94 +76,99 @@ export interface ParsedDocument {
   path: string;
   content: string;
   revision: string;
-  collections: ParsedCollection[];
   structure: StructuralNode[];
   diagnostics: Diagnostic[];
   frontmatter?: unknown;
 }
 
-export interface ScratchFieldConfig {
-  id: string;
-  alias: string;
-}
-
-export interface CollectionSourceConfig {
+export interface SelectorConfig {
   document: string;
-  select: {
+  match: {
     kind: "table" | "list" | "section" | "frontmatter";
     under?: string[];
     headers?: string[];
     occurrence?: number;
   };
-  recordId?: string;
-  key?: { field: string };
+  identity?: { field: string };
   fields?: Record<string, { column?: string; label?: string; frontmatter?: string; section?: "body"; text?: boolean }>;
-}
-
-export interface CollectionConfig {
-  sources: CollectionSourceConfig[];
-  order?: string[];
-  writableFields?: string[];
-  createTemplate?: string;
-  generated?: Array<{
-    document: string;
-    template: string;
-    between?: [string, string];
-  }>;
 }
 
 export interface MndmapConfig {
   version: 1;
   sources: { include: string[]; exclude: string[] };
-  collections: Record<string, CollectionConfig>;
-  claims: { defaultLeaseSeconds: number };
-  scratchFields: ScratchFieldConfig[];
-}
-
-export interface Claim {
-  collectionId: string;
-  recordId: string;
-  ownerId: string;
-  token: number;
-  expiresAt: string;
-}
-
-export type Mutation =
-  | { type: "update"; collectionId: string; recordId: string; token: number; values: Record<string, FieldValue> }
-  | { type: "scratch"; collectionId: string; recordId: string; token: number; field: string; value: string }
-  | { type: "delete"; collectionId: string; recordId: string; token: number }
-  | { type: "create"; collectionId: string; recordId: string; values: Record<string, FieldValue> };
-
-export interface RecordView {
-  collectionId: string;
-  id: string;
-  values: Record<string, FieldValue>;
-  scratch: Record<string, string>;
-  order: number;
-  identityConfidence: ParsedRecord["identityConfidence"];
-  staged: boolean;
-  claim: Claim | null;
-}
-
-export interface ExportPatch {
-  document: string;
-  beforeRevision: string;
-  before: string;
-  after: string;
-}
-
-export interface ChangeView {
-  id: number;
-  actor: string;
-  operations: Mutation[];
-  before: unknown[];
-  after: unknown[];
-  createdAt: string;
-  reversedBy: number | null;
+  destination: string;
+  diagrams: { depth: number };
+  selectors: SelectorConfig[];
 }
 
 export interface ImportResult {
-  collections: number;
-  records: number;
+  sourceNodes: number;
+  organizationNodes: number;
   diagnostics: Diagnostic[];
+}
+
+export interface ReconciliationCandidate {
+  sourceNodeId: string;
+  priorNodeId: string;
+  reason: string;
+}
+
+export interface GraphResult {
+  graph: import("@mnd/kit").Graph;
+  tierRootId: string;
+}
+
+export interface EmitPreview {
+  files: Array<{ path: string; bytes: number }>;
+  assets: string[];
+  diagnostics: Diagnostic[];
+}
+
+export interface GroupingSuggestion {
+  id: string;
+  title: string;
+  nodeIds: string[];
+  reason: string;
+}
+
+export interface GroupingSuggester {
+  suggest(snapshot: OrganizationSnapshot, signal: AbortSignal): Promise<GroupingSuggestion[]>;
+}
+
+export interface MoveOrganizationInput {
+  id: string;
+  parentId: string;
+  position?: number;
+}
+
+export interface CreateGroupInput {
+  parentId: string;
+  title: string;
+  position?: number;
+  nodeIds?: string[];
+}
+
+export interface RenameOrganizationInput {
+  id: string;
+  title?: string;
+  outputSlug?: string | null;
+}
+
+export interface DiagramSettingsInput {
+  id: string;
+  diagramRoot?: boolean;
+  diagramDepth?: number | null;
+}
+
+export interface ResolveReconciliationInput {
+  priorNodeId: string;
+  action: "confirm" | "new" | "remove";
+  candidateId?: string;
+}
+
+export interface WorkingStoreSnapshot {
+  sourceNodes: SourceNode[];
+  organization: OrganizationSnapshot;
+  diagnostics: Diagnostic[];
+  config: MndmapConfig;
 }

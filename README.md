@@ -141,4 +141,4 @@ Ignored: `.mndmap/`, `dist/`.
 
 ## Status
 
-This README describes the end state. `translator.md` holds the staged plan to reach it, what each stage ends with, and what is being retired along the way.
+The translator migration described in `plan.md` is implemented. `archive.md` is historical ledger documentation only.

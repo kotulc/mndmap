@@ -2,60 +2,47 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { App } from "../src/ui/App.js";
-import type { DashboardApi } from "../src/ui/api.js";
 
-describe("dashboard", () => {
-  it("shows ordered records and saves open_field through shared operations", async () => {
-    const apply = vi.fn(async () => 8);
-    const api: DashboardApi = {
-      collections: async () => [{
-        id: "work",
-        name: "Work",
-        fields: [{ id: "Title", sourceName: "Title", sourceBacked: true, writable: true, kind: "markdown" }],
-        capabilities: { create: true, delete: true, writableFields: ["Title"] },
-        sourceRegions: [],
-        scratchFields: [{ id: "open_field", alias: "implementation_plan" }],
-      }],
-      records: async () => [{
-        collectionId: "work",
-        id: "A",
-        values: { Title: "First" },
-        scratch: { implementation_plan: "Initial note" },
-        order: 0,
-        identityConfidence: "unique",
-        staged: true,
-        claim: { collectionId: "work", recordId: "A", ownerId: "dashboard", token: 4, expiresAt: "2099-01-01T00:00:00.000Z" },
-      }],
-      changes: async () => [{
-        id: 7, actor: "agent", operations: [], before: [], after: [],
-        createdAt: "2026-08-21T00:00:00.000Z", reversedBy: null,
-      }],
-      claim: vi.fn(),
-      release: vi.fn(),
-      apply,
-      previewExport: async () => { throw new Error("work.md changed since import"); },
-      applyExport: vi.fn(),
+vi.mock("@mnd/kit/react", () => ({
+  Explorer: () => <div data-testid="explorer" />,
+  Viewer: () => <div data-testid="viewer" />,
+}));
+
+import { App } from "../src/ui/App.js";
+import type { EditorApi } from "../src/ui/api.js";
+import type { Graph } from "@mnd/kit";
+
+const graph = {
+  root: "ws",
+  defs: {},
+  blocks: {
+    ws: { id: "ws", parent: null, label: "workspace", type: "folder" },
+    block_docs: { id: "block_docs", parent: "ws", label: "docs", type: "doc.set", num: 1 },
+  },
+  edges: {},
+} satisfies Graph;
+
+describe("editor ui", () => {
+  it("loads graph and triggers rescan", async () => {
+    const rescan = vi.fn(async () => ({}));
+    const api: EditorApi = {
+      import: vi.fn(async () => ({})),
+      rescan,
+      organization: async () => ({ rootId: "org_root", nodes: [] }),
+      graph: async () => graph,
+      diagnostics: async () => [],
+      moveOrganization: vi.fn(),
+      createGroup: vi.fn(),
+      renameOrganization: vi.fn(),
+      setDiagramSettings: vi.fn(),
+      resolveReconciliation: vi.fn(),
+      emitPreview: vi.fn(),
+      emit: vi.fn(),
     };
 
     render(<App api={api} />);
-    const user = userEvent.setup();
-    expect((await screen.findAllByText("First")).length).toBe(2);
-    expect(screen.getByText("Pending changes")).toBeTruthy();
-    const scratch = screen.getByLabelText("implementation_plan");
-    await user.clear(scratch);
-    await user.type(scratch, "Implementation notes");
-    await user.click(screen.getByRole("button", { name: "Save implementation_plan" }));
-    await waitFor(() => expect(apply).toHaveBeenCalledWith("dashboard", [{
-      type: "scratch",
-      collectionId: "work",
-      recordId: "A",
-      token: 4,
-      field: "open_field",
-      value: "Implementation notes",
-    }]));
-
-    await user.click(screen.getByRole("button", { name: "Preview export" }));
-    expect(await screen.findByText(/Export conflict: work\.md changed since import/)).toBeTruthy();
+    await waitFor(() => expect(screen.getByTestId("explorer")).toBeTruthy());
+    await userEvent.click(screen.getByRole("button", { name: "Rescan" }));
+    await waitFor(() => expect(rescan).toHaveBeenCalled());
   });
 });

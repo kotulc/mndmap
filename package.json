@@ -1,7 +1,7 @@
 {
   "name": "mndmap",
   "version": "1.0.0",
-  "description": "A markdown powered project management dashboard and visualization engine.",
+  "description": "A live editor for how a documentation site is organized.",
   "type": "module",
   "files": [
     "dist/src"
@@ -12,23 +12,16 @@
   "exports": "./dist/src/index.js",
   "types": "./dist/src/index.d.ts",
   "bin": {
-    "mndmap": "./dist/src/cli.js",
-    "mndmap-mcp": "./dist/src/mcp.js"
+    "mndmap": "./dist/src/cli.js"
   },
   "scripts": {
     "build": "npm run build:core && npm run build:ui",
     "build:core": "tsc -p tsconfig.json",
-    "build:ui": "vite build && npm run build:embed",
-    "build:embed": "vite build --config vite.publish.config.ts",
+    "build:ui": "vite build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run test",
     "ui": "vite",
-    "cli": "tsx src/cli.ts",
-    "serve": "tsx src/cli.ts serve",
-    "mcp": "tsx src/mcp.ts",
-    "publish": "npm run build:core && npm run build:embed && node scripts/publish.mjs build",
-    "publish:verify": "node scripts/publish.mjs verify",
-    "publish:copy": "node scripts/publish.mjs copy"
+    "cli": "tsx src/cli.ts"
   },
   "repository": {
     "type": "git",
@@ -42,8 +35,7 @@
   },
   "homepage": "https://github.com/kotulc/mndmap#readme",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.30.0",
-    "@xyflow/react": "^12.11.3",
+    "@mnd/kit": "file:../mndflow/packages/kit",
     "fast-glob": "^3.3.3",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",

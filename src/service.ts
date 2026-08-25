@@ -1,17 +1,25 @@
 import { mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { loadConfig } from "./config.js";
-import { Exporter } from "./exporter.js";
+import { emitApply, emitPreview, reportAbandonedStaging } from "./emit/index.js";
+import { graphFile, checkVocabulary } from "./graph/builder.js";
 import { parseWorkspace } from "./parser.js";
-import { LedgerState, type RecordQuery } from "./state.js";
-import type { ChangeView, ExportPatch, ImportResult, MndmapConfig, Mutation } from "./types.js";
+import type {
+  CreateGroupInput,
+  DiagramSettingsInput,
+  ImportResult,
+  MoveOrganizationInput,
+  RenameOrganizationInput,
+  ResolveReconciliationInput,
+} from "./types.js";
+import { WorkingStore } from "./working-store.js";
 
 export class Mndmap {
-  readonly exporter: Exporter;
-
-  private constructor(readonly root: string, readonly config: MndmapConfig, readonly state: LedgerState) {
-    this.exporter = new Exporter(root, state, config);
-  }
+  private constructor(
+    readonly root: string,
+    readonly config: Awaited<ReturnType<typeof loadConfig>>,
+    readonly store: WorkingStore,
+  ) {}
 
   static async open(root: string, options: { memory?: boolean; configFile?: string } = {}): Promise<Mndmap> {
     const absoluteRoot = resolve(root);
@@ -22,39 +30,48 @@ export class Mndmap {
       await mkdir(stateDir, { recursive: true });
       database = join(stateDir, "state.sqlite");
     }
-    return new Mndmap(absoluteRoot, config, new LedgerState(database));
+    const service = new Mndmap(absoluteRoot, config, new WorkingStore(database));
+    await reportAbandonedStaging(service.store);
+    return service;
   }
 
   async import(): Promise<ImportResult> {
-    this.state.importDocuments(await parseWorkspace(this.root, this.config), this.config);
-    return {
-      collections: this.collections().length,
-      records: this.collections().reduce((count, collection) => count + this.records(collection.id).length, 0),
-      diagnostics: this.diagnostics(),
-    };
+    const documents = await parseWorkspace(this.root, this.config);
+    return this.store.importScan(documents, this.config);
   }
 
-  collections(): any[] { return this.state.listCollections(); }
-  records(collectionId: string, query?: RecordQuery) { return this.state.listRecords(collectionId, query); }
-  record(collectionId: string, recordId: string) { return this.state.getRecord(collectionId, recordId); }
-
-  claim(ownerId: string, refs: Array<{ collectionId: string; recordId: string }>, leaseSeconds = this.config.claims.defaultLeaseSeconds) {
-    return this.state.claim(ownerId, refs, leaseSeconds);
+  async rescan(): Promise<ImportResult> {
+    const documents = await parseWorkspace(this.root, this.config);
+    return this.store.rescan(documents, this.config);
   }
 
-  renew(ownerId: string, claims: Array<{ collectionId: string; recordId: string; token: number }>, leaseSeconds = this.config.claims.defaultLeaseSeconds) {
-    return this.state.renew(ownerId, claims, leaseSeconds);
+  organization() { return this.store.organizationSnapshot(); }
+  sourceNodes() { return this.store.listSourceNodes(); }
+  diagnostics() { return this.store.diagnostics(); }
+
+  moveOrganization(input: MoveOrganizationInput) { return this.store.moveOrganization(input); }
+  createGroup(input: CreateGroupInput) { return this.store.createGroup(input); }
+  renameOrganization(input: RenameOrganizationInput) { return this.store.renameOrganization(input); }
+  setDiagramSettings(input: DiagramSettingsInput) { return this.store.setDiagramSettings(input); }
+  resolveReconciliation(input: ResolveReconciliationInput) { return this.store.resolveReconciliation(input); }
+
+  snapshot() { return this.store.snapshot(this.config); }
+
+  graphJson(workspaceId = "mndmap") {
+    return graphFile(this.snapshot(), workspaceId);
   }
 
-  release(ownerId: string, claims: Array<{ collectionId: string; recordId: string; token: number }>) {
-    return this.state.release(ownerId, claims);
+  vocabCheck() { return checkVocabulary(this.snapshot()); }
+
+  async emitPreview() {
+    const documents = new Map(this.store.sourceDocuments().map((doc) => [doc.path, doc.content]));
+    return emitPreview(this.snapshot(), documents);
   }
 
-  apply(actor: string, operations: Mutation[]): number { return this.state.apply(actor, operations); }
-  reverse(historyId: number, actor: string, tokens: Record<string, number>): number { return this.state.reverse(historyId, actor, tokens); }
-  pendingChanges(): ChangeView[] { return this.state.pendingHistory(); }
-  diagnostics() { return this.state.diagnostics(); }
-  exportPreview(forceClaims = false): Promise<ExportPatch[]> { return this.exporter.preview({ forceClaims }); }
-  exportApply(forceClaims = false): Promise<ExportPatch[]> { return this.exporter.apply({ forceClaims }); }
-  close(): void { this.state.close(); }
+  async emit() {
+    const documents = new Map(this.store.sourceDocuments().map((doc) => [doc.path, doc.content]));
+    return emitApply(this.root, this.store, this.snapshot(), documents);
+  }
+
+  close(): void { this.store.close(); }
 }
