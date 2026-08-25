@@ -1,368 +1,144 @@
 # mndmap
-A markdown powered project management dashboard and visualization engine.
 
-mndmap turns the tables and structured lists in `.md` and `.mdx` files into a local, queryable document ledger. Humans and agents can inspect records, temporarily claim them, stage safe edits, and explicitly export those edits back to the original Markdown.
+**A live editor for how a documentation site is organized.**
 
-Markdown remains the durable source of truth. Claims, scratch notes, and pending edits live in `.mndmap/state.sqlite`; mndmap never commits to Git or silently overwrites source changes.
+Point mndmap at a directory of markdown. It parses every document into a working store, shows you the collection as a tree you can reorganize, draws the resulting structure as a diagram while you work, and writes out a new collection of documents — diagrams embedded, and wired for navigation.
 
-## What you should know
+The markdown you point it at is never modified. What comes out is a second collection, ready to publish.
 
-- Markdown tables are inferred as collections automatically.
-- GFM task lists and lists with repeated labeled children may also become collections. Plain prose lists remain prose.
-- Inference is structural, not semantic: mndmap does not decide what `Status`, `Waits`, or `Owns` mean.
-- Agents claim records through expiring leases. Claims coordinate writes; they are not authentication.
-- Every collection has a SQLite-only `open_field` scratch field. Scratch content is never exported to Markdown.
-- Source-backed edits are staged until an explicit export.
-- Export previews the exact affected documents and rejects files changed since import.
-- Agents cannot create new source fields or Markdown table columns.
-- YAML is used only for optional `mndmap.yaml` configuration and Markdown frontmatter.
-- Run one mndmap service per workspace. Do not share the SQLite file over a network filesystem.
+## The loop
 
-## Requirements
-
-- Node.js 22.5 or newer
-- npm
-- Git for reviewing and committing exported document changes
-- Docker only when building the optional mdsite publication locally
-
-Node may print an experimental SQLite warning. mndmap currently uses the SQLite API included with Node 22.
-
-## Setup
-
-```sh
-git clone https://github.com/kotulc/mndmap.git
-cd mndmap
-npm install
-npm test
-npm run build
+```
+docs/**/*.{md,mdx}
+        │
+     parse ──▶ working store ──┬──▶ tree        reorganize files and sections
+        │                      └──▶ diagram     redrawn as you go
+        │                                │
+        │                          taggly suggests groupings
+        │                                │
+        └────────────────── emit ────────┴──▶  dist/
+                                               documents + folders, diagrams embedded
+                                                        │
+                                                     mdsite ──▶ published site
 ```
 
-For development, invoke the CLI with:
+**One target in, a different target out.** mndmap never writes into the directory it reads, so there is no feedback loop and nothing to keep in sync. Your source stays exactly as you left it.
 
-```sh
-npm run cli -- <command>
-```
+## Why
 
-After installing or linking the package, use `mndmap <command>` directly. The examples below use the shorter installed command; replace `mndmap` with `npm run cli --` when running from this checkout.
+Markdown is the right place to write documentation and the wrong place to decide how a site is *shaped*. Structure ends up encoded in folder names and heading depth, where changing it means moving files by hand and fixing every link that pointed at them. Nobody does that twice, so the shape a site gets on day one is the shape it keeps.
+
+mndmap makes the shape a thing you edit directly, see immediately, and regenerate cheaply. Reorganizing is dragging a section; the diagram redraws, the links follow, and the published site reflects it on the next build.
+
+**The goal state:** you are configuring what the published site looks like, live, and can restructure a collection to suit in the time it takes to think of the change.
+
+## What you get
+
+| | |
+|---|---|
+| **A tree** | every document and section in the collection, reorganizable by drag |
+| **A diagram** | the structure as a mndflow block diagram, redrawn on every edit |
+| **Suggestions** | taggly proposes groupings and abstractions over what you have; accept or ignore |
+| **A collection out** | documents and folders, mirroring into site page structure directly |
+| **Navigable diagrams** | every box links to the page and heading it came from |
 
 ## Quick start
 
-Import a workspace containing Markdown:
+```sh
+npm install
+npm run ui -- --root /path/to/project
+```
+
+mndmap scans `docs/` recursively for `.md` and `.mdx`, builds the working store under `.mndmap/`, and opens the editor. Reorganize, then write the collection out:
 
 ```sh
-mndmap import --root /path/to/project
+npm run cli -- emit --root /path/to/project
 ```
 
-This scans `**/*.md` and `**/*.mdx` by default, creates `.mndmap/state.sqlite`, and reports imported collection and record counts plus any inference diagnostics.
-
-Inspect the result:
+Headless verbs, for a pipeline or a check:
 
 ```sh
-mndmap list collections --root /path/to/project
-mndmap list records COLLECTION_ID --root /path/to/project
-mndmap list records COLLECTION_ID --sort Status --filter Status=queued --root /path/to/project
-mndmap list record COLLECTION_ID RECORD_ID --root /path/to/project
+mndmap import          # scan and parse into the working store
+mndmap graph           # print the block tree, or write the mndflow file
+mndmap emit            # write the document collection to the destination
+mndmap vocab --check   # validate the definitions mndmap ships
 ```
 
-Collection and record IDs are returned by the preceding list commands. Records with a configured or explicit key retain that key; otherwise mndmap derives an identity and reports when it depends on source position.
+## Configuration
 
-## Claim and update a record
-
-Claims use an opaque owner ID chosen by the caller. A batch claim grants every available record and reports the denied subset:
-
-```sh
-mndmap claim --owner agent-1 --lease 900 COLLECTION/RECORD COLLECTION/ANOTHER_RECORD
-```
-
-Each granted claim includes a fencing `token`. Include the current token when renewing, releasing, or updating that record:
-
-```sh
-mndmap renew --owner agent-1 COLLECTION/RECORD/TOKEN
-mndmap release --owner agent-1 COLLECTION/RECORD/TOKEN
-```
-
-Claims expire automatically. A stale token cannot update a record after its lease expires or another caller reclaims it.
-
-### Use the private scratch field
-
-Write an implementation plan or working notes without changing the source document:
-
-```json
-[
-  {
-    "type": "scratch",
-    "collectionId": "work",
-    "recordId": "B.6a",
-    "token": 184,
-    "field": "open_field",
-    "value": "Plan:\n- Update the parser\n- Add export coverage"
-  }
-]
-```
-
-Save this as `operations.json`, then apply it:
-
-```sh
-mndmap apply --actor agent-1 --file operations.json --root /path/to/project
-```
-
-Scratch fields persist across service restarts but remain local to `.mndmap/state.sqlite`. They are not included in exported documents or Git history.
-
-### Stage a source-backed edit
-
-Use field IDs returned by `list collections`:
-
-```json
-[
-  {
-    "type": "update",
-    "collectionId": "work",
-    "recordId": "B.6a",
-    "token": 184,
-    "values": {
-      "status": "landed"
-    }
-  }
-]
-```
-
-Apply the operation in the same way:
-
-```sh
-mndmap apply --actor agent-1 --file operations.json --root /path/to/project
-mndmap changes --root /path/to/project
-```
-
-An operation list is atomic: every operation is applied to SQLite or none are. Updates and deletes require current claim tokens. Creating a record requires a unique caller-supplied ID and a collection adapter that supports creation.
-
-## Export staged changes
-
-Release active claims, preview the complete document patches, then export:
-
-```sh
-mndmap release --owner agent-1 COLLECTION/RECORD/TOKEN --root /path/to/project
-mndmap export --preview --root /path/to/project
-mndmap export --root /path/to/project
-git diff
-```
-
-Export checks every affected source revision before writing. If a document changed after import, mndmap refuses the export rather than overwriting it. Export also refuses while claims remain active; `--force` is available for administrative recovery and invalidates stale claims.
-
-Successful export writes the smallest supported source regions, re-imports the documents as the new baseline, and marks the staged changes complete. Git remains responsible for review, history, merging, and commits.
-
-## Dashboard
-
-During development, start the local API and Vite UI in separate terminals:
-
-```sh
-npm run serve -- --root /path/to/project
-npm run ui
-```
-
-The REST service listens on `http://127.0.0.1:7341`; Vite proxies dashboard `/api` requests to it.
-
-For a production build:
-
-```sh
-npm run build
-npm run serve -- --root /path/to/project --static dist/ui
-```
-
-The dashboard provides collection navigation, ordered table and graph views, record details, claims, scratch editing, pending changes, and export previews. The REST server binds to loopback by default and has no authentication; do not expose it publicly.
-
-## Agent and MCP usage
-
-The stdio MCP server exposes the same service operations as the CLI and REST API:
-
-- `list_collections`
-- `list_records`
-- `get_record`
-- `claim_records`
-- `renew_claims`
-- `release_claims`
-- `apply_changes`
-- `list_changes`
-- `preview_export`
-- `apply_export`
-
-Start it from this checkout:
-
-```sh
-npm run mcp -- --root /path/to/project
-```
-
-Or configure an MCP client to launch the built entry point:
-
-```json
-{
-  "mcpServers": {
-    "mndmap": {
-      "command": "node",
-      "args": [
-        "/path/to/mndmap/dist/src/mcp.js",
-        "--root",
-        "/path/to/project"
-      ]
-    }
-  }
-}
-```
-
-Run `mndmap import` before connecting MCP for the first time. Owner IDs are caller-provided coordination labels, not security identities.
-
-## REST API
-
-Start the service:
-
-```sh
-mndmap serve --root /path/to/project
-```
-
-The minimal JSON API includes:
-
-```text
-GET  /health
-POST /import
-GET  /collections
-GET  /collections/:collection/records
-GET  /collections/:collection/records/:record
-POST /claims
-POST /claims/renew
-POST /claims/release
-POST /apply
-GET  /changes
-POST /export/preview
-POST /export/apply
-```
-
-Dashboard requests may use the same routes under `/api`. Record-list queries support `sort`, `direction`, `search`, `claimed`, and `filter.FIELD=value`.
-
-## Optional configuration
-
-Configuration is unnecessary for ordinary Markdown tables and strongly structured lists. Add `mndmap.yaml` at the workspace root when inference needs help, fields need stable API aliases, repeated source regions represent the same logical records, or scratch fields need different names.
+`mndmap.yaml` is optional. Ordinary markdown needs none.
 
 ```yaml
 version: 1
 
 sources:
   include: docs/**/*.{md,mdx}
-  exclude:
-    - docs/generated/**
+  exclude: docs/generated/**
 
-collections:
-  work:
-    sources:
-      - document: docs/plan.md
-        select:
-          kind: table
-          under: [The plan]
-          headers: [ID, Status, Does]
-        key:
-          field: ID
-        fields:
-          id:
-            column: ID
-          status:
-            column: Status
-          description:
-            column: Does
-    order: [id]
-    writable_fields: [status, description]
+destination: dist
 
-claims:
-  default_lease_seconds: 900
-
-scratch_fields:
-  default:
-    alias: implementation_plan
-  additional:
-    - id: review_notes
-      alias: review_notes
+diagrams:
+  depth: 3          # '#', '##', '###' — deeper headings fold in as fields
 ```
 
-Supported configured selectors are `table`, `list`, `section`, and `frontmatter`. Selectors use document paths, heading paths, headers, and optional occurrence numbers rather than unstable line numbers. A selector that unexpectedly matches zero or multiple regions reports an error instead of guessing.
+**A diagram goes three levels deep by default.** Folders, pages and sections at `#`, `##` and `###` become blocks; anything deeper folds into the third level as fields, so a layer stays readable and a drawing stays the size of a page. Overridable per node.
 
-Configuration may also provide list `create_template` values and generated document projections. It maps existing source structures; it does not permit agents to create source fields dynamically.
+Selectors for ambiguous structure — which tables and lists are records, and what identifies a row — use document paths, heading paths and headers rather than line numbers. A selector matching zero or several regions reports an error instead of guessing.
 
-## Inference and write boundaries
+## What is stored, and where
 
-- Every Markdown table is inferred as a separate collection unless configuration maps source regions together.
-- Task lists expose `$checked` and `$text`.
-- Lists with repeated labeled child values expose those existing labels as fields.
-- Plain lists and repeated sections require configuration before they become collections.
-- Tables support cell updates and normally support record creation/deletion.
-- Task and labeled lists support only edits the adapter can preserve safely. Complex creation requires a configured template.
-- Unsupported MDX expressions are retained as opaque content.
-- If the same configured logical record appears in several locations, export updates its mapped occurrences and reports conflicting imported values.
+| | Lives in | Rebuilt from |
+|---|---|---|
+| parsed documents, sections, tables, items | `.mndmap/` | `docs/`, in seconds |
+| **the organization** — tree shape, grouping, order, what becomes a diagram | `.mndmap/` | **nothing. This is your work** |
+| the emitted collection | `dist/` | the two above |
 
-## Publishing
+**The working store is local and not committed.** mndmap is a personal tool: a fresh clone re-organizes from scratch, and CI is not expected to reproduce a layout. What gets committed is what you publish.
 
-Generate deterministic graph JSON, SVG snapshots, a read-only React embed, and mdsite content:
+## How it fits with mndflow and mdsite
 
-```sh
-npm run publish -- --root /path/to/project --out-dir .publication
-npm run publish:verify -- --input .publication/mndmap
-```
+**[mndflow](https://github.com/kotulc/mndflow) — the diagram.** mndmap is a *translator*: an external project that builds a mndflow graph and renders it through `@mnd/kit`, mndflow's one supported surface. mndmap owns parsing, identity and organization; mndflow owns the block model, layout, projection and every renderer.
 
-Build the configured mdsite output with Docker:
+The graph is **derived and ephemeral** — built from the working store on demand, drawn, thrown away. Nothing about it is stored and nothing is hand-placed, which is why steering a diagram is reorganizing the tree rather than dragging a box. mndmap uses `Explorer` for the tree, `Viewer` for the live preview, and `draw_svg` for what ships.
 
-```sh
-docker run --rm \
-  -e BASE_PATH=/mndmap \
-  -v "$PWD:/workspace" \
-  ghcr.io/kotulc/mdsite:latest \
-  build --config /workspace/mdsite.yaml
-```
+**[mdsite](https://github.com/kotulc/mdsite) — the site.** mndmap emits a collection of documents and folders that mirrors directly into site page structure, as mdsite already works. It also writes `compose:` frontmatter, so a page's body can be assembled from page, topic and tag lists rather than being only its own markdown.
 
-Copy the interactive artifacts into the generated site:
+**One way out, and it never writes back.** mndmap reads markdown and emits artifacts. It never edits a mndflow model and never edits your source.
 
-```sh
-npm run publish:copy -- --input .publication/mndmap --site-output dist/site
-npm run publish:verify -- --input dist/site/mndmap
-```
+## Goals
 
-The included `.github/workflows/docs.yml` tests and builds the project, runs mdsite, and deploys `dist/site` to GitHub Pages on pushes to `main`. Enable Pages with GitHub Actions as its source. Set the optional `BASE_PATH` repository Actions variable when the site is not hosted at `/mndmap`.
+- **Restructuring a documentation collection is a live gesture**, not a refactor.
+- **The source is never touched.** Read one target, write another.
+- **The translation is generic** — any collection of `.md` or `.mdx`, no vocabulary assumed.
+- **Structure is inferred, meaning is not.** mndmap does not decide what `Status` or `Owns` mean.
+- **Diagrams are navigation**, not decoration: every box links back to its heading.
+- **Suggestions assist, never decide.** taggly proposes; a person accepts.
+- **Published docs carry the current structure**, regenerated on every build.
+
+## Non-goals
+
+- Not a workflow engine, a scheduler, or a replacement for git.
+- **Not a multi-agent ledger.** Claims, leases, scratch fields and staged record edits were an earlier direction and are retired.
+- Not a markdown editor — write your documents wherever you write them.
+- Not a mndflow client. It builds graphs; it never opens a workspace or writes a log.
+
+## Requirements
+
+- Node.js 22.5 or newer — the working store uses Node's built-in SQLite
+- npm
+- Docker only for building the mdsite output locally
+- taggly is optional; without it, grouping suggestions are simply absent
 
 ## Development
 
 ```sh
 npm test
 npm run typecheck
-npm run build:core
-npm run build:ui
 npm run build
 ```
 
-Generated and local state directories are ignored:
+Ignored: `.mndmap/`, `dist/`.
 
-```text
-.mndmap/
-.publication/
-dist/
-```
+## Status
 
-## Dependencies
-This project is building off two existing projects:
-System modeling visualization tool - https://github.com/kotulc/mndflow
-Markdown website publication engine - https://github.com/kotulc/mdsite
-
-The idea is to leverage the reactflow diagram "views" of mndflow for visualization (as well as its overall look and feel) and extend that to this tool. Both tools should "speak" the same language (though mndflow is still actively moving) and leverage this project as one of many extensions that the final mndflow tool can leverage.
-
-mdsite can be used for publishing the documentation and can be leveraged as a github workflow ci/cd step. Ideally the published documentation from this tool will contain diagram SVG exports that reflect the current state of the working project.
-
-## Problem Statement
-Managing multi-agent workflows or teams working collaboratively on a living project is tedious and fragile. Project documents used for planning and tracking implementation become bloated and unmaintainable. Documents acting as "truth" often get overwritten or missed entirely. 
-
-## Proposed Solution
-This tool does not define agentic workflows or re-invent git, instead it leverages existing tools and project documents and translates these documents into managable parallel write-safe queriable data objects presented in a simple general and unified dashboard, whose interface surface is defined by API, whose content is maintained in a standard database format and then whose state is presented in published documentation as living embedded dynamic diagram artifacts.
-
-## Goals
-- Generalize to requirement/specification/project tasking tracking and management cases
-- Automate document to query-able data source and interface surface translation
-- Visualize the data and interface surfaces via a simple and elegent modern dashboard (use the mndflow themes)
-- Provide/embed dynamic react components in published docs that reflect the structure and state of those docs 
-- Published static docs use the mdsite theme, present doc/project state in a flow diagram svg
-- Translation process is generic and repeatable for any collection of source .md or .mdx documents
-- Translator works in both directions: parses source documents, writes document revisions in a safe manner
-- Agent-first interface surface for agent tool to query/update owned project items in a parellel work environment
-- Stretch goal: Translator may be leveraged by mndflow to generate block structure projects directly from docs
+This README describes the end state. `translator.md` holds the staged plan to reach it, what each stage ends with, and what is being retired along the way.
