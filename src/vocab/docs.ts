@@ -49,7 +49,8 @@ export const DOC_VOCABULARY: Definition[] = [
     extends: "structure",
     fields: [{ name: "headers", form: "text" }, { name: "source", form: "link" }],
     components: {
-      block: { module: "structure", view: "table" },
+      block: { module: "structure" },
+      view: { module: "table" },
       constraints: { required: ["source"] },
     },
   },

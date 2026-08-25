@@ -17,7 +17,9 @@ const defaultIo: CliIo = {
 };
 
 export async function runCli(argv = process.argv.slice(2), io: CliIo = defaultIo): Promise<void> {
-  const args = [...argv];
+  // npm 10+ requires a second `--` before option-like script arguments.
+  // Treat that forwarding delimiter as transport syntax, not a CLI argument.
+  const args = argv.filter((argument) => argument !== "--");
   if (args.includes("--help") || args.includes("-h") || args.length === 0) {
     io.stdout.write(help);
     return;

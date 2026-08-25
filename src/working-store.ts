@@ -133,29 +133,38 @@ export class WorkingStore {
       const node = this.requireOrganizationNode(input.id);
       const parent = this.requireOrganizationNode(input.parentId);
       this.assertValidMove(node, parent);
+      const oldParentId = node.parentId;
       const siblings = this.listOrganizationNodes().filter((entry) => entry.parentId === input.parentId && entry.id !== input.id);
-      const position = input.position ?? siblings.length;
+      const position = Math.min(input.position ?? siblings.length, siblings.length);
       this.db.prepare("UPDATE organization_nodes SET parent_id=?, position=? WHERE id=?").run(input.parentId, position, input.id);
       this.normalizeSiblingPositions(input.parentId);
+      if (oldParentId && oldParentId !== input.parentId) this.normalizeSiblingPositions(oldParentId);
       return this.listOrganizationNodes();
     });
   }
 
   createGroup(input: CreateGroupInput): OrganizationNode[] {
     return this.transaction(() => {
-      this.requireOrganizationNode(input.parentId);
-      const id = stableId("org", ["group", input.parentId, input.title, String(Date.now())]);
+      const parent = this.requireOrganizationNode(input.parentId);
+      if (!input.title.trim()) throw new Error("A group requires a title");
+      const id = stableId("org", ["group", randomUUID()]);
       const siblings = this.listOrganizationNodes().filter((entry) => entry.parentId === input.parentId);
-      const position = input.position ?? siblings.length;
+      const position = Math.min(input.position ?? siblings.length, siblings.length);
       this.db.prepare(`INSERT INTO organization_nodes
         (id, source_node_id, kind, parent_id, position, title, output_slug, diagram_root, diagram_depth)
         VALUES (?, NULL, 'group', ?, ?, ?, NULL, 0, NULL)`)
-        .run(id, input.parentId, position, input.title);
+        .run(id, input.parentId, position, input.title.trim());
       if (input.nodeIds?.length) {
+        const moved = input.nodeIds.map((nodeId) => this.requireOrganizationNode(nodeId));
+        const oldParents = new Set(moved.map((node) => node.parentId).filter((value): value is string => Boolean(value)));
+        for (const node of moved) this.assertValidMove(node, this.requireOrganizationNode(id));
         for (const [index, nodeId] of input.nodeIds.entries()) {
           this.db.prepare("UPDATE organization_nodes SET parent_id=?, position=? WHERE id=?").run(id, index, nodeId);
         }
         this.normalizeSiblingPositions(id);
+        for (const oldParentId of oldParents) {
+          if (oldParentId !== id) this.normalizeSiblingPositions(oldParentId);
+        }
       }
       this.normalizeSiblingPositions(input.parentId);
       return this.listOrganizationNodes();
@@ -171,7 +180,7 @@ export class WorkingStore {
       if (input.outputSlug !== undefined) {
         this.db.prepare("UPDATE organization_nodes SET output_slug=? WHERE id=?").run(input.outputSlug, input.id);
       }
-      if (input.outputSlug) this.assertUniqueOutputSlug(input.outputSlug, node.id);
+      if (input.outputSlug) this.assertUniqueOutputSlug(input.outputSlug, node.id, node.parentId);
       return this.listOrganizationNodes();
     });
   }
@@ -306,13 +315,21 @@ export class WorkingStore {
 
       const pageSections = sections
         .filter((section) => section.sourcePath === page.sourcePath)
-        .sort((left, right) => String(left.sourceLocator).localeCompare(String(right.sourceLocator)));
-      for (const [index, section] of pageSections.entries()) {
+        .sort((left, right) => Number((left.sourceData.range as any)?.start ?? 0) - Number((right.sourceData.range as any)?.start ?? 0));
+      const sectionOrgByPath = new Map<string, string>();
+      for (const section of pageSections) {
+        const headingPath = Array.isArray(section.sourceData.headingPath)
+          ? section.sourceData.headingPath.map(String)
+          : [];
+        const parentHeadingPath = headingPath.slice(0, -1).join("/");
+        const sectionParentId = sectionOrgByPath.get(parentHeadingPath) ?? id;
         const sectionOrgId = stableId("org", ["source", section.id]);
+        const sectionPosition = this.listOrganizationNodes().filter((node) => node.parentId === sectionParentId).length;
         this.db.prepare(`INSERT INTO organization_nodes
           (id, source_node_id, kind, parent_id, position, title, output_slug, diagram_root, diagram_depth)
           VALUES (?, ?, 'source', ?, ?, ?, NULL, 0, NULL)`)
-          .run(sectionOrgId, section.id, id, index, String(section.sourceData.title));
+          .run(sectionOrgId, section.id, sectionParentId, sectionPosition, String(section.sourceData.title));
+        sectionOrgByPath.set(headingPath.join("/"), sectionOrgId);
       }
     }
   }
@@ -349,6 +366,7 @@ export class WorkingStore {
   }
 
   private assertValidMove(node: OrganizationNode, parent: OrganizationNode): void {
+    if (node.parentId === null) throw new Error("The organization root cannot be moved");
     if (node.id === parent.id) throw new Error("A node cannot be moved under itself");
     let cursor: OrganizationNode | undefined = parent;
     while (cursor) {
@@ -357,8 +375,9 @@ export class WorkingStore {
     }
   }
 
-  private assertUniqueOutputSlug(slug: string, exceptId: string): void {
-    const collision = this.listOrganizationNodes().find((node) => node.outputSlug === slug && node.id !== exceptId);
+  private assertUniqueOutputSlug(slug: string, exceptId: string, parentId: string | null): void {
+    const collision = this.listOrganizationNodes().find((node) =>
+      node.parentId === parentId && node.outputSlug === slug && node.id !== exceptId);
     if (collision) throw new Error(`Output slug '${slug}' collides with ${collision.id}`);
   }
 

@@ -61,7 +61,7 @@ export function extractSourceNodes(documents: ParsedDocument[], scanId: string):
           parentKind: "page",
           siblingIndex: node.depth ?? 1,
           scanId,
-          sourceData: { depth: node.depth, headingPath: node.headingPath },
+          sourceData: { depth: node.depth, headingPath: node.headingPath, range: node.range },
         }));
       } else if (node.kind === "table") {
         tableIndex++;

@@ -1,6 +1,6 @@
-import { base_graph, ROOT, review, validate, type Block, type Graph, type Relation } from "@mnd/kit";
+import { base_graph, ROOT, review, validate, write, type Block, type Graph, type Relation } from "@mnd/kit";
 import { edgeIdFromInternal } from "../fingerprints.js";
-import { pageRoute, sectionAnchor, slugifySegment, sourceLink } from "../routes.js";
+import { pageRoute, slugifySegment, sourceLink } from "../routes.js";
 import type { MndmapConfig, OrganizationNode, SourceNode, WorkingStoreSnapshot } from "../types.js";
 import { DOC_VOCABULARY, TIER_ROOT_ID } from "../vocab/docs.js";
 
@@ -38,31 +38,40 @@ export function buildGraph(snapshot: WorkingStoreSnapshot): { graph: Graph; tier
   }
   for (const bucket of childrenByParent.values()) bucket.sort((left, right) => left.position - right.position);
 
-  const emitPathByOrg = new Map<string, string>();
-  const walk = (node: OrganizationNode, prefix: string): void => {
+  const walk = (node: OrganizationNode, prefix: string, owningPage?: string): void => {
     const segment = node.outputSlug ?? slugifySegment(node.title);
     const path = node.parentId === null ? "" : `${prefix}/${segment}`.replace(/^\//, "");
-    emitPathByOrg.set(node.id, path);
 
     if (node.kind === "group") {
       const block = orgBlock(node, "doc.set", path || "docs", snapshot.config);
       graph.blocks[block.id] = block;
-      for (const child of childrenByParent.get(node.id) ?? []) walk(child, path);
+      const landingPath = `${path ? `${path}/` : ""}index.md`;
+      for (const child of childrenByParent.get(node.id) ?? []) walk(child, path, landingPath);
       return;
     }
 
     const source = node.sourceNodeId ? sourceById.get(node.sourceNodeId) : undefined;
     if (!source) return;
-    const block = sourceBlock(node, source, path, snapshot.config, emitPathByOrg);
+    const extension = String(source.sourceData.extension ?? ".md");
+    const pagePath = source.kind === "page" ? `${path}${extension}` : owningPage;
+    const block = sourceBlock(node, source, pagePath ?? `${path}${extension}`, snapshot.config);
     graph.blocks[block.id] = block;
 
     for (const child of childrenByParent.get(node.id) ?? []) {
-      walk(child, source.kind === "page" || source.kind === "folder" ? path : prefix);
+      if (source.kind === "folder") walk(child, path, owningPage);
+      else if (source.kind === "page") walk(child, prefix, pagePath);
+      else walk(child, prefix, pagePath);
     }
   };
 
   const root = snapshot.organization.nodes.find((node) => node.id === snapshot.organization.rootId);
-  if (root) walk(root, "");
+  if (root) {
+    walk(root, "");
+    delete graph.blocks[root.id];
+    for (const [id, child] of Object.entries(graph.blocks)) {
+      if (child.parent === root.id) graph.blocks[id] = { ...child, parent: TIER_ROOT_ID };
+    }
+  }
 
   const notes = review(graph, TIER_ROOT_ID);
   return { graph, tierRootId: TIER_ROOT_ID, notes };
@@ -91,15 +100,12 @@ function orgBlock(node: OrganizationNode, type: string, path: string, _config: M
 function sourceBlock(
   node: OrganizationNode,
   source: SourceNode,
-  path: string,
-  config: MndmapConfig,
-  emitPathByOrg: Map<string, string>,
+  emitPath: string,
+  _config: MndmapConfig,
 ): Block {
   const type = TYPE_BY_KIND[source.kind] ?? "doc.section";
   const blockId = node.id;
   const parentId = node.parentId ?? TIER_ROOT_ID;
-  const extension = String(source.sourceData.extension ?? ".md");
-  const emitPath = source.kind === "page" ? `${path}${extension}` : `${path}${extension}`;
   const heading = String(source.sourceData.title ?? node.title);
   const fields = [
     ...(source.kind === "page" ? [
@@ -125,7 +131,7 @@ function sourceBlock(
 
 export function graphFile(snapshot: WorkingStoreSnapshot, workspaceId = "mndmap"): string {
   const { graph } = buildGraph(snapshot);
-  return JSON.stringify({ schema: "2.0", id: workspaceId, graph }, null, 2);
+  return write(deterministicOrdering(graph), workspaceId).trimEnd();
 }
 
 export function deterministicOrdering(graph: Graph): Graph {

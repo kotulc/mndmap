@@ -20,7 +20,8 @@
     "build:ui": "vite build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run test",
-    "ui": "vite",
+    "preui": "npm run build",
+    "ui": "tsx src/cli.ts ui",
     "cli": "tsx src/cli.ts"
   },
   "repository": {

@@ -65,7 +65,7 @@ export class Mndmap {
 
   async emitPreview() {
     const documents = new Map(this.store.sourceDocuments().map((doc) => [doc.path, doc.content]));
-    return emitPreview(this.snapshot(), documents);
+    return emitPreview(this.snapshot(), documents, this.root);
   }
 
   async emit() {

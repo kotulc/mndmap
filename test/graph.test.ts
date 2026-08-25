@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { open } from "@mnd/kit";
 import { checkVocabulary, graphFile } from "../src/graph/builder.js";
 import { WorkingStore } from "../src/working-store.js";
 import { parseDocument } from "../src/parser.js";
@@ -20,6 +21,7 @@ describe("graph builder", () => {
     const first = graphFile(snapshot, "fixture");
     const second = graphFile(snapshot, "fixture");
     expect(first).toBe(second);
+    expect(open(first).faults).toEqual([]);
   });
 
   it("passes vocabulary validate and review for representative docs", () => {

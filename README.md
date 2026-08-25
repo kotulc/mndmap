@@ -16,7 +16,7 @@ docs/**/*.{md,mdx}
         │                                │
         │                          taggly suggests groupings
         │                                │
-        └────────────────── emit ────────┴──▶  dist/
+        └────────────────── emit ────────┴──▶  site/
                                                documents + folders, diagrams embedded
                                                         │
                                                      mdsite ──▶ published site
@@ -46,13 +46,13 @@ mndmap makes the shape a thing you edit directly, see immediately, and regenerat
 
 ```sh
 npm install
-npm run ui -- --root /path/to/project
+npm run ui -- -- --root /path/to/project
 ```
 
 mndmap scans `docs/` recursively for `.md` and `.mdx`, builds the working store under `.mndmap/`, and opens the editor. Reorganize, then write the collection out:
 
 ```sh
-npm run cli -- emit --root /path/to/project
+npm run cli -- emit -- --root /path/to/project
 ```
 
 Headless verbs, for a pipeline or a check:
@@ -91,7 +91,7 @@ Selectors for ambiguous structure — which tables and lists are records, and wh
 |---|---|---|
 | parsed documents, sections, tables, items | `.mndmap/` | `docs/`, in seconds |
 | **the organization** — tree shape, grouping, order, what becomes a diagram | `.mndmap/` | **nothing. This is your work** |
-| the emitted collection | `dist/` | the two above |
+| the emitted collection | `site/` | the two above |
 
 **The working store is local and not committed.** mndmap is a personal tool: a fresh clone re-organizes from scratch, and CI is not expected to reproduce a layout. What gets committed is what you publish.
 
@@ -141,4 +141,4 @@ Ignored: `.mndmap/`, `dist/`.
 
 ## Status
 
-The translator migration described in `plan.md` is implemented. `archive.md` is historical ledger documentation only.
+The translator migration described in `plan.md` is in progress. `archive.md` is historical ledger documentation only.

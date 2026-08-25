@@ -38,15 +38,20 @@ export async function loadConfig(root: string, file = "mndmap.yaml"): Promise<Mn
 
   const include = normalizeGlobs(raw.sources?.include, defaults.sources.include);
   const exclude = normalizeGlobs(raw.sources?.exclude, defaults.sources.exclude);
-  const builtInExclude = [".mndmap/**", "site/**", defaults.destination.replace(/\/$/, "") + "/**"];
-  const mergedExclude = [...new Set([...exclude, ...builtInExclude])];
-
   const destination = typeof raw.destination === "string" && raw.destination
     ? raw.destination.replace(/\\/g, "/").replace(/\/$/, "")
     : defaults.destination;
+  if (!destination || destination === "." || destination.startsWith("../") || destination.startsWith("/")) {
+    throw new Error("destination must be a workspace-relative directory");
+  }
+  const builtInExclude = [".mndmap/**", "site/**", `${destination}/**`];
+  const mergedExclude = [...new Set([...exclude, ...builtInExclude])];
 
-  for (const pattern of [...include, ...mergedExclude]) {
-    if (pattern.startsWith(destination) || pattern.startsWith(`.mndmap`)) continue;
+  for (const pattern of include) {
+    const root = pattern.split(/[*?[{]/, 1)[0]!.replace(/\/$/, "");
+    if (root === destination || root.startsWith(`${destination}/`) || destination.startsWith(`${root}/`)) {
+      throw new Error(`Source pattern '${pattern}' overlaps destination '${destination}'`);
+    }
   }
 
   const selectors: SelectorConfig[] = (raw.selectors ?? []).map((entry: any, index: number) => ({
