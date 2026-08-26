@@ -7,9 +7,9 @@ import type { MndmapConfig } from "../src/types.js";
 
 const config: MndmapConfig = {
   version: 1,
-  sources: { include: ["docs/**/*.md"], exclude: [] },
+  source: { root: "docs", include: ["**/*.md"], exclude: [] },
   destination: "site",
-  diagrams: { depth: 3 },
+  diagrams: { enabled: true, depth: 3 },
   selectors: [],
 };
 

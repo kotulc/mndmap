@@ -43,6 +43,11 @@ export async function runCli(argv = process.argv.slice(2), io: CliIo = defaultIo
         else io.stdout.write(`${json}\n`);
         break;
       }
+      case "build": {
+        const configFile = takeOption(args, "--config");
+        output(io, await Mndmap.build(root, configFile ? { configFile } : {}));
+        break;
+      }
       case "emit":
         output(io, await service.emit());
         break;
@@ -107,6 +112,7 @@ function output(io: CliIo, value: unknown): void {
 const help = `Usage: mndmap <command> [options]
 
 Commands:
+  build [--root PATH] [--config FILE]
   import [--root PATH]
   rescan [--root PATH]
   graph [--out FILE]

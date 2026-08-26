@@ -21,6 +21,19 @@ export class Mndmap {
     readonly store: WorkingStore,
   ) {}
 
+  static async build(root: string, options: { configFile?: string } = {}): Promise<import("./types.js").EmitPreview> {
+    const absoluteRoot = resolve(root);
+    const config = await loadConfig(absoluteRoot, options.configFile);
+    const store = new WorkingStore(":memory:");
+    const service = new Mndmap(absoluteRoot, config, store);
+    try {
+      await service.import();
+      return await service.emitStateless();
+    } finally {
+      service.close();
+    }
+  }
+
   static async open(root: string, options: { memory?: boolean; configFile?: string } = {}): Promise<Mndmap> {
     const absoluteRoot = resolve(root);
     const config = await loadConfig(absoluteRoot, options.configFile);
@@ -71,6 +84,11 @@ export class Mndmap {
   async emit() {
     const documents = new Map(this.store.sourceDocuments().map((doc) => [doc.path, doc.content]));
     return emitApply(this.root, this.store, this.snapshot(), documents);
+  }
+
+  async emitStateless() {
+    const documents = new Map(this.store.sourceDocuments().map((doc) => [doc.path, doc.content]));
+    return emitApply(this.root, this.store, this.snapshot(), documents, { ephemeral: true });
   }
 
   close(): void { this.store.close(); }

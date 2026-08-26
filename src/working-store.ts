@@ -281,7 +281,7 @@ export class WorkingStore {
     const rootId = stableId("org", ["root"]);
     this.db.prepare(`INSERT INTO organization_nodes
       (id, source_node_id, kind, parent_id, position, title, output_slug, diagram_root, diagram_depth)
-      VALUES (?, NULL, 'group', NULL, 0, 'docs', NULL, 1, ?)`)
+      VALUES (?, NULL, 'group', NULL, 0, 'docs', NULL, 0, ?)`)
       .run(rootId, config.diagrams.depth);
 
     const folders = nodes.filter((node) => node.kind === "folder");

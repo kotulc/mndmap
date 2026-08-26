@@ -108,6 +108,30 @@ describe("translator workspace", () => {
     expect(await readFile(join(root, "site/_assets/diagram.svg"), "utf8")).toContain("<svg>");
   });
 
+  it("writes mdsite.yaml with nav_order and fill-only frontmatter on build", async () => {
+    const { root, service } = await fixtureWorkspace({
+      "docs/readme.md": "# Readme\n\nIntro paragraph for description.\n",
+    });
+    await service.import();
+    await service.emit();
+    const config = await readFile(join(root, "site/mdsite.yaml"), "utf8");
+    expect(config).toContain("nav_order:");
+    expect(config).toContain("content: .");
+    const page = await readFile(join(root, "site/docs/readme.md"), "utf8");
+    expect(page).toContain("reading_time:");
+    expect(page).toContain("description:");
+    expect(page).not.toContain("compose:");
+  });
+
+  it("stateless build leaves no .mndmap directory", async () => {
+    const root = await mkdtemp(join(tmpdir(), "mndmap-build-"));
+    await mkdir(join(root, "docs"), { recursive: true });
+    await writeFile(join(root, "docs/a.md"), "# A\n\nBuild test.\n", "utf8");
+    await Mndmap.build(root);
+    expect(await readFile(join(root, "site/docs/a.md"), "utf8")).toContain("# A");
+    await expect(access(join(root, ".mndmap"))).rejects.toThrow();
+  });
+
   it("preserves the previous destination when planning fails", async () => {
     const { root, service } = await fixtureWorkspace({
       "docs/a.md": "# A\n\n![missing](./missing.png)\n",

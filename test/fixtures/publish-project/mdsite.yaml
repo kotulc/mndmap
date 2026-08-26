@@ -1,0 +1,9 @@
+title: Publish fixture
+description: Cross-project mdsite handoff test
+repo_url: https://github.com/kotulc/mndmap
+content: .
+output: ./dist
+toc: true
+theme:
+  color: blue
+  typeset: sans

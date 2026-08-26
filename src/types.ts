@@ -95,9 +95,10 @@ export interface SelectorConfig {
 
 export interface MndmapConfig {
   version: 1;
-  sources: { include: string[]; exclude: string[] };
+  source: { root: string; include: string[]; exclude: string[] };
   destination: string;
-  diagrams: { depth: number };
+  diagrams: { enabled: boolean; depth: number };
+  mdsite?: { config?: string };
   selectors: SelectorConfig[];
 }
 

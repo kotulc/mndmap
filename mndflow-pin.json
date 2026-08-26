@@ -1,6 +1,6 @@
 {
   "mndflowCommit": "488ae5c8a70a05b6e857a0895f23603b2de8dc9f",
   "kitVersion": "0.0.0",
-  "kitPath": "../mndflow/packages/kit",
-  "mdsiteImage": "ghcr.io/kotulc/mdsite:latest"
+  "mdsiteBranch": "simplify-mdsite",
+  "mdsiteImage": "ghcr.io/kotulc/mdsite:simplify-mdsite"
 }
