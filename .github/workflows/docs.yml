@@ -38,8 +38,8 @@ jobs:
       - run: npm run build:core
       - name: Emit publish fixture
         run: node dist/src/cli.js build --root test/fixtures/publish-project
-      - name: Install mdsite dependencies
-        run: npm ci
+      - name: Apply simplify-mdsite M1 ingest patch
+        run: git apply ../test/fixtures/mdsite-m1.patch
         working-directory: mdsite
       - name: Build static site from mndmap destination
         run: node scripts/cli.js build --config ../test/fixtures/publish-project/site/mdsite.yaml

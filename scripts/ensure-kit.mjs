@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Ensures @mnd/kit is available from the pinned mndflow commit.
- * Used on clean checkouts where no sibling mndflow repository exists.
+ * Rebuilds and repacks when the pin changes; the packed tarball is committed for CI.
  */
 import { access, mkdir } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
@@ -45,7 +45,6 @@ if (!(await exists(join(VENDOR, ".git")))) {
 
 run("npm", ["ci"], VENDOR);
 run("npm", ["run", "build", "-w", "@mnd/kit"], VENDOR);
-
 run("npm", ["pack", "--pack-destination", join(ROOT, "vendor")], KIT_DIR);
 
 if (!(await exists(KIT_PACK)) || !(await exists(KIT_DIST))) {
