@@ -47,7 +47,7 @@ async function route(service: Mndmap, request: IncomingMessage, response: Server
   if (method === "POST" && url.pathname === "/import") return send(response, 200, await service.import());
   if (method === "POST" && url.pathname === "/rescan") return send(response, 200, await service.rescan());
   if (method === "GET" && url.pathname === "/organization") return send(response, 200, service.organization());
-  if (method === "GET" && url.pathname === "/graph") return send(response, 200, JSON.parse(service.graphJson()));
+  if (method === "GET" && url.pathname === "/graph") return send(response, 200, service.graph());
   if (method === "GET" && url.pathname === "/diagnostics") return send(response, 200, service.diagnostics());
   if (method === "POST" && url.pathname === "/emit/preview") return send(response, 200, await service.emitPreview());
   if (method === "POST" && url.pathname === "/emit") return send(response, 200, await service.emit());

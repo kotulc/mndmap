@@ -61,6 +61,10 @@ export class Mndmap {
     return graphFile(this.snapshot(), workspaceId);
   }
 
+  graph(workspaceId = "mndmap") {
+    return (JSON.parse(this.graphJson(workspaceId)) as { graph: unknown }).graph;
+  }
+
   vocabCheck() { return checkVocabulary(this.snapshot()); }
 
   async emitPreview() {
