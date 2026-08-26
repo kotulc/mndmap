@@ -20,7 +20,6 @@
     "build:ui": "vite build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run test",
-    "postinstall": "node scripts/ensure-kit.mjs",
     "preui": "npm run build",
     "ui": "tsx src/cli.ts ui",
     "cli": "tsx src/cli.ts"
@@ -37,7 +36,7 @@
   },
   "homepage": "https://github.com/kotulc/mndmap#readme",
   "dependencies": {
-    "@mnd/kit": "file:vendor/mnd-kit-0.0.0.tgz",
+    "@mnd/kit": "file:vendor/mnd-kit-0.1.0.tgz",
     "fast-glob": "^3.3.3",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
