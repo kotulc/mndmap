@@ -1,579 +1,563 @@
-# mndmap translator migration plan
+# mndmap enrichment pipeline plan
 
 ## Status and authority
 
-This is the implementation plan for the product described by `README.md` and
-`translator.md`.
+This is the implementation plan for mndmap.
 
-`archive.md` describes the completed ledger MVP and is retained only as history.
-Claims, leases, scratch fields, staged source edits, source write-back, the
-ledger MCP surface, and the collection dashboard are not requirements for the
-new product.
+`README.md` describes the product. `archive.md` describes the retired ledger
+product and is historical only. Where older documents disagree with this plan,
+this plan is authoritative.
 
 ## Product contract
 
-mndmap is a local editor for the organization of a documentation site.
+mndmap enriches and reshapes a Markdown or MDX collection without modifying its
+source.
 
-It:
+It supports two separate workflows:
 
-1. reads `docs/**/*.{md,mdx}`;
-2. parses documents into a working store;
-3. lets a person organize folders, pages, sections, and generated groups;
-4. derives a complete mndflow graph from that store;
-5. previews the selected graph layer with `Explorer` and `Viewer`; and
-6. emits a separate, committed document collection to `site/`.
+1. `mndmap build --config mndmap.yaml` is a stateless, reproducible pipeline.
+   It parses source into an ephemeral working store, applies configuration and
+   deterministic defaults, and atomically emits the destination.
+2. `mndmap ui --root PATH` is a persistent, user-driven workspace. It keeps
+   one-off organization and content overrides in `.mndmap/state.sqlite` and
+   emits a customized destination only when the user explicitly requests it.
 
-mndmap never modifies source documents. Emission is explicit and replaces only
-the mndmap-owned `site/` destination. Site building and deployment are outside
-this repository's CI.
+The two workflows do not share hidden authority:
 
-## Settled decisions
+- `build` does not automatically read local dashboard state.
+- dashboard decisions affect explicit workspace emits only.
+- the emitted destination is the portable handoff to mdsite.
+- neither SQLite nor an organization manifest needs to be committed.
 
-### Authority and publication
+The complete pipeline is:
 
-- Source Markdown remains authoritative for content.
-- `.mndmap/` is authoritative for local organization and is not committed.
-- `site/` is the committed publication input.
-- CI does not re-emit, build, validate, or deploy `site/`.
-- A fresh clone can read the committed site, but cannot reproduce its
-  organization from source without reorganizing it.
+```text
+configured source
+  -> parse
+  -> optional enrichment
+  -> working store
+  -> defaults or dashboard decisions
+  -> validated destination documents
+  -> mdsite
+  -> static site
+```
 
-### Source and destination
+Taggly enrichment is deferred. The initial product preserves manual metadata,
+adds deterministic `description` and `reading_time` frontmatter when absent,
+and defines the seam that a later Taggly adapter will use.
 
-- Zero-config input is `docs/**/*.{md,mdx}`.
-- Missing `docs/` is an error.
-- `.mndmap/` and `site/` are always excluded from source discovery.
-- The default destination is `site/`.
-- The destination is wholly owned by mndmap.
-- Emit builds a staged tree and atomically replaces the previous destination.
-- Any parse, identity, selector, link, vocabulary, rendering, or collision error
-  leaves the previous destination untouched.
+## Authority and immutability
 
-### Organization and identity
+- Source Markdown and MDX are authoritative for original content.
+- mndmap never writes to the configured source root.
+- Dashboard content edits are destination-only segment overrides.
+- `.mndmap/` is authoritative only for the local interactive workspace.
+- A stateless build starts from source and configuration every time.
+- The destination is wholly owned by mndmap and is replaced atomically.
+- mdsite consumes the destination and does not reorganize or semantically
+  enrich it.
 
-- Organization persistence is required before the first live UI milestone.
-- Every source-backed node receives a persisted internal ID.
-- Explicit source IDs are used when present.
-- Otherwise rescans reconcile prior IDs using path, content, and structural
-  fingerprints.
-- Reconciliation never guesses between multiple plausible matches.
-- Ambiguous matches remain unresolved until a person confirms them.
-- Unresolved identities and broken internal references block emit.
-- Generated groups also have persisted internal IDs.
-- mndflow block IDs are deterministically minted from these internal IDs.
+## Source and destination configuration
 
-### Emitted structure
+The first implementation supports one source root, include and exclude globs
+relative to that root, and one destination:
 
-- The emitted directory and document hierarchy physically matches the
-  organization tree.
-- Moving a page changes its emitted path.
-- Moving a section changes which emitted page contains that section.
-- Generated groups become folders with generated `index` pages.
-- `compose:` is used only by generated folder/group landing pages in the first
-  implementation.
-- Ordinary emitted pages remain ordinary Markdown or MDX.
-- Output path and anchor collisions require an explicit rename; silent suffixes
-  are forbidden.
+```yaml
+version: 1
 
-### Links, assets, and MDX
+source:
+  root: docs
+  include:
+    - "**/*.{md,mdx}"
+  exclude: []
 
-- Internal links are rewritten to their emitted targets.
-- Local referenced assets are copied to deterministic output locations and
-  links are rewritten.
-- MDX is preserved.
-- Static relative MDX imports and exports are rewritten when their targets move.
-- Dynamic or unresolved local references block emit.
-- Published routes and heading anchors follow a pinned mdsite contract.
-- Cross-project fixtures prove mndmap's route and slug calculations match that
-  mdsite version.
+destination: site
 
-### Diagrams and graph behavior
+diagrams:
+  enabled: true
+  depth: 3
 
-- `mndmap graph` emits one complete, deterministic site graph by default.
-- Layer selection affects projection and rendering, not graph construction.
-- The default diagram depth is three.
-- YAML supplies diagram defaults.
-- Per-node inclusion and depth overrides live in the organization store.
-- Inline SVG is emitted on generated folder/group landing pages and pages
-  explicitly marked as diagram roots.
-- Every diagram box links to the emitted page and heading represented by its
-  source field.
+mdsite:
+  config: mdsite.yaml  # optional template path
 
-### Live editor
+selectors: []
+```
 
-- The supported command is `mndmap ui --root PATH`.
-- It starts the local REST API, serves the UI, and opens the browser.
-- Source is parsed when the editor starts.
-- Source is not watched automatically.
-- A user explicitly requests a rescan after changing source files.
-- A rescan performs identity reconciliation and preserves organization.
-- Emit occurs only through an explicit UI action or `mndmap emit`.
-- The REST API remains for UI, import, rescan, organization, graph, and emit.
-- MCP and all ledger-oriented routes are removed.
+Rules:
 
-### Configuration and compatibility
+- `source.root` and `destination` are workspace-relative directories.
+- Neither canonical path may contain the other.
+- The destination and `.mndmap/` are always excluded from discovery.
+- No implementation may assume the source is named `docs` or the destination
+  is named `site`.
+- Missing source roots, empty matches, unknown keys, invalid globs, and path
+  overlap are configuration errors.
+- Selector document paths are source-root-relative.
+- mdsite configuration precedence is: explicitly configured template, then a
+  workspace-root `mdsite.yaml`, then built-in defaults.
+- mndmap preserves user mdsite identity, theme, output, and deployment fields,
+  but owns `content` and `nav_order` in the emitted copy.
+- Ledger-era keys are rejected with a reference to `archive.md`.
+- Configuration remains `version: 1`; pre-enrichment version-1 shapes are
+  incompatible and receive a clear error.
 
-- The redesigned configuration remains `version: 1`.
-- Existing selector, key, and field-mapping capabilities survive under a
-  redesigned parsing/selectors section.
-- Claims, leases, scratch fields, writable fields, creation templates, generated
-  source regions, and source write-back configuration are removed.
-- Previous database and configuration formats are unsupported.
-- An incompatible `.mndmap/state.sqlite` produces a clear error requiring the
-  user to remove it; no migration or backup is performed.
+## Stateless build
 
-### Taggly
+`mndmap build`:
 
-- The migration defines a narrow optional suggestion interface.
-- The taggly implementation is deferred until persistence and emit are stable.
-- Taggly is never required for import, organization, graphing, emit, or CI.
+1. loads and validates configuration;
+2. creates an ephemeral SQLite working store;
+3. parses every matching source document;
+4. seeds deterministic organization that mirrors source folders and pages;
+5. keeps each source section in its source page;
+6. preserves manual frontmatter and fills deterministic metadata gaps;
+7. derives and validates the complete mndflow graph;
+8. plans links, assets, output paths, anchors, landing pages, and diagrams;
+9. copies or defaults mdsite configuration and writes generated navigation;
+10. reports all blocking diagnostics together;
+11. stages the complete destination; and
+12. atomically replaces the previous destination.
+
+The same source, configuration, and dependency versions must produce
+byte-identical output.
+
+`build` succeeds without an existing `.mndmap/` directory and leaves no
+persistent working state behind.
+
+## Interactive workspace
+
+`mndmap ui --root PATH`:
+
+- loads configuration;
+- opens or creates `.mndmap/state.sqlite`;
+- parses source at startup;
+- serves the local REST API and dashboard;
+- does not watch source automatically;
+- reconciles source only after an explicit Rescan;
+- persists organization, generated groups, diagram settings, and segment
+  overrides;
+- previews output without mutating the destination; and
+- emits only after an explicit action.
+
+The workspace may also expose `mndmap emit --root PATH` as a non-interactive
+way to emit the existing local workspace. It must never be confused with
+stateless `mndmap build`.
 
 ## Working-store model
 
-SQLite remains the local working store. Derived parse data may be replaced on a
-rescan; identity and organization data may not.
+SQLite is used in both workflows:
+
+- an in-memory or temporary database for stateless build;
+- `.mndmap/state.sqlite` for the dashboard.
 
 ### Source nodes
 
 A source node represents a parsed folder, page, section, table, row, list,
 item, term, or link.
 
-Minimum persisted fields:
+Minimum semantics:
 
 ```text
 source_node
-  id                    internal stable ID
-  kind                  folder | page | section | table | row | list | item | term | link
-  explicit_key          optional author-provided identity
-  source_path           normalized source-relative path
-  source_locator        heading path or structural locator
-  content_fingerprint   normalized-content fingerprint
-  shape_fingerprint     parent/sibling/type fingerprint
-  source_data           parsed values and source locations
-  scan_id               most recent scan that observed the node
-  resolution            resolved | unresolved | missing
+  id
+  kind
+  explicit_key
+  source_path
+  source_locator
+  source_range
+  content_fingerprint
+  shape_fingerprint
+  source_data
+  scan_id
+  resolution
 ```
 
-The exact SQL shape may normalize large JSON fields, but it must preserve these
-semantics.
+Every path is normalized relative to `source.root`.
 
 ### Organization nodes
 
-An organization node either references a source node or represents a generated
-group.
+Explorer organization contains only folders, generated groups, and pages:
 
 ```text
 organization_node
-  id                    stable organization ID
-  source_node_id        nullable for generated groups
-  kind                  source | group
-  parent_id             nullable only for the single root
-  position              sibling order
-  title                 user-facing title
-  output_slug           explicit emitted path segment
-  diagram_root          boolean
-  diagram_depth         nullable per-node override
+  id
+  source_node_id
+  kind                  folder | group | page
+  parent_id
+  position
+  title
+  output_slug
+  diagram_root
+  diagram_depth
 ```
 
-### Invariants
+Sections do not appear in the Explorer projection.
 
-- There is exactly one organization root.
-- Every non-root node has exactly one parent.
-- The organization is acyclic.
-- Sibling positions are unique and contiguous after each transaction.
-- A source node appears at most once in the organization tree.
-- Generated groups may contain groups, pages, and sections.
-- Pages may contain sections and document content.
-- Sections may contain nested sections and document content.
-- Tables, rows, lists, items, terms, and links retain valid structural
-  containment.
-- A move that would create an invalid tree is rejected before mutation.
-- A path collision is represented as a blocking diagnostic, not auto-renamed.
-- Organization transactions are atomic.
+### Page composition and overrides
 
-## Rescan and reconciliation
+Sections are organized through a page-scoped segments model:
 
-Each explicit rescan runs as one transaction:
+```text
+segment_placement
+  source_node_id
+  page_organization_id
+  parent_segment_id
+  position
 
-1. Parse all configured source documents into a new scan.
-2. Match explicit IDs exactly.
-3. Match unchanged normalized paths and structural locators.
-4. Match a unique combination of content and shape fingerprints.
-5. Create IDs for genuinely new nodes.
-6. Mark unmatched prior nodes missing without deleting their organization.
-7. Record multiple plausible matches as unresolved.
-8. Commit derived parse data only after the full scan succeeds.
-
-The UI must show missing and unresolved nodes and allow the user to:
-
-- confirm a candidate match;
-- treat a candidate as a new node; or
-- remove the missing node from the organization.
-
-No unresolved or missing node may be emitted.
-
-## Configuration contract
-
-The initial target shape is:
-
-```yaml
-version: 1
-
-sources:
-  include: docs/**/*.{md,mdx}
-  exclude: []
-
-destination: site
-
-diagrams:
-  depth: 3
-
-selectors:
-  - document: docs/reference.md
-    match:
-      kind: table
-      under: [Reference, Commands]
-      headers: [Command, Description]
-    identity:
-      field: Command
-    fields:
-      command:
-        column: Command
-      description:
-        column: Description
+segment_override
+  source_node_id
+  content
+  updated_at
 ```
 
 Rules:
 
-- Built-in exclusions for `.mndmap/**` and `site/**` cannot be disabled.
-- Source and destination canonical paths must not overlap.
-- A selector must match exactly one region.
-- Zero or multiple matches are blocking diagnostics.
-- Unknown keys are errors.
-- Ledger-era keys are errors with a message that points to `archive.md`.
+- a section appears in at most one emitted page;
+- sibling positions are unique and contiguous;
+- nesting is acyclic and produces valid heading depth;
+- overrides replace only the corresponding emitted segment;
+- the original source range remains available for reconciliation;
+- deleting source never silently deletes a placement or override;
+- unresolved or missing placed segments block workspace emit.
 
-## Graph and vocabulary contract
+## Reconciliation
 
-The vocabulary is data in `src/vocab/docs.ts` and contains:
+Each dashboard rescan is one transaction:
 
-- `doc.set`
-- `doc.page`
-- `doc.section`
-- `doc.table`
-- `doc.row`
-- `doc.item`
-- `doc.term`
-- `doc.link`
+1. parse all configured source documents into a new scan;
+2. match explicit IDs exactly;
+3. match unchanged normalized path and structural locator;
+4. match a unique content and shape fingerprint;
+5. create IDs for genuinely new nodes;
+6. mark unmatched prior nodes missing;
+7. record multiple plausible matches as unresolved; and
+8. commit derived parse data only after the full scan succeeds.
+
+Reconciliation never guesses. The dashboard supports confirming a candidate,
+treating it as new, or removing a missing placement. Existing segment
+overrides follow a confirmed identity match.
+
+## Dashboard contract
+
+The dashboard has three coordinated surfaces.
+
+### Explorer
+
+Explorer displays folders, generated groups, and pages only. It supports:
+
+- move and reorder;
+- create and dissolve generated groups;
+- rename and output-slug changes;
+- folder and page selection; and
+- document-level diagram selection.
+
+Accepted intents update SQLite transactionally and immediately rebuild the
+derived graph.
+
+### Segments view
+
+Selecting a page opens its Markdown segments. The user can:
+
+- preview source section content;
+- move and reorder sections within the page;
+- move sections between pages;
+- edit destination-only segment content; and
+- see missing, unresolved, or overridden state.
+
+The first implementation does not create, delete, split, or merge sections and
+does not write back to source.
+
+### Diagram view
+
+The main panel toggles between segments and mndflow diagrams.
+
+- Document view projects the whole documentation organization.
+- Page view projects the selected page and its section structure.
+- Layer selection changes projection, not graph construction.
+- Fold and pick are view state, not persisted graph layout.
+
+The toolbar provides Rescan, Preview Emit, Emit, diagnostics, and reconciliation
+actions.
+
+## Graph and mndflow contract
+
+mndmap consumes an exact semantic version of `@mnd/kit` from the public npm
+registry. The matching mndflow commit is recorded beside the dependency for
+fixtures and debugging. A sibling checkout is never required for installation
+or CI, and projects cannot select a different kit version through
+`mndmap.yaml`.
 
 The graph builder:
 
 - is pure and synchronous;
 - accepts an immutable working-store snapshot;
-- emits the real mndflow file schema, not a local envelope;
-- includes the vocabulary on the tier root;
+- emits the real mndflow file schema;
+- includes the documentation vocabulary on the tier root;
 - produces deterministic IDs and ordering;
-- includes a `source` link on every navigable block;
-- builds the whole graph on each organization change;
-- never stores layout or projected scenes; and
+- includes a destination link on every navigable block;
+- constructs the complete graph after every accepted organization change;
+- applies global diagram depth and per-node overrides during projection;
+- stores neither layout nor projected scenes; and
 - passes `validate` and `review` before emit.
 
-`mndmap graph` writes JSON to stdout unless an output path is requested.
-Projection and SVG rendering accept a layer ID without changing the graph file.
+`mndmap graph` remains available as a diagnostic/developer command. Its output
+must pass untouched through the real mndflow open, check, review, project, and
+SVG APIs.
 
 ## Emit contract
 
-Emit is a pure read from source plus organization followed by an atomic
-destination replacement.
+### Documents and frontmatter
 
-### Planning
+- Ordinary pages remain ordinary Markdown or MDX.
+- Existing frontmatter values are preserved; mndmap does not overwrite
+  page-specific metadata already supplied by the author.
+- Missing `description` is generated from the first non-heading prose
+  paragraph, normalized and length-capped.
+- Missing `reading_time` is plain-text words divided by 200, rounded up, with a
+  minimum of one minute.
+- Tags, categories, publish dates, and related pages are preserved when present
+  but are not generated before Taggly.
+- Generated folder/group landing pages are ordinary `index.md` or `index.mdx`
+  files with title, child links, deterministic metadata, and an optional
+  diagram.
+- There is no `compose:` protocol.
 
-Before writing:
+The handoff to mdsite is frontmatter-only: no mndmap-specific database or
+required metadata sidecar accompanies the destination.
 
-1. require a fully resolved organization;
-2. derive every output path and route;
-3. detect duplicate paths, routes, and anchors;
-4. resolve and rewrite every internal Markdown link;
-5. resolve static MDX imports and exports;
-6. enumerate referenced local assets;
-7. build and validate the complete graph;
-8. run vocabulary review;
-9. render required inline SVG diagrams; and
-10. report all diagnostics together.
+### mdsite configuration
 
-Any error stops before destination mutation.
+- mndmap writes `mdsite.yaml` at the destination root.
+- It copies an explicitly configured template when present.
+- Otherwise it copies workspace-root `mdsite.yaml` when present.
+- Otherwise it starts from built-in defaults.
+- User-owned identity, theme, output, and deployment settings are preserved.
+- mndmap sets `content: .` because the config lives at the destination root and
+  replaces `nav_order` with maps derived from the physical organization and
+  sibling positions.
+- mdsite remains compatible with publication-ready Markdown not produced by
+  mndmap.
 
-### Staging
+### Structure and segments
 
-- Build under `.mndmap/emit-<unique-id>/`.
-- Write complete Markdown/MDX pages, generated group index pages, and assets.
-- Copy referenced assets beneath `_assets/` while preserving their normalized
-  path relative to `docs/`.
-- Rewrite references from emitted pages to those copied paths.
-- Preserve source content bytes where no transformation is required.
-- Preserve frontmatter except for generated navigation fields owned by mndmap.
-- Generate `compose:` only for group landing pages.
-- Render diagrams as inline SVG.
-- Validate the staged collection before replacement.
+- Emitted directories physically match the organization tree.
+- Moving a page changes its emitted path.
+- Moving a section changes the page containing its emitted content.
+- Segment ordering and destination-only overrides are applied during planning.
+- Duplicate output paths, routes, or anchors are blocking diagnostics.
+- Silent suffixes are forbidden.
 
-References outside `docs/`, dynamic MDX references, unknown URL schemes that
-require rewriting, and unresolved local targets are blocking errors unless a
-future configuration explicitly allows them.
+### Links, assets, and MDX
 
-### Replacement
+- Internal links are rewritten to emitted page and heading targets.
+- Referenced local assets are copied beneath `_assets/` while preserving paths
+  relative to `source.root`.
+- Markdown and MDX references are rewritten relative to emitted locations.
+- Static relative MDX imports and exports are rewritten when targets move.
+- Dynamic or unresolved local references block emit.
+- References escaping `source.root` block emit unless a future explicit policy
+  allows them.
 
-- Replace `site/` only after staging validates.
-- The previous `site/` remains intact on any failure.
-- A successful replacement removes stale files because the destination is
-  wholly owned.
-- Clean abandoned staging directories on the next startup after reporting
-  them.
+### Diagrams
+
+- Generated landing pages include inline SVG by default.
+- `diagrams.enabled: false` disables emitted diagrams globally.
+- Ordinary pages include inline SVG only when explicitly marked as diagram
+  roots in configuration or the dashboard.
+- Inline SVG appears after title and introductory prose and before generated
+  child links or page sections.
+- Global depth defaults to three; per-node depth overrides it.
+- Every diagram box links to the emitted page and anchor represented by its
+  source.
+- Complete mndflow graph JSON remains diagnostic output and is not included in
+  the mdsite handoff.
+
+### Atomic replacement
+
+Planning and validation finish before destination mutation. Files are written
+under `.mndmap/emit-<unique-id>/`, validated, then atomically replace the
+destination. Any failure preserves the previous destination. Successful
+replacement removes stale files.
 
 ## REST surface
 
-The local API supports only the translator:
+The local API supports only the interactive workspace:
 
 ```text
-POST /import                 initial parse
-POST /rescan                 explicit reparse and reconciliation
+POST /import
+POST /rescan
 GET  /organization
 POST /organization/move
 POST /organization/group
 POST /organization/rename
 POST /organization/diagram
+GET  /pages/:id/segments
+POST /segments/move
+POST /segments/override
 POST /reconciliation/resolve
 GET  /graph
+GET  /graph/:layer
 POST /emit/preview
 POST /emit
 GET  /diagnostics
 GET  /health
 ```
 
-Mutation payloads and response schemas are validated. Organization mutations
-are transactional. There are no claims, leases, actors, fencing tokens, scratch
-fields, staged source mutations, source patches, or MCP tools.
+Mutation payloads and responses are validated. Organization and segment
+mutations are transactional.
 
-## Implementation stages
+## Delivery stages
 
-### S0 — Pin the external seams
+### S0 — Lock external contracts
 
-Work:
+- publish and install an exact `@mnd/kit` version from public npm;
+- pin the matching mndflow commit and supported mdsite revision;
+- define frontmatter fill-only rules and mdsite configuration ownership;
+- replace legacy publication fixtures with cross-project fixtures.
 
-- package and install the real `@mnd/kit`;
-- pin the mndflow commit beside the dependency;
-- pin the supported mdsite image/version;
-- record the exact Graph, Definition, Explorer, Viewer, validation, review,
-  projection, and `draw_svg` APIs;
-- add a cross-project route and heading-anchor fixture.
+Exit: clean checkout installation works without sibling repositories, and a
+fixture graph passes real mndflow validation, review, projection, and SVG.
 
-Exit:
+### S1 — Generalize configuration and stateless build
 
-- TypeScript compiles against the real kit types.
-- A checked-in fixture graph passes untouched through mndflow check, review,
-  fold, and project commands.
-- mndmap and the pinned mdsite fixture agree on routes and anchors.
+- implement `source.root` plus relative include/exclude globs;
+- remove hardcoded `docs/` and `site/` behavior;
+- add `mndmap build`;
+- create deterministic default organization in ephemeral SQLite;
+- prove byte-identical stateless output.
 
-### S1 — Replace ledger state with the working-store foundation
+Exit: a project with non-default source and destination names builds without
+creating `.mndmap/`.
 
-Work:
+### S2 — Complete the persistent workspace model
 
-- introduce the new schema version and reject old databases;
-- persist parsed source nodes and source locations;
-- add organization tables and invariants;
-- remove claims, leases, scratch, history, pending source changes, and
-  source-write APIs;
-- remove ledger config keys;
-- keep and adapt `parser.ts`.
+- harden identity reconciliation;
+- separate Explorer organization from page segment placement;
+- persist destination-only segment overrides;
+- enforce organization and composition invariants.
 
-Exit:
+Exit: organization and overrides survive reload and representative rescans
+without modifying source.
 
-- Import creates source and organization nodes.
-- Reopening the service preserves organization.
-- No service method can modify source content.
+### S3 — Complete graph projection and diagrams
 
-### S2 — Implement identity reconciliation and organizing transactions
+- project Explorer, document, and page layers;
+- apply configured and per-node depth;
+- produce valid destination links;
+- validate and review every complete graph.
 
-Work:
+Exit: document and page projections render through `Viewer` and `draw_svg`
+with correct links and deterministic output.
 
-- implement explicit ID, locator, content, and shape matching;
-- persist unresolved and missing states;
-- add move, group, rename, order, and diagram-setting transactions;
-- add manual reconciliation resolution.
+### S4 — Complete physical emit
 
-Exit:
+- emit ordinary generated landing pages and ordered child links;
+- apply page moves, segment moves, ordering, and overrides;
+- preserve page metadata and fill missing description and reading time;
+- merge mdsite template/defaults and generate `nav_order`;
+- rewrite links, MDX references, and assets;
+- stage, validate, and atomically replace the destination.
 
-- Organization survives a rescan after representative file and heading edits.
-- Ambiguous matches never resolve automatically.
-- Invalid moves and path collisions produce diagnostics.
+Exit: source is byte-identical, failed emit preserves the prior destination,
+and all emitted references resolve.
 
-### S3 — Add the vocabulary and real graph builder
+### S5 — Build the complete dashboard
 
-Work:
+- limit Explorer to folders, groups, and pages;
+- wire all organization intents;
+- add page-scoped segments and destination-only editing;
+- add segments/diagram toggle and document/page projection;
+- add preview, diagnostics, and reconciliation workflows.
 
-- add `src/vocab/docs.ts`;
-- add `mndmap vocab --check`;
-- replace the custom record graph adapter with store-to-mndflow Graph;
-- add `mndmap graph`.
+Exit: every supported action persists and redraws without reload, and explicit
+emit produces the previewed destination.
 
-Exit:
+### S6 — Migrate mdsite
 
-- The real mndflow CLI opens untouched graph output.
-- Graph output is byte-for-byte deterministic for the same store snapshot.
-- Validation and review pass for representative Markdown and MDX.
+- remove automatic local semantic tagging and related-page scoring;
+- remove vendored model requirements;
+- consume mndmap frontmatter and generated `nav_order`;
+- avoid reorganization and semantic rewriting during ingest;
+- retain rendering, theming, static export, and deployment.
 
-### S4 — Prove physical emit end to end
+Exit: the same mndmap destination builds locally and in the mdsite container.
 
-Work:
+### S7 — Cross-project hardening and legacy retirement
 
-- implement output planning and collision detection;
-- physically emit moved pages and sections;
-- generate group folders and landing pages;
-- rewrite links, static MDX references, and copied assets;
-- render inline SVG through `draw_svg`;
-- stage and atomically replace `site/`;
-- build the staged fixture with pinned mdsite locally.
+- remove `.publication/`, ledger, MCP, and obsolete adapter artifacts;
+- remove stale local-package and custom-renderer dependencies;
+- add clean-checkout, Windows, and Linux workflow tests;
+- establish dashboard redraw budgets on a representative corpus.
 
-Exit:
+Exit: documented commands, tests, typecheck, build, and the cross-project
+fixture all pass.
 
-- Source remains byte-for-byte unchanged.
-- A moved section appears only in its new emitted page.
-- Links and diagram boxes reach the correct emitted heading.
-- Failed emit leaves the previous site unchanged.
+### After the core — optional Taggly integration
 
-### S5 — Replace the ledger UI with the persistent live surface
-
-Work:
-
-- implement `mndmap ui --root PATH`;
-- retain a translator-only local REST server;
-- replace `@xyflow/react` with `Explorer` and `Viewer`;
-- map Explorer intents to organization transactions;
-- rebuild the complete graph after each accepted organization edit;
-- project only the open layer;
-- add explicit Rescan and Emit actions.
-
-Exit:
-
-- Reorganizing a node redraws the diagram without reload.
-- Reloading the UI preserves organization.
-- Source changes are not observed until Rescan.
-- Rescan surfaces unresolved matches and preserves resolved organization.
-
-### S6 — Complete gestures, diagnostics, and recovery
-
-Work:
-
-- finish move, group, order, rename, fold, pick, and diagram controls;
-- add reconciliation UI;
-- aggregate blocking diagnostics before emit;
-- handle abandoned staging directories;
-- test wide layers and establish a practical redraw budget.
-
-Exit:
-
-- Every supported gesture is persistent and reversible through another
-  organizing gesture.
-- No invalid organization can be committed.
-- The editor remains responsive on the agreed representative corpus.
-
-### S7 — Retire legacy publication and align packaging
-
-Work:
-
-- remove `Exporter`, ledger REST/MCP surfaces, and the MCP binary;
-- remove the custom publication embed and layout;
-- remove old publication scripts and ledger acceptance tests;
-- update package description, exports, scripts, `.gitignore`, and mdsite
-  documentation;
-- replace tests with translator fixtures;
-- mark `archive.md` clearly as historical.
-
-Exit:
-
-- No production code imports ledger types or custom graph envelopes.
-- README commands run as documented.
-- `npm test`, `npm run typecheck`, and `npm run build` pass.
-- Repository CI tests the application but does not process committed `site/`.
-
-### After the migration — optional taggly integration
-
-Define now:
-
-```ts
-interface GroupingSuggester {
-  suggest(snapshot: OrganizationSnapshot, signal: AbortSignal): Promise<GroupingSuggestion[]>;
-}
-```
-
-Implement later:
-
-- optional discovery and configuration;
-- timeout and cancellation;
-- suggestion invalidation after organization changes;
-- accept/ignore UI;
-- conversion of accepted suggestions into ordinary organization transactions.
-
-Absence or failure of a suggester never changes core behavior.
+Define an optional enrichment interface over immutable parsed content and
+organization snapshots. Add discovery, timeout, cancellation, suggestions,
+accept/ignore, and invalidation. Absence or failure of Taggly must never block
+parse, dashboard use, graphing, emit, mdsite build, or CI.
 
 ## Test plan
 
 ### Unit
 
-- parser source nodes and source locations;
-- identity fingerprints and reconciliation precedence;
-- organization invariants and transactions;
-- selector cardinality;
-- output slug and anchor collision detection;
-- link and MDX reference rewriting;
-- asset path mapping;
-- graph determinism;
-- emit planning and atomic replacement.
-
-### Contract
-
-- real `@mnd/kit` types compile;
-- vocabulary validate/review;
-- untouched graph accepted by mndflow CLI;
-- route and anchor parity with pinned mdsite;
-- inline SVG links target emitted routes.
+- source-root-relative discovery and path safety;
+- parser nodes, source ranges, and selectors;
+- identity and reconciliation precedence;
+- organization and segment invariants;
+- destination-only override application;
+- output path, route, and anchor collisions;
+- link, MDX, and asset rewriting;
+- diagram depth and projection;
+- frontmatter preservation and fill-only metadata;
+- first-paragraph description and 200-WPM reading time;
+- mdsite template precedence and `nav_order` generation;
+- deterministic graph and emit planning.
 
 ### Integration
 
-- initial import to persisted organization;
-- explicit rescan after file rename and heading edit;
-- manual resolution of ambiguous identity;
-- physical page and section moves;
-- generated group folder and landing page;
-- Markdown links, images, and static MDX imports after moves;
-- failed emit preserves previous `site/`;
-- successful emit removes stale destination files;
-- UI gesture updates graph and survives reload.
+- stateless build without `.mndmap/`;
+- persistent import, reload, and explicit rescan;
+- page/group move and rename;
+- section move and reorder within and across pages;
+- destination-only segment edit;
+- generated landing with ordered links;
+- global diagram disable and explicit page diagram;
+- copied/default mdsite config with user fields preserved;
+- successful replacement removes stale files;
+- every planning failure preserves the prior destination;
+- UI actions update SQLite and redraw immediately.
+
+### Cross-project contract
+
+- install released `@mnd/kit` in a clean checkout;
+- open, validate, review, and project untouched mndmap graph output;
+- build a mndmap destination with the pinned simplified mdsite;
+- verify routes, anchors, frontmatter metadata, navigation order, assets, MDX,
+  and diagram links in the built site.
 
 ### Golden corpus
 
-The fixture corpus must include:
-
-- nested folders and repeated headings;
-- duplicate titles that would collide as output slugs;
-- Markdown links across pages and to headings;
-- images and other local assets;
-- MDX with static relative imports;
-- tables, task lists, plain lists, terms, and links;
-- explicit IDs and nodes requiring fingerprint reconciliation;
-- ambiguous identity candidates;
-- generated groups and diagram-depth overrides.
+Include nested folders, repeated headings, output collisions, cross-page and
+heading links, images and other assets, static MDX imports, tables, lists,
+explicit IDs, fingerprint reconciliation, ambiguous candidates, generated
+groups, segment overrides, and diagram-depth overrides.
 
 ## Definition of done
 
-The migration is complete when:
+The enrichment pipeline is complete when:
 
-1. `mndmap ui --root PATH` opens the persistent organizer.
-2. Explicit rescan reconciles source changes without guessing.
-3. Explorer gestures update SQLite and redraw Viewer immediately.
-4. `mndmap graph` emits a deterministic graph accepted untouched by mndflow.
-5. `mndmap emit` atomically writes a physically reorganized `site/`.
-6. Source documents are unchanged.
-7. Internal links, assets, MDX references, routes, anchors, and inline SVG
-   navigation work in the pinned local mdsite build.
-8. Any blocking diagnostic preserves the previous emitted site.
-9. Ledger code, MCP, custom graph rendering, and source write-back are gone.
-10. Core tests, typecheck, and build pass without CI processing `site/`.
+1. `mndmap build` reproducibly emits from any valid configured source root.
+2. `mndmap ui` persists one-off organization and destination-only edits.
+3. Explorer manages folders, groups, and pages while segments manages section
+   placement and content overrides.
+4. Document and page diagrams render through released mndflow APIs.
+5. Emission atomically writes publication-ready Markdown/MDX without modifying
+   source.
+6. Generated landings, fill-only metadata, generated `nav_order`, links,
+   assets, MDX, and diagram navigation work in simplified mdsite.
+7. Taggly is optional and deferred without weakening the integration seam.
+8. Legacy ledger/publication code and sibling-package assumptions are gone.
+9. Core, dashboard, contract, and cross-project tests pass on clean checkouts.
