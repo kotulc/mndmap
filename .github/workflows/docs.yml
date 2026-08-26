@@ -41,6 +41,9 @@ jobs:
       - name: Apply simplify-mdsite M1 ingest patch
         run: git apply ../test/fixtures/mdsite-m1.patch
         working-directory: mdsite
+      - name: Install mdsite dependencies
+        run: npm ci
+        working-directory: mdsite
       - name: Build static site from mndmap destination
         run: node scripts/cli.js build --config ../test/fixtures/publish-project/site/mdsite.yaml
         working-directory: mdsite
