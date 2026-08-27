@@ -33,6 +33,13 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -62,15 +69,29 @@ jobs:
           node scripts/cli.js build --config ../site/mdsite.yaml
         working-directory: mndsite
         env:
-          BASE_PATH: ""   # set to /repo-name for GitHub project pages
+          BASE_PATH: /${{ github.event.repository.name }}
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: site/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
 ```
 
-This repository's `.github/workflows/docs.yml` runs the mndmap + mndsite chain against the project docs.
+This repository's `.github/workflows/docs.yml` builds docs on every run and deploys to GitHub Pages on pushes to `main`.
 
 ## BASE_PATH
 
@@ -80,7 +101,9 @@ Project pages (`username.github.io/repo-name/`) require a subpath prefix at **md
 BASE_PATH=/mndmap node scripts/cli.js build --config site/mdsite.yaml
 ```
 
-Do not put `BASE_PATH` in `mndmap.yaml` or `mdsite.yaml`. For GitHub Pages, set it as a repository Actions variable.
+Do not put `BASE_PATH` in `mndmap.yaml` or `mdsite.yaml`. The workflow sets it from the repository name.
+
+In **Settings → Pages**, set the source to **GitHub Actions** so `deploy-pages` can publish the artifact.
 
 Local previews of `dist/` need no base path.
 
