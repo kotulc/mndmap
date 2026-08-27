@@ -1,0 +1,204 @@
+/* mndflow colour ramp, vendored for the dashboard.
+ *
+ * `@mnd/kit/react.css` styles the Viewer and Explorer entirely in terms of
+ * ramp steps (`var(--s-<slot>-<step>)`) and names no colour of its own, so a
+ * host that does not load a ramp gets an unstyled (black) drawing. mndmap
+ * depends only on `@mnd/kit`, which does not expose `@mnd/theme`, so the ramp
+ * is copied here verbatim from mndflow `packages/theme/ramp.css`
+ * (commit 488ae5c8a70a05b6e857a0895f23603b2de8dc9f). Keep in sync with the
+ * pinned mndflow commit in `mndflow-pin.json`. */
+
+:root {
+  /* Four accent families, spread to stay apart, and two greys. Per theme. */
+  --primary-h: 150; --primary-c: 0.19;
+  --secondary-h: 200; --secondary-c: 0.12;
+  --tertiary-h: 250; --tertiary-c: 0.12;
+  --quaternary-h: 330; --quaternary-c: 0.12;
+  --neutral-h: 160; --neutral-c: 0.05;
+  --muted-h: 160; --muted-c: 0.025;
+
+  --away-h: 285; --away-c: 0.16;
+  --note-h: 78; --note-c: 0.14;
+  --error-h: 25; --error-c: 0.18;
+  --warn-h: 50; --warn-c: 0.14;
+}
+
+/* `retro` — the greens the app was built in. */
+:root,
+:root[data-theme="retro"] {
+  --l-ground: 0.145;
+  --l-fill: 0.195;
+  --l-raised: 0.255;
+  --l-divide: 0.245;
+  --l-line: 0.335;
+  --l-stroke: 0.420;
+  --l-edge: 0.800;
+  --l-dim: 0.600;
+  --l-ink: 0.880;
+  --l-outside: 0.085;
+  --outside-a: 0.72;
+  color-scheme: dark;
+
+  --primary-h: 150; --primary-c: 0.19;
+  --secondary-h: 200; --secondary-c: 0.12;
+  --tertiary-h: 250; --tertiary-c: 0.12;
+  --quaternary-h: 330; --quaternary-c: 0.12;
+  --neutral-h: 160; --neutral-c: 0.05;
+  --muted-h: 160; --muted-c: 0.025;
+}
+
+/* `modern` — a cyanotype. */
+:root[data-theme="modern"] {
+  --l-ground: 0.225;
+  --l-fill: 0.275;
+  --l-raised: 0.335;
+  --l-divide: 0.320;
+  --l-line: 0.450;
+  --l-stroke: 0.545;
+  --l-edge: 0.860;
+  --l-dim: 0.680;
+  --l-ink: 0.945;
+  --l-outside: 0.150;
+  --outside-a: 0.62;
+  color-scheme: dark;
+
+  --primary-h: 205; --primary-c: 0.13;
+  --secondary-h: 240; --secondary-c: 0.11;
+  --tertiary-h: 300; --tertiary-c: 0.10;
+  --quaternary-h: 40; --quaternary-c: 0.11;
+  --neutral-h: 245; --neutral-c: 0.075;
+  --muted-h: 245; --muted-c: 0.045;
+}
+
+/* `light` — the whiteprint the cyanotype became. */
+:root[data-theme="light"] {
+  --l-ground: 0.958;
+  --l-fill: 0.985;
+  --l-raised: 0.930;
+  --l-divide: 0.900;
+  --l-line: 0.800;
+  --l-stroke: 0.620;
+  --l-edge: 0.500;
+  --l-dim: 0.495;
+  --l-ink: 0.265;
+  --l-outside: 0.895;
+  --outside-a: 0.55;
+  color-scheme: light;
+
+  --primary-h: 235; --primary-c: 0.14;
+  --secondary-h: 200; --secondary-c: 0.11;
+  --tertiary-h: 265; --tertiary-c: 0.11;
+  --quaternary-h: 25; --quaternary-c: 0.12;
+  --neutral-h: 232; --neutral-c: 0.026;
+  --muted-h: 232; --muted-c: 0.014;
+}
+
+:root {
+  --s-primary-fill: oklch(var(--l-fill) calc(var(--primary-c) * 0.18) var(--primary-h));
+  --s-primary-raised: oklch(var(--l-raised) calc(var(--primary-c) * 0.26) var(--primary-h));
+  --s-primary-line: oklch(var(--l-line) calc(var(--primary-c) * 0.40) var(--primary-h));
+  --s-primary-stroke: oklch(var(--l-stroke) calc(var(--primary-c) * 0.45) var(--primary-h));
+  --s-primary-edge: oklch(var(--l-edge) var(--primary-c) var(--primary-h));
+  --s-primary-dim: oklch(var(--l-dim) calc(var(--primary-c) * 0.30) var(--primary-h));
+  --s-primary-ink: oklch(var(--l-ink) calc(var(--primary-c) * 0.32) var(--primary-h));
+
+  --s-secondary-fill: oklch(var(--l-fill) calc(var(--secondary-c) * 0.18) var(--secondary-h));
+  --s-secondary-raised: oklch(var(--l-raised) calc(var(--secondary-c) * 0.26) var(--secondary-h));
+  --s-secondary-line: oklch(var(--l-line) calc(var(--secondary-c) * 0.40) var(--secondary-h));
+  --s-secondary-stroke: oklch(var(--l-stroke) calc(var(--secondary-c) * 0.45) var(--secondary-h));
+  --s-secondary-edge: oklch(var(--l-edge) var(--secondary-c) var(--secondary-h));
+  --s-secondary-dim: oklch(var(--l-dim) calc(var(--secondary-c) * 0.30) var(--secondary-h));
+  --s-secondary-ink: oklch(var(--l-ink) calc(var(--secondary-c) * 0.32) var(--secondary-h));
+
+  --s-tertiary-fill: oklch(var(--l-fill) calc(var(--tertiary-c) * 0.18) var(--tertiary-h));
+  --s-tertiary-raised: oklch(var(--l-raised) calc(var(--tertiary-c) * 0.26) var(--tertiary-h));
+  --s-tertiary-line: oklch(var(--l-line) calc(var(--tertiary-c) * 0.40) var(--tertiary-h));
+  --s-tertiary-stroke: oklch(var(--l-stroke) calc(var(--tertiary-c) * 0.45) var(--tertiary-h));
+  --s-tertiary-edge: oklch(var(--l-edge) var(--tertiary-c) var(--tertiary-h));
+  --s-tertiary-dim: oklch(var(--l-dim) calc(var(--tertiary-c) * 0.30) var(--tertiary-h));
+  --s-tertiary-ink: oklch(var(--l-ink) calc(var(--tertiary-c) * 0.32) var(--tertiary-h));
+
+  --s-quaternary-fill: oklch(var(--l-fill) calc(var(--quaternary-c) * 0.18) var(--quaternary-h));
+  --s-quaternary-raised: oklch(var(--l-raised) calc(var(--quaternary-c) * 0.26) var(--quaternary-h));
+  --s-quaternary-line: oklch(var(--l-line) calc(var(--quaternary-c) * 0.40) var(--quaternary-h));
+  --s-quaternary-stroke: oklch(var(--l-stroke) calc(var(--quaternary-c) * 0.45) var(--quaternary-h));
+  --s-quaternary-edge: oklch(var(--l-edge) var(--quaternary-c) var(--quaternary-h));
+  --s-quaternary-dim: oklch(var(--l-dim) calc(var(--quaternary-c) * 0.30) var(--quaternary-h));
+  --s-quaternary-ink: oklch(var(--l-ink) calc(var(--quaternary-c) * 0.32) var(--quaternary-h));
+
+  --s-neutral-ground: oklch(var(--l-ground) calc(var(--neutral-c) * 0.30) var(--neutral-h));
+  --s-neutral-fill: oklch(var(--l-fill) calc(var(--neutral-c) * 0.35) var(--neutral-h));
+  --s-neutral-raised: oklch(var(--l-raised) calc(var(--neutral-c) * 0.40) var(--neutral-h));
+  --s-neutral-divide: oklch(var(--l-divide) calc(var(--neutral-c) * 0.40) var(--neutral-h));
+  --s-neutral-line: oklch(var(--l-line) calc(var(--neutral-c) * 0.55) var(--neutral-h));
+  --s-neutral-stroke: oklch(var(--l-stroke) calc(var(--neutral-c) * 0.60) var(--neutral-h));
+  --s-neutral-dim: oklch(var(--l-dim) calc(var(--neutral-c) * 0.70) var(--neutral-h));
+  --s-neutral-ink: oklch(var(--l-ink) var(--neutral-c) var(--neutral-h));
+
+  --s-muted-fill: oklch(var(--l-fill) calc(var(--muted-c) * 0.35) var(--muted-h));
+  --s-muted-line: oklch(var(--l-line) calc(var(--muted-c) * 0.55) var(--muted-h));
+  --s-muted-stroke: oklch(var(--l-stroke) calc(var(--muted-c) * 0.60) var(--muted-h));
+  --s-muted-dim: oklch(var(--l-dim) calc(var(--muted-c) * 0.70) var(--muted-h));
+  --s-muted-ink: oklch(var(--l-ink) var(--muted-c) var(--muted-h));
+
+  --s-away-fill: oklch(var(--l-fill) calc(var(--away-c) * 0.22) var(--away-h));
+  --s-away-line: oklch(var(--l-line) calc(var(--away-c) * 0.55) var(--away-h));
+  --s-away-stroke: oklch(var(--l-stroke) calc(var(--away-c) * 0.60) var(--away-h));
+  --s-away-edge: oklch(var(--l-edge) var(--away-c) var(--away-h));
+  --s-away-dim: oklch(var(--l-dim) calc(var(--away-c) * 0.45) var(--away-h));
+  --s-away-ink: oklch(var(--l-ink) calc(var(--away-c) * 0.40) var(--away-h));
+
+  --s-note-fill: oklch(var(--l-fill) calc(var(--note-c) * 0.22) var(--note-h));
+  --s-note-line: oklch(var(--l-line) calc(var(--note-c) * 0.55) var(--note-h));
+  --s-note-stroke: oklch(var(--l-stroke) calc(var(--note-c) * 0.60) var(--note-h));
+  --s-note-edge: oklch(var(--l-edge) var(--note-c) var(--note-h));
+  --s-note-dim: oklch(var(--l-dim) calc(var(--note-c) * 0.45) var(--note-h));
+  --s-note-ink: oklch(var(--l-ink) calc(var(--note-c) * 0.40) var(--note-h));
+
+  --s-error-edge: oklch(var(--l-edge) var(--error-c) var(--error-h));
+  --s-error-ink: oklch(var(--l-ink) calc(var(--error-c) * 0.45) var(--error-h));
+  --s-warn-edge: oklch(var(--l-edge) var(--warn-c) var(--warn-h));
+}
+
+/* Semantic aliases the Explorer chrome reads. */
+:root {
+  --bg: var(--s-neutral-ground);
+  --surface: var(--s-neutral-fill);
+  --hover: var(--s-neutral-raised);
+  --divider: var(--s-neutral-divide);
+  --border: var(--s-neutral-line);
+  --line: var(--s-neutral-line);
+  --raised: var(--s-neutral-raised);
+  --text: var(--s-neutral-ink);
+  --muted: var(--s-neutral-dim);
+  --faint: var(--s-muted-dim);
+  --accent: var(--s-primary-edge);
+  --tint: var(--s-primary-fill);
+  --away: var(--s-away-edge);
+  --away-dim: var(--s-away-dim);
+  --note: var(--s-note-edge);
+  --note-dim: var(--s-note-dim);
+  --error: var(--s-error-edge);
+  --warn: var(--s-warn-edge);
+  --chrome: oklch(var(--l-fill) calc(var(--neutral-c) * 0.35) var(--neutral-h) / 0.92);
+
+  --card-fill: var(--s-neutral-fill);
+  --card-line: var(--s-neutral-line);
+  --card-raised: var(--s-neutral-raised);
+  --card-lit: var(--s-primary-dim);
+  --card-veil: oklch(var(--l-fill) calc(var(--neutral-c) * 0.35) var(--neutral-h) / 0.6);
+  --card-veil-lit: oklch(var(--l-raised) calc(var(--neutral-c) * 0.4) var(--neutral-h) / 0.75);
+  --glow: color-mix(in oklch, var(--accent) 35%, transparent);
+  --wall: var(--s-primary-stroke);
+  --wall-lit: var(--s-primary-dim);
+  --on-loud: var(--s-neutral-ground);
+  --route: var(--s-primary-stroke);
+  --route-head: var(--s-primary-dim);
+  --route-away: var(--s-away-dim);
+  --outside: oklch(var(--l-outside) calc(var(--neutral-c) * 0.3) var(--neutral-h)
+                   / var(--outside-a));
+
+  --weight-hairline: 0.5px;
+  --weight-thin: 1px;
+  --weight-thick: 2px;
+}
