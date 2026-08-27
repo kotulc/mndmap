@@ -54,6 +54,7 @@ Build the doc site locally:
 ```sh
 npm run build
 mndmap build --root .
+npm run ui
 # then build site/ with mdsite — see docs/publishing/deployment.md
 ```
 
