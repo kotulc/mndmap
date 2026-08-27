@@ -216,6 +216,34 @@ export function locatorKey(node: Pick<SourceNode, "sourcePath" | "sourceLocator"
   return `${node.sourcePath}\0${node.sourceLocator}`;
 }
 
+const KIND_LABELS: Record<SourceNodeKind, string> = {
+  folder: "folder",
+  page: "page",
+  section: "section",
+  table: "table",
+  row: "table row",
+  list: "list",
+  item: "list item",
+  term: "term",
+  link: "link",
+};
+
+/** Human-readable label for diagnostics and UI copy. */
+export function describeSourceNode(node: Pick<SourceNode, "kind" | "sourcePath" | "sourceLocator" | "sourceData">): string {
+  const kind = KIND_LABELS[node.kind] ?? node.kind;
+  const title = sourceNodeTitle(node);
+  if (node.kind === "folder") return `${kind} ${node.sourcePath}/`;
+  if (node.kind === "page") return `${kind} "${title}" (${node.sourcePath})`;
+  return `${kind} "${title}" in ${node.sourcePath}`;
+}
+
+function sourceNodeTitle(node: Pick<SourceNode, "sourcePath" | "sourceData">): string {
+  const title = node.sourceData.title;
+  if (typeof title === "string" && title.trim()) return title;
+  const file = node.sourcePath.split("/").pop() ?? node.sourcePath;
+  return file.replace(/\.(md|mdx)$/i, "");
+}
+
 export function applySelectorIdentity(nodes: SourceNode[], config: MndmapConfig): void {
   for (const selector of config.selectors) {
     if (!selector.identity?.field) continue;

@@ -15,7 +15,7 @@ import type {
   SourceNode,
   WorkingStoreSnapshot,
 } from "./types.js";
-import { applySelectorIdentity, extractSourceNodes } from "./source-nodes.js";
+import { applySelectorIdentity, describeSourceNode, extractSourceNodes } from "./source-nodes.js";
 import { reconcileSourceNodes, resolveReconciliation } from "./reconciliation.js";
 import { stableId } from "./fingerprints.js";
 
@@ -73,19 +73,27 @@ export class WorkingStore {
         for (const diagnostic of document.diagnostics) this.insertDiagnostic(diagnostic);
       }
       for (const entry of reconciled.unresolved) {
+        const priorNode = prior.find((node) => node.id === entry.priorId);
         this.insertDiagnostic({
           code: "ambiguous-identity",
           severity: "error",
-          message: `Ambiguous identity match for ${entry.priorId}`,
+          message: priorNode
+            ? `Could not uniquely match ${describeSourceNode(priorNode)} after rescan`
+            : "Could not uniquely match a saved item after rescan",
           sourceNodeId: entry.priorId,
+          ...(priorNode ? { document: priorNode.sourcePath } : {}),
         });
       }
       for (const missingId of reconciled.missing) {
+        const priorNode = prior.find((node) => node.id === missingId);
         this.insertDiagnostic({
           code: "missing-source-node",
           severity: "error",
-          message: `Source node ${missingId} was not found in the latest scan`,
+          message: priorNode
+            ? `${describeSourceNode(priorNode)} — no longer found in docs after rescan`
+            : "An item from your saved layout is no longer in docs after rescan",
           sourceNodeId: missingId,
+          ...(priorNode ? { document: priorNode.sourcePath } : {}),
         });
       }
 
@@ -224,8 +232,9 @@ export class WorkingStore {
         this.insertDiagnostic({
           code: "missing-source-node",
           severity: "error",
-          message: `Source node ${node.id} is missing from source`,
+          message: `${describeSourceNode(node)} — removed from source`,
           sourceNodeId: node.id,
+          document: node.sourcePath,
         });
       }
       return resolved;

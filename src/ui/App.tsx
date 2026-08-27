@@ -2,6 +2,7 @@ import { Explorer, Viewer } from "@mnd/kit/react";
 import type { Graph } from "@mnd/kit";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createEditorApi, type EditorApi } from "./api.js";
+import { formatDiagnosticsForDisplay } from "./format-diagnostics.js";
 import "@mnd/kit/react.css";
 import "./styles.css";
 
@@ -19,7 +20,7 @@ export function App({ api = createEditorApi() }: { api?: EditorApi }) {
       setGraph(nextGraph);
       setLayer((current) => current && nextGraph.blocks[current] ? current : "block_docs");
       const nextDiagnostics = await api.diagnostics();
-      setDiagnostics(nextDiagnostics.filter((entry) => entry.severity === "error").map((entry) => entry.message).join("\n"));
+      setDiagnostics(formatDiagnosticsForDisplay(nextDiagnostics));
       setFeedback("");
     } catch (error) {
       setFeedback(error instanceof Error ? error.message : String(error));
