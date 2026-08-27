@@ -24,7 +24,7 @@ export async function runCli(argv = process.argv.slice(2), io: CliIo = defaultIo
     io.stdout.write(help);
     return;
   }
-  const root = takeOption(args, "--root") ?? process.cwd();
+  const root = takeOption(args, "--root") ?? process.env.MNDMAP_ROOT ?? process.cwd();
   const command = args.shift();
   const service = await Mndmap.open(root);
 
@@ -121,7 +121,8 @@ Commands:
   ui [--root PATH] [--host HOST] [--port PORT]
 
 Global option:
-  --root PATH                            Workspace root (default: current directory)
+  --root PATH                            Project root with mndmap.yaml (default: current directory).
+                                         Source files default to docs/ via configuration.
 `;
 
 const mainPath = process.argv[1] ? resolve(process.argv[1]) : "";

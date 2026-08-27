@@ -1,8 +1,8 @@
 title: mndmap
-description: Published read-only views of the mndmap document ledger
+description: Organize documentation collections and emit publication-ready sites
 repo_url: https://github.com/kotulc/mndmap
-content: ./.publication/content
-output: ./dist/site
+content: ./docs
+output: ./dist
 toc: true
 theme:
   color: blue

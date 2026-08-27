@@ -40,6 +40,23 @@ mndmap makes the shape a thing you edit directly, see immediately, and regenerat
 | **Navigable diagrams** | every box links to the page and heading it came from |
 | **mdsite handoff** | `mdsite.yaml` with `content: .`, generated `nav_order`, and fill-only metadata |
 
+## Documentation
+
+Full guides live in [`docs/`](docs/):
+
+- [Getting started](docs/getting-started.md) — install, `build`, `ui`, and chaining to mdsite
+- [Workflow overview](docs/workflow/overview.md) — parse → store → graph → emit
+- [mdsite handoff](docs/publishing/mdsite-handoff.md) — destination contract and `nav_order`
+- [Deployment](docs/publishing/deployment.md) — CI/CD with mndmap and mdsite
+
+Build the doc site locally:
+
+```sh
+npm run build
+mndmap build --root .
+# then build site/ with mdsite — see docs/publishing/deployment.md
+```
+
 ## Quick start
 
 ### Stateless build (CI and pipelines)
@@ -55,8 +72,10 @@ mndmap build --root /path/to/project
 ### Interactive workspace
 
 ```sh
-npm run ui -- -- --root /path/to/project
+npm run ui
 ```
+
+From another project directory, use the CLI directly: `mndmap ui --root /path/to/project` (source defaults to `docs/` when configured that way in `mndmap.yaml`).
 
 The dashboard keeps organization and content overrides in `.mndmap/state.sqlite`. Reorganize, then emit when ready:
 
@@ -117,7 +136,7 @@ Selectors for ambiguous structure — which tables and lists are records, and wh
 
 The graph is **derived and ephemeral** — built from the working store on demand, drawn, thrown away. Nothing about it is stored and nothing is hand-placed, which is why steering a diagram is reorganizing the tree rather than dragging a box. mndmap uses `Explorer` for the tree, `Viewer` for the live preview, and `draw_svg` for what ships.
 
-**[mdsite](https://github.com/kotulc/mdsite) — the site.** mndmap emits a publication-ready destination that mdsite ingests and builds. mndmap writes `mdsite.yaml` at the destination root with `content: .` (the emitted tree) and generated `nav_order`. User identity fields — title, theme, repo URL, output path — come from your template; mndmap owns navigation and content paths in the emitted copy.
+**[mndsite](https://github.com/kotulc/mndsite) — the site.** mndmap emits a publication-ready destination that mndsite ingests and builds. mndmap writes `mdsite.yaml` at the destination root with `content: .` (the emitted tree) and generated `nav_order`. User identity fields — title, theme, repo URL, output path — come from your template; mndmap owns navigation and content paths in the emitted copy.
 
 The complete pipeline:
 
@@ -125,7 +144,7 @@ The complete pipeline:
 configured source → mndmap build → destination/ → mdsite build → dist/
 ```
 
-See the [mdsite README](https://github.com/kotulc/mdsite/blob/cursor/implement-simplification-mndsite-9a75/README.md) for the downstream config schema, CLI, and Docker usage.
+See the [mndsite README](https://github.com/kotulc/mndsite/blob/main/README.md) for the downstream config schema, CLI, and Docker usage.
 
 **One way out, and it never writes back.** mndmap reads markdown and emits artifacts. It never edits a mndflow model and never edits your source.
 

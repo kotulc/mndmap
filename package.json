@@ -21,7 +21,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run test",
     "preui": "npm run build",
-    "ui": "tsx src/cli.ts ui",
+    "ui": "tsx src/cli.ts ui --root .",
     "cli": "tsx src/cli.ts"
   },
   "repository": {

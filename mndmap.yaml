@@ -1,0 +1,16 @@
+version: 1
+
+source:
+  root: docs
+  include:
+    - "**/*.{md,mdx}"
+  exclude: []
+
+destination: site
+
+diagrams:
+  enabled: true
+  depth: 3
+
+mdsite:
+  config: mdsite.yaml
