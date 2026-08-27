@@ -9,5 +9,5 @@ source:
 destination: site
 
 diagrams:
-  enabled: false
+  enabled: true
   depth: 3

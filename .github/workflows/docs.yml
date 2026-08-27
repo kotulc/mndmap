@@ -28,7 +28,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: kotulc/mdsite
-          ref: simplify-mdsite
+          ref: cursor/implement-simplification-mndsite-9a75
           path: mdsite
       - uses: actions/setup-node@v4
         with:
@@ -38,11 +38,11 @@ jobs:
       - run: npm run build:core
       - name: Emit publish fixture
         run: node dist/src/cli.js build --root test/fixtures/publish-project
-      - name: Apply simplify-mdsite M1 ingest patch
-        run: git apply ../test/fixtures/mdsite-m1.patch
-        working-directory: mdsite
       - name: Install mdsite dependencies
         run: npm ci
+        working-directory: mdsite
+      - name: Prepare mdsite public directory
+        run: mkdir -p public
         working-directory: mdsite
       - name: Build static site from mndmap destination
         run: node scripts/cli.js build --config ../test/fixtures/publish-project/site/mdsite.yaml

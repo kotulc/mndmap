@@ -2,6 +2,6 @@
   "mndflowCommit": "4cb39a1ba74a9090853a536e5fc870013111ecaf",
   "kitVersion": "0.1.0",
   "kitTarball": "vendor/mnd-kit-0.1.0.tgz",
-  "mdsiteBranch": "simplify-mdsite",
-  "mdsiteImage": "ghcr.io/kotulc/mdsite:simplify-mdsite"
+  "mdsiteBranch": "cursor/implement-simplification-mndsite-9a75",
+  "mdsiteImage": "ghcr.io/kotulc/mdsite:cursor-implement-simplification-mndsite-9a75"
 }
