@@ -1,8 +1,11 @@
 import { access, copyFile, mkdir, rename, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { dirname, join, posix, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { block, draw_svg, validate } from "@mnd/kit";
 import { addContainsEdges, buildGraph, deterministicOrdering } from "../graph/builder.js";
+import { loadMdsiteTemplate, buildNavOrder, mergeMdsiteConfig, serializeMdsiteConfig } from "./mdsite-config.js";
+import { fillFrontmatter } from "../metadata.js";
 import { TIER_ROOT_ID } from "../vocab/docs.js";
 import { resolveRelativeTarget, sectionAnchor, slugifySegment, sourceLink } from "../routes.js";
 import type { Diagnostic, EmitPreview, OrganizationNode, SourceNode, WorkingStoreSnapshot } from "../types.js";
@@ -44,13 +47,15 @@ export async function emitApply(
   store: WorkingStore,
   snapshot: WorkingStoreSnapshot,
   documents: Map<string, string>,
+  options: { ephemeral?: boolean } = {},
 ): Promise<EmitPreview> {
   const preview = await emitPreview(snapshot, documents, root);
   if (preview.diagnostics.some((entry) => entry.severity === "error")) {
     throw new Error(`Emit blocked by diagnostics:\n${preview.diagnostics.map((entry) => entry.message).join("\n")}`);
   }
   const plan = planOutputs(snapshot, documents);
-  const staging = join(root, ".mndmap", `emit-${randomUUID()}`);
+  const stagingRoot = options.ephemeral ? join(tmpdir(), "mndmap-emit") : join(root, ".mndmap");
+  const staging = join(stagingRoot, `emit-${randomUUID()}`);
   const destination = join(root, snapshot.config.destination);
 
   await mkdir(staging, { recursive: true });
@@ -65,16 +70,21 @@ export async function emitApply(
     await copyFile(resolve(root, asset.sourcePath), target);
   }
 
-  const backup = join(root, ".mndmap", `site-backup-${randomUUID()}`);
+  const mdsiteTemplate = await loadMdsiteTemplate(root, snapshot.config);
+  const mdsiteConfig = mergeMdsiteConfig(mdsiteTemplate, buildNavOrder(snapshot));
+  await writeFile(join(staging, "mdsite.yaml"), serializeMdsiteConfig(mdsiteConfig), "utf8");
+
+  const backup = join(stagingRoot, `site-backup-${randomUUID()}`);
   try {
     await rename(destination, backup).catch((error: NodeJS.ErrnoException) => {
       if (error.code !== "ENOENT") throw error;
     });
     await rename(staging, destination);
     await rm(backup, { recursive: true, force: true });
+    if (options.ephemeral) await rm(stagingRoot, { recursive: true, force: true });
   } catch (error) {
     await rename(backup, destination).catch(() => undefined);
-    store.recordAbandonedStaging(staging);
+    if (!options.ephemeral) store.recordAbandonedStaging(staging);
     throw error;
   }
   return preview;
@@ -183,13 +193,19 @@ function planOutputs(snapshot: WorkingStoreSnapshot, documents: Map<string, stri
     return undefined;
   };
 
+  const sourceRoot = snapshot.config.source.root.replace(/\/$/, "");
   const registerAsset = (sourcePath: string, fromDocument: string): string => {
     const normalized = sourcePath.replaceAll("\\", "/");
-    if (!normalized.startsWith("docs/")) {
-      diagnostics.push({ code: "asset-outside-source", severity: "error", message: `Local reference escapes docs/: ${normalized}`, document: fromDocument });
+    if (!normalized.startsWith(`${sourceRoot}/`)) {
+      diagnostics.push({
+        code: "asset-outside-source",
+        severity: "error",
+        message: `Local reference escapes source root: ${normalized}`,
+        document: fromDocument,
+      });
       return normalized;
     }
-    const outputPath = `_assets/${normalized.slice("docs/".length)}`;
+    const outputPath = `_assets/${normalized.slice(sourceRoot.length + 1)}`;
     assets.set(normalized, { sourcePath: normalized, outputPath, fromDocument });
     return outputPath;
   };
@@ -202,7 +218,7 @@ function planOutputs(snapshot: WorkingStoreSnapshot, documents: Map<string, stri
       const hash = hashIndex >= 0 ? target.slice(hashIndex + 1) : "";
       const resolved = pathPart ? resolveRelativeTarget(sourcePath, pathPart) : sourcePath;
       if (!resolved) {
-        diagnostics.push({ code: "reference-outside-source", severity: "error", message: `Local reference escapes docs/: ${target}`, document: sourcePath });
+        diagnostics.push({ code: "reference-outside-source", severity: "error", message: `Local reference escapes source root: ${target}`, document: sourcePath });
         return target;
       }
       const markdown = /\.(md|mdx)$/i.test(resolved);
@@ -277,6 +293,7 @@ function planOutputs(snapshot: WorkingStoreSnapshot, documents: Map<string, stri
     return { content: chunks.filter(Boolean).join("\n\n"), anchors };
   };
 
+  const diagramsEnabled = snapshot.config.diagrams.enabled;
   const { graph } = buildGraph(snapshot);
   const drawable = addContainsEdges(graph);
   for (const node of snapshot.organization.nodes) {
@@ -284,11 +301,15 @@ function planOutputs(snapshot: WorkingStoreSnapshot, documents: Map<string, stri
     if (!outputPath) continue;
     if (node.kind === "group") {
       const sections = renderSections(node.id, 2, outputPath);
-      const svg = draw_svg(block.project(drawable, node.id === snapshot.organization.rootId ? TIER_ROOT_ID : node.id));
-      const landing = [
-        "---", `title: ${node.title}`, "compose:", "  pages: []", "---", "",
-        `# ${node.title}`, "", sections.content, sections.content ? "" : null, svg,
+      const svg = diagramsEnabled ? draw_svg(block.project(drawable, node.id === snapshot.organization.rootId ? TIER_ROOT_ID : node.id)) : "";
+      const landingBody = [
+        `# ${node.title}`,
+        "",
+        sections.content,
+        sections.content ? "" : null,
+        svg || null,
       ].filter((line): line is string => line !== null).join("\n");
+      const landing = fillFrontmatter(`---\ntitle: ${node.title}\n---\n\n${landingBody}`);
       files.push({ path: outputPath, content: landing, sectionAnchors: [sectionAnchor(node.title), ...sections.anchors] });
       continue;
     }
@@ -303,7 +324,8 @@ function planOutputs(snapshot: WorkingStoreSnapshot, documents: Map<string, stri
     const preamble = rewrite(document.slice(0, firstSectionStart).trimEnd(), source.sourcePath, outputPath);
     const sections = renderSections(node.id, 1, outputPath);
     let content = [preamble, sections.content].filter(Boolean).join("\n\n");
-    if (node.diagramRoot) content += `\n\n${draw_svg(block.project(drawable, node.id))}\n`;
+    if (diagramsEnabled && node.diagramRoot) content += `\n\n${draw_svg(block.project(drawable, node.id))}\n`;
+    content = fillFrontmatter(content, [preamble, sections.content].filter(Boolean).join("\n\n"));
     files.push({ path: outputPath, content, sectionAnchors: sections.anchors });
   }
 

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { access, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import fg from "fast-glob";
 import { unified } from "unified";
@@ -8,6 +8,7 @@ import remarkGfm from "remark-gfm";
 import remarkFrontmatter from "remark-frontmatter";
 import remarkMdx from "remark-mdx";
 import YAML from "yaml";
+import { sourceIncludePatterns } from "./config.js";
 import type { Diagnostic, MndmapConfig, ParsedDocument, SourceRange, StructuralNode } from "./types.js";
 
 const markdownProcessor = unified().use(remarkParse).use(remarkGfm).use(remarkFrontmatter, ["yaml"]);
@@ -45,13 +46,7 @@ export function parseDocument(path: string, content: string, config?: MndmapConf
 }
 
 export async function parseWorkspace(root: string, config: MndmapConfig): Promise<ParsedDocument[]> {
-  const docsDir = resolve(root, "docs");
-  try {
-    await access(docsDir);
-  } catch {
-    throw new Error("Missing docs/ directory");
-  }
-  const paths = await fg(config.sources.include, { cwd: root, ignore: config.sources.exclude, onlyFiles: true });
+  const paths = await fg(sourceIncludePatterns(config), { cwd: root, ignore: config.source.exclude, onlyFiles: true });
   if (paths.length === 0) throw new Error("No source documents matched the configured include patterns");
   return Promise.all(paths.sort().map(async (path) =>
     parseDocument(path.replaceAll("\\", "/"), await readFile(resolve(root, path), "utf8"), config)));

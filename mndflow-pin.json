@@ -1,6 +1,7 @@
 {
-  "mndflowCommit": "488ae5c8a70a05b6e857a0895f23603b2de8dc9f",
-  "kitVersion": "0.0.0",
-  "kitPath": "../mndflow/packages/kit",
-  "mdsiteImage": "ghcr.io/kotulc/mdsite:latest"
+  "mndflowCommit": "4cb39a1ba74a9090853a536e5fc870013111ecaf",
+  "kitVersion": "0.1.0",
+  "kitTarball": "vendor/mnd-kit-0.1.0.tgz",
+  "mdsiteBranch": "cursor/implement-simplification-mndsite-9a75",
+  "mdsiteImage": "ghcr.io/kotulc/mdsite:cursor-implement-simplification-mndsite-9a75"
 }
