@@ -172,7 +172,9 @@ source_node
   resolution
 ```
 
-Every path is normalized relative to `source.root`.
+Every path is normalized relative to `source.root`, never to the workspace.
+A source root of `docs` yields `index.md` and `workflow/overview.md`, and
+never a `docs` folder node, a `docs/` route prefix, or a second root frame.
 
 ### Organization nodes
 
@@ -191,7 +193,12 @@ organization_node
   diagram_depth
 ```
 
-Sections do not appear in the Explorer projection.
+Rules:
+
+- `kind` is closed: `folder | group | page`. There is no generic source kind.
+- Sections, tables, lists, items, terms, and links are never seeded into
+  organization; they reach a page through segment placement only.
+- The organization root is the tier root itself, not a node inside it.
 
 ### Page composition and overrides
 
@@ -206,6 +213,7 @@ segment_placement
 
 segment_override
   source_node_id
+  field                 null for the whole segment
   content
   updated_at
 ```
@@ -215,7 +223,10 @@ Rules:
 - a section appears in at most one emitted page;
 - sibling positions are unique and contiguous;
 - nesting is acyclic and produces valid heading depth;
-- overrides replace only the corresponding emitted segment;
+- overrides replace only the corresponding emitted segment, or one field
+  within it when `field` is set;
+- a field override re-serializes one structure — a table cell rewrites that
+  cell, a list item rewrites that item — and never the whole segment;
 - the original source range remains available for reconciliation;
 - deleting source never silently deletes a placement or override;
 - unresolved or missing placed segments block workspace emit.
@@ -239,11 +250,38 @@ overrides follow a confirmed identity match.
 
 ## Dashboard contract
 
-The dashboard has three coordinated surfaces.
+### Shell
+
+The dashboard wears mndflow's chrome so the two applications read as one
+family. The mndflow theme is vendored beside the pinned commit: `ramp.css`
+for colour and `base.css` for the shell.
+
+Layout is mndflow's `.app` grid and nothing else:
+
+- a header spanning the top;
+- the Explorer as the left column;
+- the main panel filling the rest.
+
+Header rules:
+
+- the product name sits at the left;
+- every control sits at the right in one `.tools` group;
+- the controls are: panel toggle (Content / Diagram), Rescan, Preview,
+  Export, Diagnostics, and theme;
+- `Export` and `Preview` are the user-facing names for the emit contract
+  below;
+- nothing else occupies layout — the panel toggle changes what the main panel
+  draws, never how much room it gets.
+
+Diagnostics and parse logs never sit in the page. They open once in a
+dismissible dialog on load when the scan produced any, and otherwise only when
+the Diagnostics control is pressed. A one-line status reports the result of the
+last action.
 
 ### Explorer
 
-Explorer displays folders, generated groups, and pages only. It supports:
+Explorer is the document tree and holds nothing else. Rows are folders,
+generated groups, and pages — never sections. It supports:
 
 - move and reorder;
 - create and dissolve generated groups;
@@ -254,30 +292,44 @@ Explorer displays folders, generated groups, and pages only. It supports:
 Accepted intents update SQLite transactionally and immediately rebuild the
 derived graph.
 
-### Segments view
+### Content panel
 
-Selecting a page opens its Markdown segments. The user can:
+Selecting a page draws its content in the main panel as one vertical list of
+segment blocks in emitted order — the page as a stack of parts, not a document
+preview.
 
-- preview source section content;
-- move and reorder sections within the page;
-- move sections between pages;
-- edit destination-only segment content; and
-- see missing, unresolved, or overridden state.
+Each block:
 
-The first implementation does not create, delete, split, or merge sections and
-does not write back to source.
+- is collapsed by default to its heading, kind, and state;
+- expands to reveal its content as mndflow fields, in the same shape mndflow
+  gives a block's fields — prose is one `text` field, a table is one field per
+  column with its rows beneath, a list is one field per item, a term is a
+  name/value pair, and a link is a `link` field;
+- is editable field by field, and every edit is a destination-only override;
+- shows missing, unresolved, and overridden state on the block itself.
 
-### Diagram view
+The list is managed by direct manipulation:
 
-The main panel toggles between segments and mndflow diagrams.
+- drag to reorder within the page;
+- drag onto an Explorer row to move to another page;
+- remove to drop a section from the emitted page.
 
-- Document view projects the whole documentation organization.
-- Page view projects the selected page and its section structure.
+The first implementation does not create, split, or merge sections, and never
+writes to source. Removing a block removes its placement, not the source.
+
+### Diagram panel
+
+The panel toggle swaps the content list for the mndflow diagram of the same
+selection.
+
+- Document view projects the organization tree.
+- Page view projects the selected page and its placed segments.
+- Every layer block carries `arrangement: "down"`, so a layer's children read
+  as a vertical column and the diagram matches the Explorer's ordering.
+- One layer draws exactly one frame. The organization root is the tier root,
+  so there is never a `docs` block inside a `docs` frame.
 - Layer selection changes projection, not graph construction.
 - Fold and pick are view state, not persisted graph layout.
-
-The toolbar provides Rescan, Preview Emit, Emit, diagnostics, and reconciliation
-actions.
 
 ## Graph and mndflow contract
 
@@ -295,6 +347,8 @@ The graph builder:
 - includes the documentation vocabulary on the tier root;
 - produces deterministic IDs and ordering;
 - includes a destination link on every navigable block;
+- sets `arrangement: "down"` on every layer block;
+- never emits a block for the organization root;
 - constructs the complete graph after every accepted organization change;
 - applies global diagram depth and per-node overrides during projection;
 - stores neither layout nor projected scenes; and
@@ -393,6 +447,7 @@ POST /organization/rename
 POST /organization/diagram
 GET  /pages/:id/segments
 POST /segments/move
+POST /segments/remove
 POST /segments/override
 POST /reconciliation/resolve
 GET  /graph
@@ -404,11 +459,14 @@ GET  /health
 ```
 
 Mutation payloads and responses are validated. Organization and segment
-mutations are transactional.
+mutations are transactional. `/segments/override` takes an optional `field`
+and rewrites only that field when given.
 
 ## Delivery stages
 
-### S0 — Lock external contracts
+Each stage carries where it stands. `done` means the exit condition holds.
+
+### S0 — Lock external contracts — done
 
 - publish and install an exact `@mnd/kit` version from public npm;
 - pin the matching mndflow commit and supported mdsite revision;
@@ -418,28 +476,33 @@ mutations are transactional.
 Exit: clean checkout installation works without sibling repositories, and a
 fixture graph passes real mndflow validation, review, projection, and SVG.
 
-### S1 — Generalize configuration and stateless build
+### S1 — Generalize configuration and stateless build — partial
 
 - implement `source.root` plus relative include/exclude globs;
 - remove hardcoded `docs/` and `site/` behavior;
+- normalize every parsed path to `source.root`, so no source-root folder node,
+  route prefix, or root frame is created;
 - add `mndmap build`;
 - create deterministic default organization in ephemeral SQLite;
 - prove byte-identical stateless output.
 
 Exit: a project with non-default source and destination names builds without
-creating `.mndmap/`.
+creating `.mndmap/`, and its emitted routes carry no source-root prefix.
 
-### S2 — Complete the persistent workspace model
+### S2 — Complete the persistent workspace model — not started
 
 - harden identity reconciliation;
-- separate Explorer organization from page segment placement;
-- persist destination-only segment overrides;
+- close `organization_node.kind` to `folder | group | page` and stop seeding
+  sections into organization;
+- add the `segment_placement` and `segment_override` tables and seed each
+  page's sections as placements;
+- persist destination-only segment and field overrides;
 - enforce organization and composition invariants.
 
 Exit: organization and overrides survive reload and representative rescans
 without modifying source.
 
-### S3 — Complete graph projection and diagrams
+### S3 — Complete graph projection and diagrams — partial
 
 - project Explorer, document, and page layers;
 - apply configured and per-node depth;
@@ -449,7 +512,7 @@ without modifying source.
 Exit: document and page projections render through `Viewer` and `draw_svg`
 with correct links and deterministic output.
 
-### S4 — Complete physical emit
+### S4 — Complete physical emit — partial
 
 - emit ordinary generated landing pages and ordered child links;
 - apply page moves, segment moves, ordering, and overrides;
@@ -461,18 +524,25 @@ with correct links and deterministic output.
 Exit: source is byte-identical, failed emit preserves the prior destination,
 and all emitted references resolve.
 
-### S5 — Build the complete dashboard
+### S5 — Build the complete dashboard — not started
 
+- adopt mndflow's shell: vendored `ramp.css` and `base.css`, the `.app` grid,
+  and every control in the header's right-hand `.tools` group;
 - limit Explorer to folders, groups, and pages;
 - wire all organization intents;
-- add page-scoped segments and destination-only editing;
-- add segments/diagram toggle and document/page projection;
-- add preview, diagnostics, and reconciliation workflows.
+- draw the selected page as a vertical list of expandable segment blocks;
+- reveal segment tables, lists, terms, and links as mndflow fields, and make
+  each field a destination-only override;
+- support drag to reorder, drag to another page, and remove;
+- add the Content/Diagram toggle and document/page projection;
+- move diagnostics into a load-time dialog and name the emit controls
+  `Preview` and `Export`;
+- add reconciliation workflows.
 
 Exit: every supported action persists and redraws without reload, and explicit
-emit produces the previewed destination.
+export produces the previewed destination.
 
-### S6 — Migrate mdsite
+### S6 — Migrate mdsite — partial
 
 - remove automatic local semantic tagging and related-page scoring;
 - remove vendored model requirements;
@@ -482,7 +552,7 @@ emit produces the previewed destination.
 
 Exit: the same mndmap destination builds locally and in the mdsite container.
 
-### S7 — Cross-project hardening and legacy retirement
+### S7 — Cross-project hardening and legacy retirement — not started
 
 - remove `.publication/`, ledger, MCP, and obsolete adapter artifacts;
 - remove stale local-package and custom-renderer dependencies;
@@ -507,7 +577,8 @@ parse, dashboard use, graphing, emit, mdsite build, or CI.
 - parser nodes, source ranges, and selectors;
 - identity and reconciliation precedence;
 - organization and segment invariants;
-- destination-only override application;
+- destination-only segment and field override application;
+- table, list, term, and link projection into fields, and back;
 - output path, route, and anchor collisions;
 - link, MDX, and asset rewriting;
 - diagram depth and projection;
@@ -523,6 +594,8 @@ parse, dashboard use, graphing, emit, mdsite build, or CI.
 - page/group move and rename;
 - section move and reorder within and across pages;
 - destination-only segment edit;
+- destination-only field edit inside a table and a list;
+- segment removed from a page without touching source;
 - generated landing with ordered links;
 - global diagram disable and explicit page diagram;
 - copied/default mdsite config with user fields preserved;
@@ -551,8 +624,8 @@ The enrichment pipeline is complete when:
 
 1. `mndmap build` reproducibly emits from any valid configured source root.
 2. `mndmap ui` persists one-off organization and destination-only edits.
-3. Explorer manages folders, groups, and pages while segments manages section
-   placement and content overrides.
+3. Explorer manages folders, groups, and pages while the content panel manages
+   section placement, ordering, removal, and field-level overrides.
 4. Document and page diagrams render through released mndflow APIs.
 5. Emission atomically writes publication-ready Markdown/MDX without modifying
    source.
