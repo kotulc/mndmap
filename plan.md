@@ -25,7 +25,7 @@ It supports two separate workflows:
 The two workflows do not share hidden authority:
 
 - `build` does not automatically read local dashboard state.
-- dashboard decisions affect explicit workspace emits only.
+- dashboard decisions affect explicit workspace exports only.
 - the emitted destination is the portable handoff to mdsite.
 - neither SQLite nor an organization manifest needs to be committed.
 
@@ -137,11 +137,15 @@ persistent working state behind.
 - persists organization, generated groups, diagram settings, and segment
   overrides;
 - previews output without mutating the destination; and
-- emits only after an explicit action.
+- exports only after an explicit action.
 
-The workspace may also expose `mndmap emit --root PATH` as a non-interactive
-way to emit the existing local workspace. It must never be confused with
-stateless `mndmap build`.
+The workspace may also expose `mndmap export --root PATH` as a
+non-interactive way to export the existing local workspace. It must never be
+confused with stateless `mndmap build`.
+
+While the schema is still moving, a schema change is answered by deleting
+`.mndmap/`. No version stamp and no migration are written until the model
+settles — either would pin down a shape that is still being chosen.
 
 ## Working-store model
 
@@ -173,8 +177,18 @@ source_node
 ```
 
 Every path is normalized relative to `source.root`, never to the workspace.
-A source root of `docs` yields `index.md` and `workflow/overview.md`, and
-never a `docs` folder node, a `docs/` route prefix, or a second root frame.
+
+**The configured root is the tree, and is never in it.** What sits directly
+under `source.root` becomes the top level, and moving the root moves the whole
+tree with it:
+
+- with `source.root: docs`, `docs/workflow/overview.md` parses as
+  `workflow/overview.md`, and `workflow` is a top-level folder;
+- with `source.root: .`, the same file parses as `docs/workflow/overview.md`,
+  and `docs` is the top-level folder.
+
+So the root never appears as a folder node, a route prefix, or a second frame
+around the tier root.
 
 ### Organization nodes
 
@@ -229,7 +243,7 @@ Rules:
   cell, a list item rewrites that item — and never the whole segment;
 - the original source range remains available for reconciliation;
 - deleting source never silently deletes a placement or override;
-- unresolved or missing placed segments block workspace emit.
+- unresolved or missing placed segments block workspace export.
 
 ## Reconciliation
 
@@ -256,6 +270,11 @@ The dashboard wears mndflow's chrome so the two applications read as one
 family. The mndflow theme is vendored beside the pinned commit: `ramp.css`
 for colour and `base.css` for the shell.
 
+Every surface the kit exposes is used rather than reimplemented: `Explorer`
+draws the document tree and `Viewer` draws the diagram. The kit exposes no
+other component, so the header and the content panel are mndmap's own, written
+against mndflow's CSS. If the kit later exposes more, they adopt it.
+
 Layout is mndflow's `.app` grid and nothing else:
 
 - a header spanning the top;
@@ -268,8 +287,9 @@ Header rules:
 - every control sits at the right in one `.tools` group;
 - the controls are: panel toggle (Content / Diagram), Rescan, Preview,
   Export, Diagnostics, and theme;
-- `Export` and `Preview` are the user-facing names for the emit contract
-  below;
+- `Export` and `Preview` name the export contract below. No surface says
+  `emit` — not the controls, the CLI, the REST paths, or the staging
+  directory. `emitted` survives only as ordinary prose for the output;
 - nothing else occupies layout — the panel toggle changes what the main panel
   draws, never how much room it gets.
 
@@ -301,40 +321,62 @@ preview.
 Each block:
 
 - is collapsed by default to its heading, kind, and state;
-- expands to reveal its content as mndflow fields, in the same shape mndflow
-  gives a block's fields — prose is one `text` field, a table is one field per
-  column with its rows beneath, a list is one field per item, a term is a
-  name/value pair, and a link is a `link` field;
-- is editable field by field, and every edit is a destination-only override;
+- expands to show the section's content;
 - shows missing, unresolved, and overridden state on the block itself.
 
 The list is managed by direct manipulation:
 
 - drag to reorder within the page;
-- drag onto an Explorer row to move to another page;
 - remove to drop a section from the emitted page.
 
-The first implementation does not create, split, or merge sections, and never
-writes to source. Removing a block removes its placement, not the source.
+A block expands to **fields** rather than Markdown: prose is one `text` field,
+a table is one field per column with its rows beneath, a list is one field per
+item, a term is a name/value pair, and a link is a `link` field. Each field is
+editable and every edit is a destination-only override. This is the panel's
+end state; blocks land first and fields follow, so the ordering and removal
+gestures are settled before the editor is built on top of them.
+
+The first implementation does not create, split, or merge sections, does not
+move a section to another page, and never writes to source. Removing a block
+removes its placement, not the source.
 
 ### Diagram panel
 
-The panel toggle swaps the content list for the mndflow diagram of the same
-selection.
+The panel toggle swaps the content list for the mndflow diagram. The diagram
+draws one open layer: its children, side by side, with the picked block lit.
 
-- Document view projects the organization tree.
-- Page view projects the selected page and its placed segments.
+**One click sets context, two act on what it is on.** Clicking a row in the
+Explorer goes to the layer holding that block and lights it there, so selecting
+always shows a thing among its siblings and never lands you inside it. Walking
+in is clicking a child. Double-clicking renames.
+
+The diagram reads the same pair: one click picks, and two always navigate —
+into a card, or back out of the layer. Renaming there is done from inside a
+block, by double-clicking the frame's name.
+
 - Every layer block carries `arrangement: "down"`, so a layer's children read
   as a vertical column and the diagram matches the Explorer's ordering.
 - One layer draws exactly one frame. The organization root is the tier root,
   so there is never a `docs` block inside a `docs` frame.
+- Selecting a page shows it among its siblings in its folder's layer, rather
+  than opening a frame of its own.
 - Layer selection changes projection, not graph construction.
 - Fold and pick are view state, not persisted graph layout.
+
+**This behavior belongs to mndflow, not to mndmap.** One click and two clicks
+are one pair of gestures with one meaning, and the Explorer, Stage, and Viewer
+are where that meaning lives. mndmap does not carry a local variant, a
+host-side workaround, or an option that turns it on — it consumes the
+components and gets the behavior. mndflow changes; mndmap upgrades its
+`@mnd/kit` pin.
 
 ## Graph and mndflow contract
 
 mndmap consumes an exact semantic version of `@mnd/kit` from the public npm
-registry. The matching mndflow commit is recorded beside the dependency for
+registry. The kit is a shared contract rather than a library to work around:
+where a component behaves wrongly for mndmap, it is wrong for mndflow too, and
+the fix is a kit release both products take. mndmap never wraps, forks, or
+locally overrides a kit component's behavior. The matching mndflow commit is recorded beside the dependency for
 fixtures and debugging. A sibling checkout is never required for installation
 or CI, and projects cannot select a different kit version through
 `mndmap.yaml`.
@@ -352,13 +394,13 @@ The graph builder:
 - constructs the complete graph after every accepted organization change;
 - applies global diagram depth and per-node overrides during projection;
 - stores neither layout nor projected scenes; and
-- passes `validate` and `review` before emit.
+- passes `validate` and `review` before export.
 
 `mndmap graph` remains available as a diagnostic/developer command. Its output
 must pass untouched through the real mndflow open, check, review, project, and
 SVG APIs.
 
-## Emit contract
+## Export contract
 
 ### Documents and frontmatter
 
@@ -394,7 +436,8 @@ required metadata sidecar accompanies the destination.
 
 ### Structure and segments
 
-- Emitted directories physically match the organization tree.
+- Emitted directories physically match the organization tree, so the
+  destination root holds the top-level folders and pages directly.
 - Moving a page changes its emitted path.
 - Moving a section changes the page containing its emitted content.
 - Segment ordering and destination-only overrides are applied during planning.
@@ -408,8 +451,8 @@ required metadata sidecar accompanies the destination.
   relative to `source.root`.
 - Markdown and MDX references are rewritten relative to emitted locations.
 - Static relative MDX imports and exports are rewritten when targets move.
-- Dynamic or unresolved local references block emit.
-- References escaping `source.root` block emit unless a future explicit policy
+- Dynamic or unresolved local references block export.
+- References escaping `source.root` block export unless a future explicit policy
   allows them.
 
 ### Diagrams
@@ -429,7 +472,7 @@ required metadata sidecar accompanies the destination.
 ### Atomic replacement
 
 Planning and validation finish before destination mutation. Files are written
-under `.mndmap/emit-<unique-id>/`, validated, then atomically replace the
+under `.mndmap/export-<unique-id>/`, validated, then atomically replace the
 destination. Any failure preserves the previous destination. Successful
 replacement removes stale files.
 
@@ -452,8 +495,8 @@ POST /segments/override
 POST /reconciliation/resolve
 GET  /graph
 GET  /graph/:layer
-POST /emit/preview
-POST /emit
+POST /export/preview
+POST /export
 GET  /diagnostics
 GET  /health
 ```
@@ -475,6 +518,25 @@ Each stage carries where it stands. `done` means the exit condition holds.
 
 Exit: clean checkout installation works without sibling repositories, and a
 fixture graph passes real mndflow validation, review, projection, and SVG.
+
+### S0b — Align the gestures upstream — mndflow work, done but unreleased
+
+Done in mndflow, because both products must gesture the same way. **One click
+sets context; two act on what they are on.**
+
+- `Explorer` click emits `reveal` — the layer holding the row, with the row
+  picked there — and double click renames;
+- `Stage` double click always navigates — into a card, or out of the layer —
+  and double-clicking the frame's name renames the layer it is the frame of;
+- `Viewer` accepts `picked` and `layer` as values a host may drive, with
+  `onPick` and `onLook`, and treats a name as the card it names;
+- `Hit` gains `title` for the frame's name, reported by the renderer because
+  text has no region a projection could compute.
+
+Remaining: release the kit, bump `mndflow-pin.json`, and reinstall.
+
+Exit: one click means the same thing in both products, and mndmap builds
+against the released kit.
 
 ### S1 — Generalize configuration and stateless build — partial
 
@@ -504,43 +566,57 @@ without modifying source.
 
 ### S3 — Complete graph projection and diagrams — partial
 
-- project Explorer, document, and page layers;
+- project the open layer, its siblings, and the picked block;
+- take the S0b kit release rather than reproducing its behavior here;
 - apply configured and per-node depth;
 - produce valid destination links;
 - validate and review every complete graph.
 
-Exit: document and page projections render through `Viewer` and `draw_svg`
-with correct links and deterministic output.
+Exit: layer projections render through `Viewer` and `draw_svg` with correct
+links and deterministic output, and no gesture reaches an empty frame.
 
-### S4 — Complete physical emit — partial
+### S4 — Complete physical export — partial
 
-- emit ordinary generated landing pages and ordered child links;
+- export ordinary generated landing pages and ordered child links;
 - apply page moves, segment moves, ordering, and overrides;
 - preserve page metadata and fill missing description and reading time;
 - merge mdsite template/defaults and generate `nav_order`;
 - rewrite links, MDX references, and assets;
 - stage, validate, and atomically replace the destination.
 
-Exit: source is byte-identical, failed emit preserves the prior destination,
+Exit: source is byte-identical, a failed export preserves the prior destination,
 and all emitted references resolve.
 
-### S5 — Build the complete dashboard — not started
+### S5 — Build the dashboard shell and content blocks — not started
 
 - adopt mndflow's shell: vendored `ramp.css` and `base.css`, the `.app` grid,
   and every control in the header's right-hand `.tools` group;
-- limit Explorer to folders, groups, and pages;
+- keep the kit's `Explorer` and `Viewer`, and limit Explorer to folders,
+  groups, and pages;
 - wire all organization intents;
 - draw the selected page as a vertical list of expandable segment blocks;
-- reveal segment tables, lists, terms, and links as mndflow fields, and make
-  each field a destination-only override;
-- support drag to reorder, drag to another page, and remove;
-- add the Content/Diagram toggle and document/page projection;
-- move diagnostics into a load-time dialog and name the emit controls
-  `Preview` and `Export`;
+- support drag to reorder and remove within a page;
+- add the Content/Diagram toggle, and wire Explorer selection to the Viewer
+  through the S0b props;
+- move diagnostics into a load-time dialog and rename every emit surface —
+  CLI, REST, staging directory, and controls — to `export`;
 - add reconciliation workflows.
 
 Exit: every supported action persists and redraws without reload, and explicit
 export produces the previewed destination.
+
+### S5b — Reveal segment content as fields — deferred
+
+Held until the block list, its gestures, and the export they produce are
+settled, so the editor is built on a fixed shape rather than a moving one.
+
+- project a section's tables, lists, terms, and links into mndflow fields;
+- edit a field and store it as a destination-only override on that field;
+- re-serialize one field without rewriting its segment;
+- show which fields carry an override, and clear one.
+
+Exit: a table cell and a list item can each be edited, exported, and cleared
+without touching source or any neighbouring content.
 
 ### S6 — Migrate mdsite — partial
 
@@ -567,7 +643,7 @@ fixture all pass.
 Define an optional enrichment interface over immutable parsed content and
 organization snapshots. Add discovery, timeout, cancellation, suggestions,
 accept/ignore, and invalidation. Absence or failure of Taggly must never block
-parse, dashboard use, graphing, emit, mdsite build, or CI.
+parse, dashboard use, graphing, export, mdsite build, or CI.
 
 ## Test plan
 
@@ -585,7 +661,7 @@ parse, dashboard use, graphing, emit, mdsite build, or CI.
 - frontmatter preservation and fill-only metadata;
 - first-paragraph description and 200-WPM reading time;
 - mdsite template precedence and `nav_order` generation;
-- deterministic graph and emit planning.
+- deterministic graph and export planning.
 
 ### Integration
 
