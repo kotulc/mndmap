@@ -327,6 +327,10 @@ Each block:
 - expands to show the section's content;
 - shows missing, unresolved, and overridden state on the block itself.
 
+The list is **linear**, and nesting is drawn as an indent. A page whose
+heading holds the rest of the page would otherwise hide the whole document
+behind one closed row, which is the opposite of a stack of parts.
+
 The list is managed by direct manipulation:
 
 - drag to reorder within the page;
@@ -525,7 +529,7 @@ Each stage carries where it stands. `done` means the exit condition holds.
 Exit: clean checkout installation works without sibling repositories, and a
 fixture graph passes real mndflow validation, review, projection, and SVG.
 
-### S0b — Align the gestures upstream — mndflow work, done
+### S0b — Align the components upstream — mndflow work, done
 
 Done in mndflow, because both products must gesture the same way. **One click
 sets context; two act on what they are on.**
@@ -539,7 +543,12 @@ sets context; two act on what they are on.**
 - `Hit` gains `title` for the frame's name, reported by the renderer because
   text has no region a projection could compute.
 
-Released as `@mnd/kit` 0.2.0 and pinned here.
+Also upstream, in 0.3.0: a layer whose blocks relate to nothing lays out along
+its arrangement rather than ranking them all together — `down` reads as a
+column — and Explorer rows carry their kind, so a host can tell a folder from
+a page by more than a glyph.
+
+Released as `@mnd/kit` 0.3.0 and pinned here.
 
 Exit: one click means the same thing in both products, and mndmap builds
 against the released kit.

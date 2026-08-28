@@ -1,6 +1,6 @@
 import { Explorer, Viewer } from "@mnd/kit/react";
 import type { Graph } from "@mnd/kit";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createEditorApi, type EditorApi } from "./api.js";
 import { ContentPanel } from "./ContentPanel.js";
 import { DiagnosticsDialog } from "./DiagnosticsDialog.js";
@@ -11,7 +11,14 @@ import { TIER_ROOT_ID } from "../vocab/docs.js";
 type PanelMode = "content" | "diagram";
 type ThemeName = "retro" | "modern" | "light";
 
-export function App({ api = createEditorApi() }: { api?: EditorApi }) {
+export function App({ api }: { api?: EditorApi } = {}) {
+  /** Lazily, and once. A default parameter builds a new client on **every**
+   *  render, which every hook below then treats as a new dependency — the
+   *  effect re-imports, the state changes, and the render loops forever. */
+  const held = useRef<EditorApi | null>(null);
+  held.current ??= api ?? createEditorApi();
+  const editor = held.current;
+
   const [graph, setGraph] = useState<Graph | null>(null);
   const [organization, setOrganization] = useState<OrganizationSnapshot | null>(null);
   const [layer, setLayer] = useState<string | null>(TIER_ROOT_ID);
@@ -23,6 +30,7 @@ export function App({ api = createEditorApi() }: { api?: EditorApi }) {
   const [diagnostics, setDiagnostics] = useState<Diagnostic[]>([]);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const [feedback, setFeedback] = useState("Loading…");
+  const [reloads, setReloads] = useState(0);
   const [theme, setTheme] = useState<ThemeName>("retro");
 
   useEffect(() => {
@@ -30,31 +38,41 @@ export function App({ api = createEditorApi() }: { api?: EditorApi }) {
   }, [theme]);
 
   const refresh = useCallback(async () => {
-    const nextGraph = await api.graph() as Graph;
-    const nextOrganization = await api.organization();
-    const nextDiagnostics = await api.diagnostics();
+    const nextGraph = await editor.graph() as Graph;
+    const nextOrganization = await editor.organization();
+    const nextDiagnostics = await editor.diagnostics();
     setGraph(nextGraph);
     setOrganization(nextOrganization);
     setDiagnostics(nextDiagnostics);
     setLayer((current) => current && nextGraph.blocks[current] ? current : TIER_ROOT_ID);
-    if (selectedPageId) {
-      setSegments(await api.pageSegments(selectedPageId));
-    }
     setFeedback("");
-  }, [api, selectedPageId]);
+    setReloads((n) => n + 1);
+  }, [editor]);
 
   useEffect(() => {
     void (async () => {
       try {
-        await api.import();
+        await editor.import();
         await refresh();
-        const initialDiagnostics = await api.diagnostics();
+        const initialDiagnostics = await editor.diagnostics();
         if (initialDiagnostics.length > 0) setDiagnosticsOpen(true);
       } catch (error) {
         setFeedback(error instanceof Error ? error.message : String(error));
       }
     })();
-  }, [api, refresh]);
+  }, [editor, refresh]);
+
+  /** The open page's content, reloaded when the page changes and again
+   *  whenever the workspace has been rebuilt under it. */
+  useEffect(() => {
+    if (!selectedPageId) { setSegments([]); return; }
+    let live = true;
+    void (async () => {
+      const next = await editor.pageSegments(selectedPageId);
+      if (live) setSegments(next);
+    })();
+    return () => { live = false; };
+  }, [editor, selectedPageId, reloads]);
 
   const onAct = useCallback(async (name: string, args?: Record<string, unknown>) => {
     /** A click reveals: the layer holding the block, with the block picked
@@ -64,14 +82,12 @@ export function App({ api = createEditorApi() }: { api?: EditorApi }) {
       setLayer(graph?.blocks[id]?.parent ?? TIER_ROOT_ID);
       setPicked([id]);
       const pageNode = organization?.nodes.find((node) => node.id === id && node.kind === "page");
-      if (!pageNode) return;
-      setSelectedPageId(pageNode.id);
-      setSegments(await api.pageSegments(pageNode.id));
+      setSelectedPageId(pageNode?.id ?? null);
       return;
     }
     if (name === "rename" && args?.id && args?.label) {
       try {
-        await api.renameOrganization({ id: String(args.id), title: String(args.label) });
+        await editor.renameOrganization({ id: String(args.id), title: String(args.label) });
         await refresh();
         setFeedback("Renamed.");
       } catch (error) {
@@ -81,14 +97,14 @@ export function App({ api = createEditorApi() }: { api?: EditorApi }) {
     }
     if (name === "move" && args?.id && args?.parent) {
       try {
-        await api.moveOrganization({ id: String(args.id), parentId: String(args.parent) });
+        await editor.moveOrganization({ id: String(args.id), parentId: String(args.parent) });
         await refresh();
         setFeedback("Organization updated.");
       } catch (error) {
         setFeedback(error instanceof Error ? error.message : String(error));
       }
     }
-  }, [api, graph, organization?.nodes, refresh]);
+  }, [editor, graph, organization?.nodes, refresh]);
 
   const run = async (action: () => Promise<unknown>, success: string) => {
     try {
@@ -115,7 +131,7 @@ export function App({ api = createEditorApi() }: { api?: EditorApi }) {
   const moveSegment = async (sourceNodeId: string, position: number) => {
     if (!selectedPageId) return;
     await run(
-      () => api.moveSegment({ sourceNodeId, pageOrganizationId: selectedPageId, position }),
+      () => editor.moveSegment({ sourceNodeId, pageOrganizationId: selectedPageId, position }),
       "Segment order updated.",
     );
   };
@@ -123,7 +139,7 @@ export function App({ api = createEditorApi() }: { api?: EditorApi }) {
   const removeSegment = async (sourceNodeId: string) => {
     if (!selectedPageId) return;
     await run(
-      () => api.removeSegment({ pageOrganizationId: selectedPageId, sourceNodeId }),
+      () => editor.removeSegment({ pageOrganizationId: selectedPageId, sourceNodeId }),
       "Segment removed from page.",
     );
   };
@@ -137,9 +153,9 @@ export function App({ api = createEditorApi() }: { api?: EditorApi }) {
         <div className="tools">
           <button type="button" className={panel === "content" ? "active" : ""} onClick={() => setPanel("content")}>Content</button>
           <button type="button" className={panel === "diagram" ? "active" : ""} onClick={() => setPanel("diagram")}>Diagram</button>
-          <button type="button" onClick={() => void run(() => api.rescan(), "Rescan complete.")}>Rescan</button>
-          <button type="button" onClick={() => void run(() => api.exportPreview(), "Export preview ready.")}>Preview</button>
-          <button type="button" onClick={() => void run(() => api.export(), "Destination exported.")}>Export</button>
+          <button type="button" onClick={() => void run(() => editor.rescan(), "Rescan complete.")}>Rescan</button>
+          <button type="button" onClick={() => void run(() => editor.exportPreview(), "Export preview ready.")}>Preview</button>
+          <button type="button" onClick={() => void run(() => editor.export(), "Destination exported.")}>Export</button>
           <button type="button" onClick={() => setDiagnosticsOpen(true)}>Diagnostics</button>
           <select value={theme} onChange={(event) => setTheme(event.target.value as ThemeName)} aria-label="Theme">
             <option value="retro">Retro</option>

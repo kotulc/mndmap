@@ -1,7 +1,7 @@
 {
-  "mndflowCommit": "95a324f2b82577bef1bd9afa42989e981987cda0",
-  "kitVersion": "0.2.0",
-  "kitTarball": "vendor/mnd-kit-0.2.0.tgz",
+  "mndflowCommit": "a0ea9baaffbd2922949ac220a2e1acf1b3936146",
+  "kitVersion": "0.3.0",
+  "kitTarball": "vendor/mnd-kit-0.3.0.tgz",
   "mndsiteBranch": "main",
   "mndsiteImage": "ghcr.io/kotulc/mndsite:main"
 }

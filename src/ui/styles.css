@@ -79,3 +79,17 @@
 .segment-actions { display: flex; gap: 4px; margin-left: auto; }
 
 .empty-state { color: var(--muted); padding: 24px; }
+
+/* A folder and a page are different kinds of thing, and four pixels of glyph
+ * is not enough to say so. The kit names each row's kind; this reads it. */
+.explorer li[data-mark="folder"] > .label {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.explorer li[data-mark="leaf"] > .label,
+.explorer li[data-mark="container"] > .label {
+  color: var(--dim, var(--muted));
+}
+
+.explorer li[data-mark="folder"] > .mark { color: var(--accent); }
