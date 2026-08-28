@@ -1,5 +1,5 @@
 ---
-title: Emit contract
+title: Export contract
 categories:
   - specifications
 tags:
@@ -12,9 +12,9 @@ related:
     url: /specifications/pipeline-split
 ---
 
-# Emit contract
+# Export contract
 
-This document summarizes what `mndmap build` and `mndmap emit` guarantee. `plan.md` is authoritative for implementation details.
+This document summarizes what `mndmap build` and `mndmap export` guarantee. `plan.md` is authoritative for implementation details.
 
 ## Documents and frontmatter
 
@@ -27,9 +27,9 @@ This document summarizes what `mndmap build` and `mndmap emit` guarantee. `plan.
 
 ## Structure
 
-- Emitted directories match the organization tree
+- Emitted directories match the organization tree (no source-root prefix in routes)
 - Moving a page changes its emitted path
-- Moving a section changes the containing page
+- Segment placements control which sections appear on each page
 - Segment ordering and destination-only overrides apply during planning
 - Duplicate output paths, routes, or anchors are blocking diagnostics
 - Silent path suffixes are forbidden
@@ -37,11 +37,11 @@ This document summarizes what `mndmap build` and `mndmap emit` guarantee. `plan.
 ## Links, assets, and MDX
 
 - Internal links rewrite to emitted page and heading targets
-- Referenced local assets copy to `_assets/` preserving `source.root`-relative paths
+- Referenced local assets copy to `_assets/` preserving paths relative to `source.root`
 - Markdown and MDX references rewrite relative to emitted locations
 - Static relative MDX imports/exports rewrite when targets move
-- Dynamic or unresolved local references block emit
-- References escaping `source.root` block emit
+- Dynamic or unresolved local references block export
+- References escaping `source.root` block export
 
 ## Diagrams
 
@@ -63,26 +63,24 @@ This document summarizes what `mndmap build` and `mndmap emit` guarantee. `plan.
 ## Atomic replacement
 
 1. Plan and validate completely
-2. Write staging directory (`.mndmap/emit-<uuid>/` or temp)
+2. Write staging directory (`.mndmap/export-<uuid>/` or temp)
 3. Rename staging → destination
 4. On failure, previous destination remains; staging may be recorded for recovery
 
-Successful `build` with `ephemeral: true` removes temp staging. Interactive `emit` may leave abandoned staging paths in the store for inspection.
+Successful `build` with `ephemeral: true` removes temp staging. Interactive `export` may leave abandoned staging paths in the store for inspection.
 
 ## Determinism
 
-Same source + configuration + kit version → byte-identical destination.
+Same source + configuration + `@mnd/kit` version → byte-identical destination.
 
 ## Blocking diagnostics (non-exhaustive)
 
 | Code | Cause |
 |------|-------|
 | `missing-asset` | Referenced file not on disk |
-| `unresolved-identity` | Source node not resolved |
-| `graph-validate` | mndflow validate fault |
-| `graph-review` | mndflow review note treated as error |
+| `unresolved-identity` | Ambiguous or missing source node after rescan |
+| `missing-placed-segment` | A placed segment no longer resolves |
 | `path-collision` | Two outputs share a path |
-| `anchor-collision` | Duplicate heading slug in one page |
-| selector errors | Zero or multiple selector matches |
-
-All errors are collected before any destination mutation.
+| `anchor-collision` | Duplicate heading anchor in one file |
+| `graph-validate` / `graph-review` | mndflow graph faults |
+| `dynamic-mdx-reference` | Non-static MDX import |

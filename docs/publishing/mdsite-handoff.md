@@ -18,21 +18,18 @@ related:
 
 # mdsite handoff
 
-The emitted **destination** is the portable contract between mndmap and mdsite. mndmap replaces it atomically on each build or emit; mdsite mirrors it without reorganizing.
+The exported **destination** is the portable contract between mndmap and mdsite. mndmap replaces it atomically on each build or export; mdsite mirrors it without reorganizing.
 
 ## Destination layout
 
 ```text
 site/                          # or your configured destination name
 ├── mdsite.yaml                # content: .  +  generated nav_order
-├── docs/                      # example — mirrors your organization tree
-│   ├── index.md
-│   ├── getting-started.md
-│   └── workflow/
-│       └── overview.md
-└── _assets/                   # collected local assets, paths preserved
-    └── docs/
-        └── diagram.svg
+├── readme.md                  # pages at destination root (no source.root prefix)
+├── workflow/
+│   └── overview.md
+└── _assets/                   # collected local assets, source-root-relative paths
+    └── diagram.svg
 ```
 
 Every path under the destination is publication-ready. Internal links already resolve to emitted routes. MDX imports are rewritten when targets move.
@@ -95,7 +92,7 @@ emit:    site/_assets/docs/images/photo.png
 mdsite:  public/_assets/docs/images/photo.png
 ```
 
-Missing assets block emit with a diagnostic — mndmap does not emit broken references.
+Missing assets block export with a diagnostic — mndmap does not export broken references.
 
 ## Removed mdsite responsibilities
 

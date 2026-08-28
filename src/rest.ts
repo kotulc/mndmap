@@ -49,8 +49,18 @@ async function route(service: Mndmap, request: IncomingMessage, response: Server
   if (method === "GET" && url.pathname === "/organization") return send(response, 200, service.organization());
   if (method === "GET" && url.pathname === "/graph") return send(response, 200, service.graph());
   if (method === "GET" && url.pathname === "/diagnostics") return send(response, 200, service.diagnostics());
-  if (method === "POST" && url.pathname === "/emit/preview") return send(response, 200, await service.emitPreview());
-  if (method === "POST" && url.pathname === "/emit") return send(response, 200, await service.emit());
+  if (method === "POST" && url.pathname === "/export/preview") return send(response, 200, await service.exportPreview());
+  if (method === "POST" && url.pathname === "/export") return send(response, 200, await service.export());
+
+  const pageSegments = url.pathname.match(/^\/pages\/([^/]+)\/segments$/);
+  if (method === "GET" && pageSegments) {
+    return send(response, 200, service.pageSegments(decodeURIComponent(pageSegments[1]!)));
+  }
+
+  const graphLayer = url.pathname.match(/^\/graph\/([^/]+)$/);
+  if (method === "GET" && graphLayer) {
+    return send(response, 200, service.graphLayer(decodeURIComponent(graphLayer[1]!)));
+  }
 
   if (method === "POST" && url.pathname === "/organization/move") {
     const input = z.object({
@@ -100,6 +110,39 @@ async function route(service: Mndmap, request: IncomingMessage, response: Server
       id: input.id,
       ...(input.diagramRoot === undefined ? {} : { diagramRoot: input.diagramRoot }),
       ...(input.diagramDepth === undefined ? {} : { diagramDepth: input.diagramDepth }),
+    }));
+  }
+  if (method === "POST" && url.pathname === "/segments/move") {
+    const input = z.object({
+      sourceNodeId: z.string().min(1),
+      pageOrganizationId: z.string().min(1),
+      parentSegmentId: z.string().nullable().optional(),
+      position: z.number().int().nonnegative(),
+    }).parse(await body(request));
+    return send(response, 200, service.moveSegment({
+      sourceNodeId: input.sourceNodeId,
+      pageOrganizationId: input.pageOrganizationId,
+      ...(input.parentSegmentId === undefined ? {} : { parentSegmentId: input.parentSegmentId }),
+      position: input.position,
+    }));
+  }
+  if (method === "POST" && url.pathname === "/segments/remove") {
+    const input = z.object({
+      pageOrganizationId: z.string().min(1),
+      sourceNodeId: z.string().min(1),
+    }).parse(await body(request));
+    return send(response, 200, service.removeSegment(input.pageOrganizationId, input.sourceNodeId));
+  }
+  if (method === "POST" && url.pathname === "/segments/override") {
+    const input = z.object({
+      sourceNodeId: z.string().min(1),
+      field: z.string().nullable().optional(),
+      content: z.string(),
+    }).parse(await body(request));
+    return send(response, 200, service.overrideSegment({
+      sourceNodeId: input.sourceNodeId,
+      content: input.content,
+      ...(input.field === undefined ? {} : { field: input.field }),
     }));
   }
   if (method === "POST" && url.pathname === "/reconciliation/resolve") {

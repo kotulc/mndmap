@@ -46,7 +46,7 @@ my-project/
 └── site/              # destination — mndmap writes here; mdsite reads from here
 ```
 
-mndmap never modifies `docs/`. Everything under `site/` is regenerated on each build or emit.
+mndmap never modifies `docs/`. Everything under `site/` is regenerated on each build or export.
 
 ## Stateless build (recommended for CI)
 
@@ -95,10 +95,10 @@ The dashboard opens in your browser. Drag pages and sections in the tree; the di
 When the layout looks right:
 
 ```bash
-mndmap emit --root /path/to/project
+mndmap export --root /path/to/project
 ```
 
-`emit` writes the same destination contract as `build`, but from your saved organization instead of deterministic defaults.
+`export` writes the same destination contract as `build`, but from your saved organization and segment placements instead of deterministic defaults.
 
 ## Headless commands
 

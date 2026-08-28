@@ -29,7 +29,8 @@ export function extractSourceNodes(documents: ParsedDocument[], scanId: string):
 
   for (const document of documents) {
     const extension = document.path.endsWith(".mdx") ? ".mdx" : ".md";
-    const title = titleFromPath(document.path, extension);
+    const title = documentTitle(document, extension);
+    const slug = document.path.split("/").pop()!.slice(0, -extension.length);
     const explicitKey = explicitId(document.frontmatter);
     nodes.push(makeNode({
       kind: "page",
@@ -41,7 +42,8 @@ export function extractSourceNodes(documents: ParsedDocument[], scanId: string):
       siblingIndex: siblingIndex(document.path),
       scanId,
       ...(explicitKey ? { explicitKey } : {}),
-      sourceData: { revision: document.revision, extension, frontmatter: document.frontmatter ?? null },
+      sourceData: { revision: document.revision, extension, slug,
+                    frontmatter: document.frontmatter ?? null },
     }));
 
     let tableIndex = 0;
@@ -61,7 +63,10 @@ export function extractSourceNodes(documents: ParsedDocument[], scanId: string):
           parentKind: "page",
           siblingIndex: node.depth ?? 1,
           scanId,
-          sourceData: { depth: node.depth, headingPath: node.headingPath, range: node.range },
+          /** The section's own text, kept so the dashboard can show a segment
+           *  without re-reading the file it came from. */
+          sourceData: { depth: node.depth, headingPath: node.headingPath, range: node.range,
+                        body: slice(document.content, node.range) },
         }));
       } else if (node.kind === "table") {
         tableIndex++;
@@ -167,6 +172,18 @@ function makeNode(input: {
 function siblingIndex(path: string): number {
   const parts = path.split("/");
   return parts[parts.length - 1]!.charCodeAt(0);
+}
+
+/** What the document calls itself: its frontmatter title, then its first
+ *  heading, and only then its filename. An author who named the page is never
+ *  told it is called something else. Where it is **filed** is a separate
+ *  question, answered by the filename, so renaming a heading never moves it. */
+function documentTitle(document: ParsedDocument, extension: string): string {
+  const front = document.frontmatter as Record<string, unknown> | null | undefined;
+  const declared = front && typeof front["title"] === "string" ? front["title"].trim() : "";
+  if (declared) return declared;
+  const heading = /^#s+(.+)$/m.exec(document.content)?.[1]?.trim();
+  return heading || titleFromPath(document.path, extension);
 }
 
 function titleFromPath(path: string, extension: string): string {

@@ -1,4 +1,5 @@
 import type { Definition } from "@mnd/kit";
+import type { MndmapConfig } from "../types.js";
 
 export const DOC_VOCABULARY: Definition[] = [
   {
@@ -96,3 +97,10 @@ export const DOC_VOCABULARY: Definition[] = [
 ];
 
 export const TIER_ROOT_ID = "block_docs";
+
+export function tierRootLabel(config: MndmapConfig): string {
+  const root = config.source.root.replace(/\/$/, "");
+  if (!root || root === ".") return "content";
+  const parts = root.split("/").filter(Boolean);
+  return parts[parts.length - 1] ?? "content";
+}

@@ -21,7 +21,7 @@ mndmap draws your documentation structure as **mndflow block diagrams** — live
 
 1. The graph builder reads an immutable working-store snapshot
 2. Organization nodes become blocks with deterministic IDs and ordering
-3. `@mnd/kit` validates the graph, projects a layer, and renders SVG
+3. `@mnd/kit` **0.2.0** validates the graph, projects a layer (with depth `n`), and renders SVG
 4. Every navigable block carries a `link` field: emitted page URL + heading anchor
 5. mdsite preserves inline SVG through ingest (with MDX-safe escaping)
 
@@ -57,7 +57,7 @@ mndmap uses mdsite-compatible URL and anchor rules (Nextra/GitHub style slugific
 
 ## Diagnostics
 
-The complete graph must pass `validate` and `review` before emit. Graph JSON is available for debugging:
+The complete graph must pass `validate` and `review` before export. Graph JSON is available for debugging:
 
 ```bash
 mndmap graph --out plan.mndflow.json

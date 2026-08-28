@@ -44,7 +44,7 @@ export interface SourceNode {
   candidates?: string[];
 }
 
-export type OrganizationKind = "source" | "group";
+export type OrganizationKind = "folder" | "group" | "page";
 
 export interface OrganizationNode {
   id: string;
@@ -56,6 +56,37 @@ export interface OrganizationNode {
   outputSlug: string | null;
   diagramRoot: boolean;
   diagramDepth: number | null;
+}
+
+export interface SegmentPlacement {
+  id: string;
+  sourceNodeId: string;
+  pageOrganizationId: string;
+  parentSegmentId: string | null;
+  position: number;
+}
+
+export interface SegmentOverride {
+  sourceNodeId: string;
+  field: string | null;
+  content: string;
+  updatedAt: string;
+}
+
+export interface SegmentView {
+  id: string;
+  sourceNodeId: string;
+  pageOrganizationId: string;
+  parentSegmentId: string | null;
+  position: number;
+  kind: SourceNodeKind;
+  title: string;
+  /** What the block shows when it is expanded: the override where there is
+   *  one, and the source section otherwise. */
+  body: string;
+  resolution: ResolutionState;
+  overridden: boolean;
+  children: SegmentView[];
 }
 
 export interface OrganizationSnapshot {
@@ -119,11 +150,14 @@ export interface GraphResult {
   tierRootId: string;
 }
 
-export interface EmitPreview {
+export interface ExportPreview {
   files: Array<{ path: string; bytes: number }>;
   assets: string[];
   diagnostics: Diagnostic[];
 }
+
+/** @deprecated Use ExportPreview */
+export type EmitPreview = ExportPreview;
 
 export interface GroupingSuggestion {
   id: string;
@@ -167,9 +201,24 @@ export interface ResolveReconciliationInput {
   candidateId?: string;
 }
 
+export interface MoveSegmentInput {
+  sourceNodeId: string;
+  pageOrganizationId: string;
+  parentSegmentId?: string | null;
+  position: number;
+}
+
+export interface SegmentOverrideInput {
+  sourceNodeId: string;
+  field?: string | null;
+  content: string;
+}
+
 export interface WorkingStoreSnapshot {
   sourceNodes: SourceNode[];
   organization: OrganizationSnapshot;
+  segmentPlacements: SegmentPlacement[];
+  segmentOverrides: SegmentOverride[];
   diagnostics: Diagnostic[];
   config: MndmapConfig;
 }

@@ -1,17 +1,81 @@
-:root {
-  color: #d8dee9;
-  background: #0f1218;
-  font: 14px/1.45 Inter, ui-sans-serif, system-ui, sans-serif;
+/* mndmap's own panels: the diagnostics dialog and the content stack.
+ *
+ * The shell and the ramp are `base.css` and `theme.css`; nothing here names a
+ * colour of its own. */
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--outside);
+  display: grid;
+  place-items: center;
+  z-index: 100;
 }
 
-* { box-sizing: border-box; }
-body { margin: 0; min-height: 100vh; }
-button { cursor: pointer; color: inherit; font: inherit; padding: 8px 12px; border: 1px solid #2a3340; border-radius: 4px; background: #1b212b; }
+.dialog {
+  width: min(720px, 92vw);
+  max-height: 80vh;
+  overflow: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 16px;
+}
 
-.app { display: grid; grid-template-rows: auto auto 1fr; min-height: 100vh; }
-.toolbar { display: flex; gap: 10px; align-items: center; padding: 12px 16px; border-bottom: 1px solid #2a3340; background: #11151c; }
-.feedback, .diagnostics { margin: 0; padding: 8px 16px; }
-.diagnostics { color: #ffb4a6; white-space: pre-wrap; }
-.workspace { display: grid; grid-template-columns: 320px 1fr; min-height: 0; }
-.panel { min-height: 0; border-top: 1px solid #2a3340; overflow: auto; }
-.viewer { border-left: 1px solid #2a3340; }
+.dialog header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.dialog pre { white-space: pre-wrap; margin: 0; }
+
+.content-panel { padding: 12px 16px 24px; }
+
+.segment-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* A nested stack reads as inset rather than as another top-level list. */
+.segment-block .segment-list { margin: 0 12px 12px; }
+
+.segment-block {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+}
+
+.segment-block summary {
+  cursor: pointer;
+  padding: 8px 12px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.segment-block .badge {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.segment-block .badge.warn { border-color: var(--warn); color: var(--warn); }
+
+.segment-block .body {
+  padding: 0 12px 12px;
+  margin: 0;
+  white-space: pre-wrap;
+  color: var(--dim, var(--muted));
+}
+
+.segment-actions { display: flex; gap: 4px; margin-left: auto; }
+
+.empty-state { color: var(--muted); padding: 24px; }

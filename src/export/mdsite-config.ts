@@ -36,7 +36,6 @@ export async function loadMdsiteTemplate(root: string, config: MndmapConfig): Pr
 
 /** Build nav_order maps from physical organization sibling positions. */
 export function buildNavOrder(snapshot: WorkingStoreSnapshot): Record<string, string[]> {
-  const sourceById = new Map(snapshot.sourceNodes.map((node) => [node.id, node]));
   const childrenByParent = new Map<string | null, OrganizationNode[]>();
   for (const node of snapshot.organization.nodes) {
     const bucket = childrenByParent.get(node.parentId) ?? [];
@@ -47,12 +46,8 @@ export function buildNavOrder(snapshot: WorkingStoreSnapshot): Record<string, st
     bucket.sort((left, right) => left.position - right.position);
   }
 
-  const isNavigable = (node: OrganizationNode): boolean => {
-    if (node.kind === "group") return true;
-    if (!node.sourceNodeId) return false;
-    const source = sourceById.get(node.sourceNodeId);
-    return source?.kind === "folder" || source?.kind === "page";
-  };
+  const isNavigable = (node: OrganizationNode): boolean =>
+    node.kind === "group" || node.kind === "folder" || node.kind === "page";
 
   const navOrder: Record<string, string[]> = {};
   const walk = (parentId: string | null, routePrefix: string): void => {

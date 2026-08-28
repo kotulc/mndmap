@@ -16,7 +16,7 @@ const config: MndmapConfig = {
 describe("graph builder", () => {
   it("builds deterministic graph output", () => {
     const store = new WorkingStore();
-    store.importScan([parseDocument("docs/a.md", "# A\n\n## Section\n\nBody.\n", config)], config);
+    store.importScan([parseDocument("a.md", "# A\n\n## Section\n\nBody.\n", config)], config);
     const snapshot = store.snapshot(config);
     const first = graphFile(snapshot, "fixture");
     const second = graphFile(snapshot, "fixture");
@@ -26,7 +26,7 @@ describe("graph builder", () => {
 
   it("passes vocabulary validate and review for representative docs", () => {
     const store = new WorkingStore();
-    store.importScan([parseDocument("docs/a.md", "# A\n\n## Section\n\nBody.\n", config)], config);
+    store.importScan([parseDocument("a.md", "# A\n\n## Section\n\nBody.\n", config)], config);
     const result = checkVocabulary(store.snapshot(config));
     expect(result.faults).toEqual([]);
     expect(result.notes).toEqual([]);

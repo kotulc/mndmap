@@ -19,7 +19,7 @@ docs/**/*.{md,mdx}
      parse ──▶ working store ──┬──▶ tree        reorganize files and sections
         │                      └──▶ diagram     redrawn as you go
         │                                │
-        └────────────────── emit ────────┴──▶  site/
+        └────────────────── export ────────┴──▶  site/
                                                documents + _assets/ + mdsite.yaml
                                                         │
                                                      mdsite ──▶ dist/
@@ -37,14 +37,14 @@ docs/**/*.{md,mdx}
 ## Two ways to work
 
 1. **`mndmap build`** — stateless CI pipeline. Parses source, applies configuration and deterministic defaults, atomically replaces the destination. No `.mndmap/` directory required.
-2. **`mndmap ui`** — interactive workspace. Keeps organization and content overrides in `.mndmap/state.sqlite`. Reorganize in the dashboard, then `mndmap emit` when ready.
+2. **`mndmap ui`** — interactive workspace. Keeps organization and segment overrides in `.mndmap/state.sqlite`. Reorganize in the dashboard, then **`mndmap export`** when ready.
 
-`build` does not read dashboard state. Dashboard decisions affect explicit workspace emits only.
+`build` does not read dashboard state. Dashboard decisions affect explicit workspace exports only.
 
 ## Where to go next
 
 - [Getting Started](getting-started.md) — install, first build, chain to mdsite
 - [Configuration](configuration.md) — `mndmap.yaml`, selectors, diagram depth
-- [Workflow overview](workflow/overview.md) — parse → store → graph → emit
+- [Workflow overview](workflow/overview.md) — parse → store → graph → export
 - [mdsite handoff](publishing/mdsite-handoff.md) — destination contract and `nav_order`
 - [Deployment](publishing/deployment.md) — CI/CD with mndmap and mdsite

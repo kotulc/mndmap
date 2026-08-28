@@ -5,7 +5,7 @@ categories:
 tags:
   - pipeline
   - parse
-  - emit
+  - export
 related:
   - title: Stateless build
     url: /workflow/stateless-build
@@ -25,7 +25,7 @@ configured source
   → working store
   → organization (defaults or dashboard)
   → graph validation (mndflow / @mnd/kit)
-  → emit planning
+  → export planning
   → destination/ + mdsite.yaml
   → mdsite build
   → dist/
@@ -36,12 +36,13 @@ configured source
 | Concern | Where it happens |
 |---------|------------------|
 | Source parsing and structural identity | `parse` → source nodes in working store |
-| File, folder, group, and section organization | organization tree |
-| Destination layout and sibling order | emit → paths + `nav_order` |
-| Internal link and MDX reference rewriting | emit planning |
-| Local asset collection into `_assets/` | emit |
-| Inline mndflow diagram SVG with navigation links | emit on landing pages |
-| Fill-only `description` and `reading_time` | `metadata.ts` during emit |
+| File, folder, group, and page organization | organization tree (`folder` \| `group` \| `page`) |
+| Section placement per page | `segment_placement` |
+| Destination layout and sibling order | export → paths + `nav_order` |
+| Internal link and MDX reference rewriting | export planning |
+| Local asset collection into `_assets/` | export |
+| Inline mndflow diagram SVG with navigation links | export on landing pages |
+| Fill-only `description` and `reading_time` | `metadata.ts` during export |
 | `mdsite.yaml` with `content: .` and generated `nav_order` | `emit/mdsite-config.ts` |
 
 ## What mdsite owns (downstream)
@@ -67,27 +68,26 @@ mdsite does **not** reorganize folders, flatten directories, run embeddings, sco
 - **The destination** is wholly owned by mndmap and replaced atomically.
 - **mdsite** consumes the destination without semantic enrichment.
 
-## Two workflows, one emit contract
+## Two workflows, one export contract
 
-| | `mndmap build` | `mndmap ui` + `emit` |
+| | `mndmap build` | `mndmap ui` + `export` |
 |---|---|---|
-| Working store | ephemeral (in-memory or temp SQLite) | persistent `.mndmap/state.sqlite` |
+| Working store | ephemeral (in-memory SQLite) | persistent `.mndmap/state.sqlite` |
 | Organization | deterministic defaults mirroring source | user-edited tree |
+| Segment placements | seeded from source | user-edited per page |
 | Reads `.mndmap/` | no | yes |
 | Output | same destination contract | same destination contract |
 | Use case | CI, reproducible pipelines | exploratory restructuring |
 
-Both paths produce byte-identical output when organization matches.
+Both paths produce byte-identical output when organization and placements match.
 
 ## The graph is derived
 
-mndmap builds a mndflow graph from the working store on demand — for the dashboard preview, validation before emit, and inline SVG generation. The graph is **not stored** and **not hand-placed**. Steering a diagram means reorganizing the tree, not dragging boxes.
+mndmap builds a mndflow graph from the working store on demand — for the dashboard preview, validation before export, and inline SVG generation. The graph is **not stored** and **not hand-placed**. `@mnd/kit` **0.2.0** provides `Explorer`, `Viewer`, and `draw_svg`; one click reveals context, two clicks act.
 
-mndmap is a *translator*: it uses `@mnd/kit` (`Explorer`, `Viewer`, `draw_svg`) but never opens a mndflow workspace or writes a log.
+## Diagnostics block export
 
-## Diagnostics block emit
-
-These are hard errors — emit and build abort rather than guess:
+These are hard errors — export and build abort rather than guess:
 
 - Unresolved source identity
 - Graph `validate` / `review` faults

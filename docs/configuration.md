@@ -49,7 +49,7 @@ selectors: []
 | `source.root` | `docs` | Directory to parse; never written to |
 | `source.include` | `**/*.{md,mdx}` | Globs relative to `source.root` |
 | `source.exclude` | `[]` | Globs to skip |
-| `destination` | `site` | Output directory; replaced atomically on build/emit |
+| `destination` | `site` | Output directory; replaced atomically on build/export |
 
 Rules:
 
@@ -75,7 +75,7 @@ A selector matching zero or several regions reports an error instead of guessing
 
 ```yaml
 selectors:
-  - document: docs/plan.md
+  - document: plan.md
     heading: Plan
     kind: table
     identity: ID

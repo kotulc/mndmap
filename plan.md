@@ -86,6 +86,9 @@ selectors: []
 Rules:
 
 - `source.root` and `destination` are workspace-relative directories.
+- A page is **named** by its document — frontmatter `title`, then its first
+  heading, then its filename — and **filed** by its filename. Two questions,
+  two answers: renaming a heading never moves a page.
 - Neither canonical path may contain the other.
 - The destination and `.mndmap/` are always excluded from discovery.
 - No implementation may assume the source is named `docs` or the destination
@@ -413,9 +416,12 @@ SVG APIs.
   minimum of one minute.
 - Tags, categories, publish dates, and related pages are preserved when present
   but are not generated before Taggly.
-- Generated folder/group landing pages are ordinary `index.md` or `index.mdx`
-  files with title, child links, deterministic metadata, and an optional
-  diagram.
+- Every container — folder and generated group alike — has a landing page.
+- A landing is an ordinary `index.md` or `index.mdx` with title, child links,
+  deterministic metadata, and an optional diagram.
+- **A source `index` page is its container's landing.** mndmap generates one
+  only where the source has none, so an author's page is never shadowed by a
+  generated file, and the two never collide on one path.
 - There is no `compose:` protocol.
 
 The handoff to mdsite is frontmatter-only: no mndmap-specific database or
@@ -519,7 +525,7 @@ Each stage carries where it stands. `done` means the exit condition holds.
 Exit: clean checkout installation works without sibling repositories, and a
 fixture graph passes real mndflow validation, review, projection, and SVG.
 
-### S0b — Align the gestures upstream — mndflow work, done but unreleased
+### S0b — Align the gestures upstream — mndflow work, done
 
 Done in mndflow, because both products must gesture the same way. **One click
 sets context; two act on what they are on.**
@@ -533,12 +539,12 @@ sets context; two act on what they are on.**
 - `Hit` gains `title` for the frame's name, reported by the renderer because
   text has no region a projection could compute.
 
-Remaining: release the kit, bump `mndflow-pin.json`, and reinstall.
+Released as `@mnd/kit` 0.2.0 and pinned here.
 
 Exit: one click means the same thing in both products, and mndmap builds
 against the released kit.
 
-### S1 — Generalize configuration and stateless build — partial
+### S1 — Generalize configuration and stateless build — done
 
 - implement `source.root` plus relative include/exclude globs;
 - remove hardcoded `docs/` and `site/` behavior;
@@ -551,7 +557,7 @@ against the released kit.
 Exit: a project with non-default source and destination names builds without
 creating `.mndmap/`, and its emitted routes carry no source-root prefix.
 
-### S2 — Complete the persistent workspace model — not started
+### S2 — Complete the persistent workspace model — done
 
 - harden identity reconciliation;
 - close `organization_node.kind` to `folder | group | page` and stop seeding
@@ -564,7 +570,7 @@ creating `.mndmap/`, and its emitted routes carry no source-root prefix.
 Exit: organization and overrides survive reload and representative rescans
 without modifying source.
 
-### S3 — Complete graph projection and diagrams — partial
+### S3 — Complete graph projection and diagrams — done
 
 - project the open layer, its siblings, and the picked block;
 - take the S0b kit release rather than reproducing its behavior here;
@@ -575,7 +581,7 @@ without modifying source.
 Exit: layer projections render through `Viewer` and `draw_svg` with correct
 links and deterministic output, and no gesture reaches an empty frame.
 
-### S4 — Complete physical export — partial
+### S4 — Complete physical export — done
 
 - export ordinary generated landing pages and ordered child links;
 - apply page moves, segment moves, ordering, and overrides;
@@ -587,7 +593,7 @@ links and deterministic output, and no gesture reaches an empty frame.
 Exit: source is byte-identical, a failed export preserves the prior destination,
 and all emitted references resolve.
 
-### S5 — Build the dashboard shell and content blocks — not started
+### S5 — Build the dashboard shell and content blocks — partial
 
 - adopt mndflow's shell: vendored `ramp.css` and `base.css`, the `.app` grid,
   and every control in the header's right-hand `.tools` group;
@@ -601,6 +607,11 @@ and all emitted references resolve.
 - move diagnostics into a load-time dialog and rename every emit surface —
   CLI, REST, staging directory, and controls — to `export`;
 - add reconciliation workflows.
+
+Still open: reordering is by control rather than by drag; creating and
+dissolving groups, output-slug editing, and per-node diagram settings have
+REST and store support but no control in the dashboard; reconciliation has no
+surface at all.
 
 Exit: every supported action persists and redraws without reload, and explicit
 export produces the previewed destination.

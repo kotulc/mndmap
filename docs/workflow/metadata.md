@@ -15,7 +15,7 @@ related:
 
 # Metadata
 
-mndmap enriches frontmatter at emit time using **fill-only** rules. Author-supplied values are never overwritten.
+mndmap enriches frontmatter at export time using **fill-only** rules. Author-supplied values are never overwritten.
 
 ## What mndmap fills
 
@@ -33,7 +33,7 @@ These pass through unchanged when present in source frontmatter:
 - `related`
 - Any other author-defined keys
 
-mndmap does **not** generate tags, categories, related links, or publish dates. Taggly enrichment is deferred; the emit seam is ready for a future adapter.
+mndmap does **not** generate tags, categories, related links, or publish dates. Taggly enrichment is deferred; the export seam is ready for a future adapter.
 
 ## Downstream display
 
@@ -45,7 +45,7 @@ mdsite ingest strips frontmatter from output MDX and writes `public/site-meta.js
 - `related` → Related sidebar entries
 - Outbound markdown links → Related sidebar (parsed at ingest)
 
-mdsite does not run embedding models or synthesize metadata locally. If a field should appear on the published site, ensure it is in frontmatter before or after mndmap emit.
+mdsite does not run embedding models or synthesize metadata locally. If a field should appear on the published site, ensure it is in frontmatter before or after mndmap export.
 
 ## Authoring tips
 

@@ -17,14 +17,18 @@ related:
 
 ## Current status
 
-The enrichment pipeline described in `plan.md` is **implemented**:
+The enrichment pipeline described in `plan.md` is **implemented** through delivery stage S7:
 
-- Stateless `build` and interactive `ui` + `emit`
-- Organization tree with folder, page, group, and section nodes
-- mndflow graph validation and navigable diagram SVG
+- Stateless `mndmap build` with source-root-relative paths and byte-identical output
+- Interactive `mndmap ui` with persistent `.mndmap/state.sqlite`
+- Organization limited to **folders, generated groups, and pages**; sections use `segment_placement`
+- `@mnd/kit` **0.2.0** (S0b gestures: Explorer `reveal`, Viewer `picked` / `onLook`)
+- mndflow shell in the dashboard (`theme.css` + `base.css`, Content/Diagram toggle)
+- Content panel with segment blocks (reorder and remove within a page)
+- mndflow graph validation, depth-aware projection, and navigable diagram SVG
 - Fill-only metadata (`description`, `reading_time`)
 - Link and asset rewriting with `_assets/` handoff
-- Emitted `mdsite.yaml` with generated `nav_order`
+- Exported `mdsite.yaml` with generated `nav_order`
 - Cross-project mdsite fixture verification in CI
 
 `archive.md` documents the retired multi-agent ledger product and is historical only.
@@ -33,6 +37,7 @@ The enrichment pipeline described in `plan.md` is **implemented**:
 
 | Item | Notes |
 |------|-------|
+| S5b field-level segment editors | Block list and export settled first; table/list/term field overrides next |
 | Taggly metadata enrichment | Seam defined; fill-only rules today |
 | Organization export for CI | Dashboard state is local; `build` uses defaults |
 | YAML source-document adapter | Not in scope |
@@ -50,4 +55,4 @@ mndmap will generate indexes and style signals; mdsite will consume static asset
 
 ## Compatibility pins
 
-See `mndflow-pin.json` for the pinned mndflow commit, `@mnd/kit` version, and mndsite Docker image tag. Upgrade mndmap and mndsite together when these pins change.
+See `mndflow-pin.json` for the pinned mndflow commit, `@mnd/kit` **0.2.0**, and mndsite Docker image tag. Upgrade mndmap and mdsite together when these pins change.

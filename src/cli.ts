@@ -48,8 +48,8 @@ export async function runCli(argv = process.argv.slice(2), io: CliIo = defaultIo
         output(io, await Mndmap.build(root, configFile ? { configFile } : {}));
         break;
       }
-      case "emit":
-        output(io, await service.emit());
+      case "export":
+        output(io, await service.export());
         break;
       case "vocab": {
         if (args.shift() !== "--check") throw new Error("Usage: mndmap vocab --check");
@@ -116,13 +116,13 @@ Commands:
   import [--root PATH]
   rescan [--root PATH]
   graph [--out FILE]
-  emit [--root PATH]
+  export [--root PATH]
   vocab --check
   ui [--root PATH] [--host HOST] [--port PORT]
 
 Global option:
   --root PATH                            Project root with mndmap.yaml (default: current directory).
-                                         Source files default to docs/ via configuration.
+                                         Source paths are relative to source.root in configuration.
 `;
 
 const mainPath = process.argv[1] ? resolve(process.argv[1]) : "";

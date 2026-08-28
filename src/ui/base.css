@@ -1,0 +1,97 @@
+/* The shell, over the ramp.
+ *
+ * Adapted from mndflow `packages/theme/base.css` at the pinned commit: the
+ * reset, the type, the controls and the `.app` grid, narrowed to the two
+ * columns this dashboard has. Every value is a ramp token, so the shell cannot
+ * drift from the drawing. mndmap's own panels live in `styles.css`. */
+
+* { box-sizing: border-box; }
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  overflow: hidden;
+}
+
+button, select, input {
+  font: inherit;
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled),
+select:hover { background: var(--hover); }
+button:disabled { opacity: 0.35; cursor: default; }
+input:focus, select:focus { outline: none; border-color: var(--accent); }
+
+/* Chrome spans the top; the tree and the panel share the row below. */
+.app {
+  display: grid;
+  grid-template-columns: minmax(240px, 320px) 1fr;
+  grid-template-rows: auto auto 1fr;
+  grid-template-areas:
+    "header header"
+    "status status"
+    "explorer main";
+  height: 100%;
+}
+
+.app > header {
+  grid-area: header;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--divider);
+  background: var(--chrome);
+  min-width: 0;
+}
+
+.brand {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Every control sits at the right, and nothing else does. */
+.tools {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+}
+
+.tools button.active { border-color: var(--accent); color: var(--accent); }
+
+.status {
+  grid-area: status;
+  margin: 0;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--divider);
+  color: var(--muted);
+}
+
+.app > .explorer {
+  grid-area: explorer;
+  min-height: 0;
+  overflow: auto;
+  border-right: 1px solid var(--divider);
+}
+
+.app > .main {
+  grid-area: main;
+  min-height: 0;
+  overflow: auto;
+}

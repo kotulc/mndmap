@@ -14,7 +14,7 @@ docs/**/*.{md,mdx}
      parse ──▶ working store ──┬──▶ tree        reorganize files and sections
         │                      └──▶ diagram     redrawn as you go
         │                                │
-        └────────────────── emit ────────┴──▶  site/
+        └────────────────── export ────────┴──▶  site/
                                                documents + folders, diagrams embedded
                                                         │
                                                      mdsite ──▶ published site
@@ -34,7 +34,8 @@ mndmap makes the shape a thing you edit directly, see immediately, and regenerat
 
 | | |
 |---|---|
-| **A tree** | every document and section in the collection, reorganizable by drag |
+| **A tree** | folders, groups, and pages in the Explorer |
+| **A content panel** | segment blocks per page — reorder and remove |
 | **A diagram** | the structure as a mndflow block diagram, redrawn on every edit |
 | **A collection out** | documents and folders, mirroring into site page structure directly |
 | **Navigable diagrams** | every box links to the page and heading it came from |
@@ -45,7 +46,7 @@ mndmap makes the shape a thing you edit directly, see immediately, and regenerat
 Full guides live in [`docs/`](docs/):
 
 - [Getting started](docs/getting-started.md) — install, `build`, `ui`, and chaining to mdsite
-- [Workflow overview](docs/workflow/overview.md) — parse → store → graph → emit
+- [Workflow overview](docs/workflow/overview.md) — parse → store → graph → export
 - [mdsite handoff](docs/publishing/mdsite-handoff.md) — destination contract and `nav_order`
 - [Deployment](docs/publishing/deployment.md) — CI/CD with mndmap and mdsite
 
@@ -78,10 +79,10 @@ npm run ui
 
 From another project directory, use the CLI directly: `mndmap ui --root /path/to/project` (source defaults to `docs/` when configured that way in `mndmap.yaml`).
 
-The dashboard keeps organization and content overrides in `.mndmap/state.sqlite`. Reorganize, then emit when ready:
+The dashboard keeps organization and segment placements in `.mndmap/state.sqlite`. Reorganize, then export when ready:
 
 ```sh
-mndmap emit --root /path/to/project
+mndmap export --root /path/to/project
 ```
 
 Headless verbs:
@@ -89,7 +90,7 @@ Headless verbs:
 ```sh
 mndmap import          # scan and parse into the working store
 mndmap graph           # print the block tree, or write the mndflow file
-mndmap emit            # write the document collection to the destination
+mndmap export          # write the document collection to the destination
 mndmap vocab --check   # validate the definitions mndmap ships
 ```
 
@@ -125,17 +126,18 @@ Selectors for ambiguous structure — which tables and lists are records, and wh
 | | Lives in | Rebuilt from |
 |---|---|---|
 | parsed documents, sections, tables, items | `.mndmap/` (interactive only) | `docs/`, in seconds |
-| **the organization** — tree shape, grouping, order, what becomes a diagram | `.mndmap/` (interactive only) | **nothing. This is your work** |
-| the emitted collection | `site/` | source + config (stateless build) or store (emit) |
+| **the organization** — tree shape, grouping, order, diagram roots | `.mndmap/` (interactive only) | **nothing. This is your work** |
+| **segment placements** — section order per page | `.mndmap/` (interactive only) | seeded from source on first import |
+| the exported collection | `site/` | source + config (`build`) or store (`export`) |
 | `mdsite.yaml` at destination root | `site/mdsite.yaml` | template + generated `nav_order` |
 
 **The working store is local and not committed.** For CI, use `mndmap build` — it does not read dashboard state. What gets committed is what you publish.
 
 ## How it fits with mndflow and mdsite
 
-**[mndflow](https://github.com/kotulc/mndflow) — the diagram.** mndmap is a *translator*: an external project that builds a mndflow graph and renders it through `@mnd/kit`, mndflow's one supported surface. mndmap owns parsing, identity and organization; mndflow owns the block model, layout, projection and every renderer.
+**[mndflow](https://github.com/kotulc/mndflow) — the diagram.** mndmap is a *translator*: an external project that builds a mndflow graph and renders it through `@mnd/kit` **0.2.0**, mndflow's one supported surface. mndmap owns parsing, identity and organization; mndflow owns the block model, layout, projection and every renderer.
 
-The graph is **derived and ephemeral** — built from the working store on demand, drawn, thrown away. Nothing about it is stored and nothing is hand-placed, which is why steering a diagram is reorganizing the tree rather than dragging a box. mndmap uses `Explorer` for the tree, `Viewer` for the live preview, and `draw_svg` for what ships.
+The graph is **derived and ephemeral** — built from the working store on demand, drawn, thrown away. mndmap uses `Explorer` for the tree (one click reveals, double-click renames), `Viewer` for the live preview (`picked` + `onLook`), and `draw_svg` for what ships.
 
 **[mndsite](https://github.com/kotulc/mndsite) — the site.** mndmap emits a publication-ready destination that mndsite ingests and builds. mndmap writes `mdsite.yaml` at the destination root with `content: .` (the emitted tree) and generated `nav_order`. User identity fields — title, theme, repo URL, output path — come from your template; mndmap owns navigation and content paths in the emitted copy.
 
@@ -183,4 +185,4 @@ Ignored: `.mndmap/`, `dist/`.
 
 ## Status
 
-The enrichment pipeline described in `plan.md` is implemented. `archive.md` is historical ledger documentation only.
+The enrichment pipeline described in `plan.md` is implemented through stage S7. `@mnd/kit` is pinned at **0.2.0** in `mndflow-pin.json`. `archive.md` is historical ledger documentation only.

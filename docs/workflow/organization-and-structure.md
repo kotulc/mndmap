@@ -16,24 +16,36 @@ related:
 
 # Organization and structure
 
-mndmap's core job is making **site shape** editable. The organization tree controls where pages land, how sections group, and what order siblings appear in navigation.
+mndmap's core job is making **site shape** editable. The organization tree controls where pages land and what order siblings appear in navigation. **Sections** are managed separately through segment placements on each page.
 
 ## Organization nodes
 
 | Kind | Meaning |
 |------|---------|
-| `folder` | Directory in the emitted destination |
+| `folder` | Source folder mirrored in the emitted destination |
 | `page` | A markdown or MDX file |
 | `group` | Generated folder with an `index.md` landing page |
-| `section` | A heading subtree moved within or across pages |
 
-Dragging in the dashboard updates parent, position, and optional output slug. The tree is the source of truth for emitted paths.
+Sections, tables, lists, and items are **not** organization nodes. They appear on pages via `segment_placement`.
+
+Dragging folders, groups, and pages in the Explorer updates parent, position, and optional output slug.
+
+## Segment placements
+
+Each page owns an ordered list of section placements:
+
+- reorder sections within the page (content panel or REST)
+- remove a section from the page without deleting source
+- destination-only overrides (whole segment or per-field in S5b)
+
+A section appears on at most one emitted page.
 
 ## Emitted paths
 
 - **Moving a page** changes its path under the destination root
-- **Moving a section** changes which page contains its emitted content
+- **Reordering segments** changes section order in the emitted page
 - **Creating a group** adds a folder with a generated `index.md` linking to children
+- Paths are relative to `source.root` — the configured root is never duplicated in routes
 - Duplicate output paths, routes, or anchors are blocking errors — no silent suffixes
 
 Folder and group landing pages are ordinary markdown with:
@@ -45,7 +57,7 @@ Folder and group landing pages are ordinary markdown with:
 
 ## Navigation order
 
-Sibling order in the organization tree becomes `nav_order` in the emitted `mdsite.yaml`:
+Sibling order in the organization tree becomes `nav_order` in the exported `mdsite.yaml`:
 
 ```yaml
 nav_order:
@@ -55,24 +67,20 @@ nav_order:
 
 Keys are route prefixes (`""` for the content root). Values are slug arrays in sibling position order. mdsite pins listed slugs first; unlisted siblings sort alphabetically after.
 
-mdsite does not apply a second organization policy — what mndmap emits is what gets mirrored.
-
-## Directory feeds and flattening
-
-Older mdsite configs used a `flatten` field to render a folder as a single scrolling feed. That responsibility moved upstream to mndmap's organization model. If you need feed-like layouts, structure them in the dashboard before emit.
+mdsite does not apply a second organization policy — what mndmap exports is what gets mirrored.
 
 ## Selectors vs organization
 
 **Selectors** identify structured records inside a document (tables, typed lists). They do not move content between pages.
 
-**Organization** moves pages, sections, and folders. Use the dashboard for structural edits; use selectors in `mndmap.yaml` when tables need stable row identity for graphing or future enrichment.
+**Organization** moves pages, folders, and groups. **Segment placements** control section order within pages. Use the dashboard for structural edits; use selectors in `mndmap.yaml` when tables need stable row identity for graphing or future enrichment.
 
 ## Rescan and reconciliation
 
-When source files change, `rescan` reconciles parsed content against stored organization:
+When source files change, `rescan` reconciles parsed content against stored nodes:
 
-- Matching identity (path + locator + fingerprints) updates content in place
-- New sections appear as unresolved nodes for you to place
-- Removed source regions become orphans in the store
+- Matching identity (explicit key, locator + fingerprints) updates content in place
+- Ambiguous matches surface as diagnostics for confirmation
+- Missing source nodes block export until resolved
 
-Organization decisions survive rescans when fingerprints still match.
+Organization and segment overrides survive rescans when identity still matches.
