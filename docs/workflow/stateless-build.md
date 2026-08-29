@@ -15,7 +15,7 @@ related:
 
 # Stateless build
 
-`mndmap build` is the reproducible pipeline for CI and automation. It does not read `.mndmap/state.sqlite` and leaves no persistent working state behind.
+`mndmap build` is the reproducible pipeline for CI and automation. It does not read `.mndmap/workspace.json` and leaves no persistent working state behind.
 
 ## Command
 
@@ -27,7 +27,7 @@ mndmap build --config /path/to/mndmap.yaml
 ## Steps
 
 1. Load and validate `mndmap.yaml` (or defaults)
-2. Create an ephemeral SQLite working store
+2. Create an ephemeral in-memory working store
 3. Parse every matching source document (paths normalized relative to `source.root`)
 4. Seed organization: folders, pages, and optional groups — never sections
 5. Seed segment placements so each page's sections mirror source order

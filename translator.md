@@ -82,7 +82,7 @@ import "@mnd/kit/react.css";
 
 ## The working store
 
-**SQLite stays, and it is the working store**: parsed records, their source locations, their identity, and every organizing decision the user makes.
+**The working store is in memory, and organizing work is JSON.** Parsed records and their source locations rebuild from `docs/` on every open. Identity fingerprints and every organizing decision the user makes land in `.mndmap/workspace.json`.
 
 | Holds | Derived from | Survives a rescan |
 |---|---|---|
@@ -92,7 +92,7 @@ import "@mnd/kit/react.css";
 
 **The organization is the only irreplaceable state, and it stays on the machine.** Everything else rebuilds from `docs/` in seconds; the organization rebuilds from nothing. **Settled: local only.** mndmap is a personal live tool, a fresh clone re-organizes from scratch, and CI is not expected to reproduce a layout. Nothing is exported, nothing is committed, and the store is free to be a working store.
 
-**Revisit only if** a second person or a CI job ever needs the same site out of the same inputs. The answer then is to write the non-derivable slice out as JSON — not to commit the database, which is mostly cache and diffs as binary.
+The non-derivable slice is `.mndmap/workspace.json` — organization, placements, overrides, and source identity — not a database of parsed documents.
 
 **What retires either way:** claims, leases, fencing tokens, scratch fields, staged changes, the record write-back path in `exporter.ts`, and the REST/MCP claim surface. `parser.ts` is the keeper.
 

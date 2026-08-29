@@ -136,8 +136,8 @@ taskkill //PID "$PID" //F
 
 ## Gotchas
 
-- **`rm -rf .mndmap` fails with `Device or resource busy`** while the server
-  runs — SQLite holds the file. Stop the server first, with the `taskkill`
+- **`rm -rf .mndmap` fails with `Device or resource busy`** if a process still
+  has a file open under it. Stop the server first, with the `taskkill`
   above.
 - **`waitUntil: "networkidle"` never settles** against this server and times
   out after 30s. The driver uses `domcontentloaded` plus a wait for

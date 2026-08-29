@@ -5,7 +5,7 @@ categories:
 tags:
   - ui
   - dashboard
-  - sqlite
+  - workspace
 related:
   - title: Organization and structure
     url: /workflow/organization-and-structure
@@ -15,7 +15,7 @@ related:
 
 # Interactive workspace
 
-`mndmap ui` is the live editor for site shape. It keeps organization and destination-only segment overrides in a local SQLite database while you drag pages, reorder sections within a page, and preview diagrams.
+`mndmap ui` is the live editor for site shape. It keeps organization and destination-only segment overrides in `.mndmap/workspace.json` while you drag pages, reorder sections within a page, and preview diagrams.
 
 ## Start the dashboard
 
@@ -34,7 +34,7 @@ The dashboard uses mndflow's shell layout and `@mnd/kit` **0.2.0** components (`
 On startup, mndmap:
 
 1. Loads configuration
-2. Opens or creates `.mndmap/state.sqlite`
+2. Opens or creates `.mndmap/workspace.json`
 3. Parses source documents
 4. Serves the REST API and React dashboard
 
@@ -46,9 +46,9 @@ mndmap rescan --root /path/to/project
 
 ## What persists locally
 
-| Stored in `.mndmap/` | Rebuilt from source? |
-|----------------------|----------------------|
-| Parsed documents, sections, tables, items | yes — on rescan |
+| Stored in `.mndmap/workspace.json` | Rebuilt from source? |
+|------------------------------------|----------------------|
+| Source identity (ids and fingerprints) | used to match records on rescan; content is reparsed |
 | **Organization** — folders, groups, pages, order, diagram roots | **no — this is your work** |
 | **Segment placements** — which sections appear on which page | no |
 | Segment content overrides (destination-only) | no |

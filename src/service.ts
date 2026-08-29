@@ -1,4 +1,3 @@
-import { mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { block } from "@mnd/kit";
 import { loadConfig } from "./config.js";
@@ -27,7 +26,7 @@ export class Mndmap {
   static async build(root: string, options: { configFile?: string } = {}): Promise<import("./types.js").ExportPreview> {
     const absoluteRoot = resolve(root);
     const config = await loadConfig(absoluteRoot, options.configFile);
-    const store = new WorkingStore(":memory:");
+    const store = new WorkingStore();
     const service = new Mndmap(absoluteRoot, config, store);
     try {
       await service.import();
@@ -40,13 +39,11 @@ export class Mndmap {
   static async open(root: string, options: { memory?: boolean; configFile?: string } = {}): Promise<Mndmap> {
     const absoluteRoot = resolve(root);
     const config = await loadConfig(absoluteRoot, options.configFile);
-    let database = ":memory:";
-    if (!options.memory) {
-      const stateDir = join(absoluteRoot, ".mndmap");
-      await mkdir(stateDir, { recursive: true });
-      database = join(stateDir, "state.sqlite");
-    }
-    const service = new Mndmap(absoluteRoot, config, new WorkingStore(database));
+    const store = options.memory
+      ? new WorkingStore()
+      : new WorkingStore(join(absoluteRoot, ".mndmap", "workspace.json"));
+    const service = new Mndmap(absoluteRoot, config, store);
+    if (!options.memory) await service.import();
     await reportAbandonedStaging(service.store);
     return service;
   }

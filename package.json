@@ -7,7 +7,7 @@
     "dist/src"
   ],
   "engines": {
-    "node": ">=22.5"
+    "node": ">=20"
   },
   "exports": "./dist/src/index.js",
   "types": "./dist/src/index.d.ts",

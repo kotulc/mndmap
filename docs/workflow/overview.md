@@ -72,7 +72,7 @@ mdsite does **not** reorganize folders, flatten directories, run embeddings, sco
 
 | | `mndmap build` | `mndmap ui` + `export` |
 |---|---|---|
-| Working store | ephemeral (in-memory SQLite) | persistent `.mndmap/state.sqlite` |
+| Working store | ephemeral (in-memory) | persistent `.mndmap/workspace.json` |
 | Organization | deterministic defaults mirroring source | user-edited tree |
 | Segment placements | seeded from source | user-edited per page |
 | Reads `.mndmap/` | no | yes |

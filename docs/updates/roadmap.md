@@ -20,7 +20,7 @@ related:
 The enrichment pipeline described in `plan.md` is **implemented** through delivery stage S7:
 
 - Stateless `mndmap build` with source-root-relative paths and byte-identical output
-- Interactive `mndmap ui` with persistent `.mndmap/state.sqlite`
+- Interactive `mndmap ui` with persistent `.mndmap/workspace.json`
 - Organization limited to **folders, generated groups, and pages**; sections use `segment_placement`
 - `@mnd/kit` **0.2.0** (S0b gestures: Explorer `reveal`, Viewer `picked` / `onLook`)
 - mndflow shell in the dashboard (`theme.css` + `base.css`, Content/Diagram toggle)

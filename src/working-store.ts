@@ -1,4 +1,5 @@
-import { DatabaseSync } from "node:sqlite";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { randomUUID } from "node:crypto";
 import type {
   CreateGroupInput,
@@ -27,18 +28,67 @@ import { stableId } from "./fingerprints.js";
 import { slugifySegment } from "./routes.js";
 import { tierRootLabel } from "./vocab/docs.js";
 
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 1;
+
+interface SourceDocument {
+  path: string;
+  revision: string;
+  content: string;
+}
+
+interface AbandonedStaging {
+  path: string;
+  reportedAt: string;
+  reported: boolean;
+}
+
+interface SourceIdentity {
+  id: string;
+  kind: SourceNode["kind"];
+  explicitKey?: string;
+  sourcePath: string;
+  sourceLocator: string;
+  contentFingerprint: string;
+  shapeFingerprint: string;
+}
+
+interface WorkspaceFile {
+  version: number;
+  sourceIdentity: SourceIdentity[];
+  organizationNodes: OrganizationNode[];
+  segmentPlacements: SegmentPlacement[];
+  segmentOverrides: SegmentOverride[];
+  abandonedStaging: AbandonedStaging[];
+}
+
+interface StoreState {
+  documents: SourceDocument[];
+  sourceNodes: SourceNode[];
+  organizationNodes: OrganizationNode[];
+  segmentPlacements: SegmentPlacement[];
+  segmentOverrides: SegmentOverride[];
+  diagnostics: Diagnostic[];
+  abandonedStaging: AbandonedStaging[];
+}
 
 export class WorkingStore {
-  readonly db: DatabaseSync;
+  private readonly persistPath?: string;
+  private documents: SourceDocument[] = [];
+  private sourceNodes: SourceNode[] = [];
+  private organizationNodes: OrganizationNode[] = [];
+  private segmentPlacements: SegmentPlacement[] = [];
+  private segmentOverrides: SegmentOverride[] = [];
+  private diagnosticsList: Diagnostic[] = [];
+  private abandonedStaging: AbandonedStaging[] = [];
 
-  constructor(path = ":memory:") {
-    this.db = new DatabaseSync(path);
-    this.db.exec("PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL");
-    this.migrate();
+  constructor(persistPath?: string) {
+    if (persistPath) this.persistPath = persistPath;
+    if (this.persistPath) this.load();
   }
 
-  close(): void { this.db.close(); }
+  close(): void {
+    this.persist();
+  }
 
   importScan(documents: ParsedDocument[], config: MndmapConfig): ImportResult {
     return this.transaction(() => {
@@ -49,34 +99,14 @@ export class WorkingStore {
       const reconciled = prior.length ? reconcileSourceNodes(scanned, prior) : { nodes: scanned, unresolved: [], missing: [] };
       const nodes = reconciled.nodes;
 
-      this.db.prepare("DELETE FROM source_documents").run();
-      for (const document of documents) {
-        this.db.prepare("INSERT INTO source_documents(path, revision, content) VALUES (?, ?, ?)")
-          .run(document.path, document.revision, document.content);
-      }
+      this.documents = documents.map((document) => ({
+        path: document.path,
+        revision: document.revision,
+        content: document.content,
+      }));
+      this.diagnosticsList = [];
+      this.sourceNodes = [...nodes];
 
-      this.db.prepare("DELETE FROM diagnostics").run();
-
-      const existingIds = new Set(this.listSourceNodes().map((node) => node.id));
-      const newIds = new Set(nodes.map((node) => node.id));
-      for (const node of nodes) {
-        if (existingIds.has(node.id)) {
-          this.db.prepare(`UPDATE source_nodes SET kind=?, explicit_key=?, source_path=?, source_locator=?,
-            content_fingerprint=?, shape_fingerprint=?, source_data=?, scan_id=?, resolution=?, candidates_json=? WHERE id=?`)
-            .run(
-              node.kind, node.explicitKey ?? null, node.sourcePath, node.sourceLocator,
-              node.contentFingerprint, node.shapeFingerprint, JSON.stringify(node.sourceData),
-              node.scanId, node.resolution, node.candidates ? JSON.stringify(node.candidates) : null, node.id,
-            );
-        } else {
-          this.insertSourceNode(node);
-        }
-      }
-      for (const staleId of existingIds) {
-        if (!newIds.has(staleId)) {
-          this.db.prepare("DELETE FROM source_nodes WHERE id=?").run(staleId);
-        }
-      }
       for (const document of documents) {
         for (const diagnostic of document.diagnostics) this.insertDiagnostic(diagnostic);
       }
@@ -113,7 +143,7 @@ export class WorkingStore {
       }
       return {
         sourceNodes: nodes.length,
-        organizationNodes: this.listOrganizationNodes().length,
+        organizationNodes: this.organizationNodes.length,
         diagnostics: this.diagnostics(),
       };
     });
@@ -124,23 +154,23 @@ export class WorkingStore {
   }
 
   listSourceNodes(): SourceNode[] {
-    return (this.db.prepare("SELECT * FROM source_nodes ORDER BY source_path, source_locator").all() as any[])
-      .map(readSourceNode);
+    return [...this.sourceNodes].sort((left, right) =>
+      left.sourcePath.localeCompare(right.sourcePath) || left.sourceLocator.localeCompare(right.sourceLocator));
   }
 
   listOrganizationNodes(): OrganizationNode[] {
-    return (this.db.prepare("SELECT * FROM organization_nodes ORDER BY parent_id, position").all() as any[])
-      .map(readOrganizationNode);
+    return [...this.organizationNodes].sort((left, right) =>
+      compareNullable(left.parentId, right.parentId) || left.position - right.position);
   }
 
   listSegmentPlacements(): SegmentPlacement[] {
-    return (this.db.prepare("SELECT * FROM segment_placement ORDER BY page_organization_id, position").all() as any[])
-      .map(readSegmentPlacement);
+    return [...this.segmentPlacements].sort((left, right) =>
+      left.pageOrganizationId.localeCompare(right.pageOrganizationId) || left.position - right.position);
   }
 
   listSegmentOverrides(): SegmentOverride[] {
-    return (this.db.prepare("SELECT * FROM segment_override ORDER BY source_node_id, field").all() as any[])
-      .map(readSegmentOverride);
+    return [...this.segmentOverrides].sort((left, right) =>
+      left.sourceNodeId.localeCompare(right.sourceNodeId) || compareNullable(left.field, right.field));
   }
 
   listPageSegments(pageOrganizationId: string): SegmentView[] {
@@ -197,9 +227,9 @@ export class WorkingStore {
       const parent = this.requireOrganizationNode(input.parentId);
       this.assertValidMove(node, parent);
       const oldParentId = node.parentId;
-      const siblings = this.listOrganizationNodes().filter((entry) => entry.parentId === input.parentId && entry.id !== input.id);
+      const siblings = this.organizationNodes.filter((entry) => entry.parentId === input.parentId && entry.id !== input.id);
       const position = Math.min(input.position ?? siblings.length, siblings.length);
-      this.db.prepare("UPDATE organization_nodes SET parent_id=?, position=? WHERE id=?").run(input.parentId, position, input.id);
+      this.patchOrganization(input.id, { parentId: input.parentId, position });
       this.normalizeSiblingPositions(input.parentId);
       if (oldParentId && oldParentId !== input.parentId) this.normalizeSiblingPositions(oldParentId);
       return this.listOrganizationNodes();
@@ -211,18 +241,25 @@ export class WorkingStore {
       this.requireOrganizationNode(input.parentId);
       if (!input.title.trim()) throw new Error("A group requires a title");
       const id = stableId("org", ["group", randomUUID()]);
-      const siblings = this.listOrganizationNodes().filter((entry) => entry.parentId === input.parentId);
+      const siblings = this.organizationNodes.filter((entry) => entry.parentId === input.parentId);
       const position = Math.min(input.position ?? siblings.length, siblings.length);
-      this.db.prepare(`INSERT INTO organization_nodes
-        (id, source_node_id, kind, parent_id, position, title, output_slug, diagram_root, diagram_depth)
-        VALUES (?, NULL, 'group', ?, ?, ?, NULL, 0, NULL)`)
-        .run(id, input.parentId, position, input.title.trim());
+      this.organizationNodes.push({
+        id,
+        sourceNodeId: null,
+        kind: "group",
+        parentId: input.parentId,
+        position,
+        title: input.title.trim(),
+        outputSlug: null,
+        diagramRoot: false,
+        diagramDepth: null,
+      });
       if (input.nodeIds?.length) {
         const moved = input.nodeIds.map((nodeId) => this.requireOrganizationNode(nodeId));
         const oldParents = new Set(moved.map((node) => node.parentId).filter((value): value is string => Boolean(value)));
         for (const node of moved) this.assertValidMove(node, this.requireOrganizationNode(id));
         for (const [index, nodeId] of input.nodeIds.entries()) {
-          this.db.prepare("UPDATE organization_nodes SET parent_id=?, position=? WHERE id=?").run(id, index, nodeId);
+          this.patchOrganization(nodeId, { parentId: id, position: index });
         }
         this.normalizeSiblingPositions(id);
         for (const oldParentId of oldParents) {
@@ -237,12 +274,8 @@ export class WorkingStore {
   renameOrganization(input: RenameOrganizationInput): OrganizationNode[] {
     return this.transaction(() => {
       const node = this.requireOrganizationNode(input.id);
-      if (input.title !== undefined) {
-        this.db.prepare("UPDATE organization_nodes SET title=? WHERE id=?").run(input.title, input.id);
-      }
-      if (input.outputSlug !== undefined) {
-        this.db.prepare("UPDATE organization_nodes SET output_slug=? WHERE id=?").run(input.outputSlug, input.id);
-      }
+      if (input.title !== undefined) this.patchOrganization(input.id, { title: input.title });
+      if (input.outputSlug !== undefined) this.patchOrganization(input.id, { outputSlug: input.outputSlug });
       if (input.outputSlug) this.assertUniqueOutputSlug(input.outputSlug, node.id, node.parentId);
       return this.listOrganizationNodes();
     });
@@ -251,25 +284,21 @@ export class WorkingStore {
   setDiagramSettings(input: DiagramSettingsInput): OrganizationNode[] {
     return this.transaction(() => {
       this.requireOrganizationNode(input.id);
-      if (input.diagramRoot !== undefined) {
-        this.db.prepare("UPDATE organization_nodes SET diagram_root=? WHERE id=?").run(input.diagramRoot ? 1 : 0, input.id);
-      }
-      if (input.diagramDepth !== undefined) {
-        this.db.prepare("UPDATE organization_nodes SET diagram_depth=? WHERE id=?").run(input.diagramDepth, input.id);
-      }
+      if (input.diagramRoot !== undefined) this.patchOrganization(input.id, { diagramRoot: input.diagramRoot });
+      if (input.diagramDepth !== undefined) this.patchOrganization(input.id, { diagramDepth: input.diagramDepth });
       return this.listOrganizationNodes();
     });
   }
 
   moveSegment(input: MoveSegmentInput): SegmentPlacement[] {
     return this.transaction(() => {
-      const placement = this.listSegmentPlacements().find((entry) =>
+      const placement = this.segmentPlacements.find((entry) =>
         entry.pageOrganizationId === input.pageOrganizationId && entry.sourceNodeId === input.sourceNodeId);
       if (!placement) throw new Error(`Segment not found on page ${input.pageOrganizationId}`);
       const parentSegmentId = input.parentSegmentId ?? placement.parentSegmentId;
-      this.db.prepare(`UPDATE segment_placement SET parent_segment_id=?, position=? WHERE id=?`)
-        .run(parentSegmentId, input.position, placement.id);
-      const siblings = this.listSegmentPlacements()
+      placement.parentSegmentId = parentSegmentId;
+      placement.position = input.position;
+      const siblings = this.segmentPlacements
         .filter((entry) =>
           entry.pageOrganizationId === input.pageOrganizationId
           && entry.parentSegmentId === parentSegmentId
@@ -277,7 +306,8 @@ export class WorkingStore {
         .sort((left, right) => left.position - right.position);
       siblings.splice(Math.min(input.position, siblings.length), 0, { ...placement, parentSegmentId, position: input.position });
       siblings.forEach((entry, index) => {
-        this.db.prepare("UPDATE segment_placement SET position=? WHERE id=?").run(index, entry.id);
+        const target = this.segmentPlacements.find((row) => row.id === entry.id);
+        if (target) target.position = index;
       });
       return this.listSegmentPlacements();
     });
@@ -285,17 +315,17 @@ export class WorkingStore {
 
   removeSegment(pageOrganizationId: string, sourceNodeId: string): SegmentPlacement[] {
     return this.transaction(() => {
-      const placement = this.listSegmentPlacements().find((entry) =>
+      const placement = this.segmentPlacements.find((entry) =>
         entry.pageOrganizationId === pageOrganizationId && entry.sourceNodeId === sourceNodeId);
       if (!placement) throw new Error("Segment placement not found");
-      const childIds = this.collectDescendantPlacementIds(placement.id);
-      for (const id of [placement.id, ...childIds]) {
-        this.db.prepare("DELETE FROM segment_placement WHERE id=?").run(id);
-      }
+      const childIds = new Set(this.collectDescendantPlacementIds(placement.id));
+      this.segmentPlacements = this.segmentPlacements.filter((entry) =>
+        entry.id !== placement.id && !childIds.has(entry.id));
       const parentSegmentId = placement.parentSegmentId;
       const normalized = normalizeSegmentPositions(this.listSegmentPlacements(), pageOrganizationId, parentSegmentId);
       for (const entry of normalized.filter((row) => row.pageOrganizationId === pageOrganizationId)) {
-        this.db.prepare("UPDATE segment_placement SET position=? WHERE id=?").run(entry.position, entry.id);
+        const target = this.segmentPlacements.find((row) => row.id === entry.id);
+        if (target) target.position = entry.position;
       }
       return this.listSegmentPlacements();
     });
@@ -304,43 +334,37 @@ export class WorkingStore {
   overrideSegment(input: SegmentOverrideInput): SegmentOverride[] {
     return this.transaction(() => {
       const field = input.field ?? null;
-      this.db.prepare(`INSERT INTO segment_override(source_node_id, field, content, updated_at)
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT(source_node_id, field) DO UPDATE SET content=excluded.content, updated_at=excluded.updated_at`)
-        .run(input.sourceNodeId, field, input.content, new Date().toISOString());
+      const existing = this.segmentOverrides.find((entry) => entry.sourceNodeId === input.sourceNodeId && entry.field === field);
+      const next: SegmentOverride = {
+        sourceNodeId: input.sourceNodeId,
+        field,
+        content: input.content,
+        updatedAt: new Date().toISOString(),
+      };
+      if (existing) {
+        existing.content = next.content;
+        existing.updatedAt = next.updatedAt;
+      } else {
+        this.segmentOverrides.push(next);
+      }
       return this.listSegmentOverrides();
     });
   }
 
   clearSegmentOverride(sourceNodeId: string, field: string | null = null): SegmentOverride[] {
     return this.transaction(() => {
-      this.db.prepare("DELETE FROM segment_override WHERE source_node_id=? AND field IS ?").run(sourceNodeId, field);
+      this.segmentOverrides = this.segmentOverrides.filter((entry) =>
+        !(entry.sourceNodeId === sourceNodeId && entry.field === field));
       return this.listSegmentOverrides();
     });
   }
 
   resolveReconciliation(input: ResolveReconciliationInput): SourceNode[] {
     return this.transaction(() => {
-      const nodes = this.listSourceNodes();
-      const resolved = resolveReconciliation(nodes, input.priorNodeId, input.action, input.candidateId);
-      const resolvedIds = new Set(resolved.map((node) => node.id));
-      for (const node of resolved) {
-        if (this.listSourceNodes().some((entry) => entry.id === node.id)) {
-          this.db.prepare(`UPDATE source_nodes SET kind=?, explicit_key=?, source_path=?, source_locator=?,
-            content_fingerprint=?, shape_fingerprint=?, source_data=?, scan_id=?, resolution=?, candidates_json=? WHERE id=?`)
-            .run(
-              node.kind, node.explicitKey ?? null, node.sourcePath, node.sourceLocator,
-              node.contentFingerprint, node.shapeFingerprint, JSON.stringify(node.sourceData),
-              node.scanId, node.resolution, node.candidates ? JSON.stringify(node.candidates) : null, node.id,
-            );
-        } else {
-          this.insertSourceNode(node);
-        }
-      }
-      for (const node of this.listSourceNodes()) {
-        if (!resolvedIds.has(node.id)) this.db.prepare("DELETE FROM source_nodes WHERE id=?").run(node.id);
-      }
-      this.db.prepare("DELETE FROM diagnostics WHERE code IN ('ambiguous-identity', 'missing-source-node')").run();
+      const resolved = resolveReconciliation(this.listSourceNodes(), input.priorNodeId, input.action, input.candidateId);
+      this.sourceNodes = [...resolved];
+      this.diagnosticsList = this.diagnosticsList.filter((entry) =>
+        entry.code !== "ambiguous-identity" && entry.code !== "missing-source-node");
       for (const node of resolved.filter((entry) => entry.resolution === "missing")) {
         this.insertDiagnostic({
           code: "missing-source-node",
@@ -354,26 +378,16 @@ export class WorkingStore {
     });
   }
 
-  sourceDocument(path: string): { path: string; revision: string; content: string } | null {
-    const row = this.db.prepare("SELECT * FROM source_documents WHERE path=?").get(path) as any;
-    return row ? { path: row.path, revision: row.revision, content: row.content } : null;
+  sourceDocument(path: string): SourceDocument | null {
+    return this.documents.find((document) => document.path === path) ?? null;
   }
 
-  sourceDocuments(): Array<{ path: string; revision: string; content: string }> {
-    return (this.db.prepare("SELECT * FROM source_documents ORDER BY path").all() as any[])
-      .map((row) => ({ path: row.path, revision: row.revision, content: row.content }));
+  sourceDocuments(): SourceDocument[] {
+    return [...this.documents].sort((left, right) => left.path.localeCompare(right.path));
   }
 
   diagnostics(): Diagnostic[] {
-    return (this.db.prepare("SELECT * FROM diagnostics ORDER BY id").all() as any[]).map((row) => ({
-      code: row.code,
-      severity: row.severity,
-      message: row.message,
-      ...(row.document ? { document: row.document } : {}),
-      ...(row.range_json ? { range: JSON.parse(row.range_json) } : {}),
-      ...(row.organization_node_id ? { organizationNodeId: row.organization_node_id } : {}),
-      ...(row.source_node_id ? { sourceNodeId: row.source_node_id } : {}),
-    }));
+    return [...this.diagnosticsList];
   }
 
   blockingDiagnostics(): Diagnostic[] {
@@ -386,25 +400,39 @@ export class WorkingStore {
   }
 
   recordAbandonedStaging(path: string): void {
-    this.db.prepare("INSERT OR IGNORE INTO abandoned_staging(path, reported_at) VALUES (?, ?)").run(path, new Date().toISOString());
+    this.transaction(() => {
+      if (!this.abandonedStaging.some((entry) => entry.path === path)) {
+        this.abandonedStaging.push({ path, reportedAt: new Date().toISOString(), reported: false });
+      }
+    });
   }
 
   unreportedAbandonedStaging(): string[] {
-    return (this.db.prepare("SELECT path FROM abandoned_staging WHERE reported=0").all() as any[]).map((row) => row.path);
+    return this.abandonedStaging.filter((entry) => !entry.reported).map((entry) => entry.path);
   }
 
   markAbandonedStagingReported(paths: string[]): void {
-    for (const path of paths) {
-      this.db.prepare("UPDATE abandoned_staging SET reported=1 WHERE path=?").run(path);
-    }
+    this.transaction(() => {
+      for (const path of paths) {
+        const entry = this.abandonedStaging.find((row) => row.path === path);
+        if (entry) entry.reported = true;
+      }
+    });
   }
 
   private seedOrganization(nodes: SourceNode[], config: MndmapConfig): void {
     const rootId = stableId("org", ["root"]);
-    this.db.prepare(`INSERT INTO organization_nodes
-      (id, source_node_id, kind, parent_id, position, title, output_slug, diagram_root, diagram_depth)
-      VALUES (?, NULL, 'group', NULL, 0, ?, NULL, 0, ?)`)
-      .run(rootId, tierRootLabel(config), config.diagrams.depth);
+    this.organizationNodes.push({
+      id: rootId,
+      sourceNodeId: null,
+      kind: "group",
+      parentId: null,
+      position: 0,
+      title: tierRootLabel(config),
+      outputSlug: null,
+      diagramRoot: false,
+      diagramDepth: config.diagrams.depth,
+    });
 
     const folders = nodes.filter((node) => node.kind === "folder");
     const pages = nodes.filter((node) => node.kind === "page");
@@ -415,11 +443,18 @@ export class WorkingStore {
       const parentPath = folder.sourcePath.includes("/") ? folder.sourcePath.split("/").slice(0, -1).join("/") : "";
       const parentId = orgBySource.get(parentPath) ?? rootId;
       const id = stableId("org", ["folder", folder.id]);
-      const position = this.listOrganizationNodes().filter((node) => node.parentId === parentId).length;
-      this.db.prepare(`INSERT INTO organization_nodes
-        (id, source_node_id, kind, parent_id, position, title, output_slug, diagram_root, diagram_depth)
-        VALUES (?, ?, 'folder', ?, ?, ?, NULL, 0, NULL)`)
-        .run(id, folder.id, parentId, position, String(folder.sourceData.title));
+      const position = this.organizationNodes.filter((node) => node.parentId === parentId).length;
+      this.organizationNodes.push({
+        id,
+        sourceNodeId: folder.id,
+        kind: "folder",
+        parentId: parentId,
+        position,
+        title: String(folder.sourceData.title),
+        outputSlug: null,
+        diagramRoot: false,
+        diagramDepth: null,
+      });
       orgBySource.set(folder.sourcePath, id);
     }
 
@@ -427,85 +462,71 @@ export class WorkingStore {
       const parentPath = page.sourcePath.includes("/") ? page.sourcePath.split("/").slice(0, -1).join("/") : "";
       const parentId = orgBySource.get(parentPath) ?? rootId;
       const id = stableId("org", ["page", page.id]);
-      const position = this.listOrganizationNodes().filter((node) => node.parentId === parentId).length;
-      /** Filed by its filename, named by its document. */
-      this.db.prepare(`INSERT INTO organization_nodes
-        (id, source_node_id, kind, parent_id, position, title, output_slug, diagram_root, diagram_depth)
-        VALUES (?, ?, 'page', ?, ?, ?, ?, 0, NULL)`)
-        .run(id, page.id, parentId, position, String(page.sourceData.title),
-             String(page.sourceData.slug ?? slugifySegment(String(page.sourceData.title))));
+      const position = this.organizationNodes.filter((node) => node.parentId === parentId).length;
+      this.organizationNodes.push({
+        id,
+        sourceNodeId: page.id,
+        kind: "page",
+        parentId: parentId,
+        position,
+        title: String(page.sourceData.title),
+        outputSlug: String(page.sourceData.slug ?? slugifySegment(String(page.sourceData.title))),
+        diagramRoot: false,
+        diagramDepth: null,
+      });
       orgBySource.set(page.sourcePath, id);
     }
   }
 
   private seedSegmentPlacements(nodes: SourceNode[]): void {
-    for (const page of this.listOrganizationNodes().filter((node) => node.kind === "page")) {
+    for (const page of this.organizationNodes.filter((node) => node.kind === "page")) {
       const source = nodes.find((node) => node.id === page.sourceNodeId);
       if (!source) continue;
       for (const placement of seedPlacementsForPage(page.id, source.sourcePath, nodes)) {
-        this.insertSegmentPlacement(placement);
+        this.segmentPlacements.push(placement);
       }
     }
   }
 
   private reconcileNewSegmentPlacements(nodes: SourceNode[]): void {
-    const placed = new Set(this.listSegmentPlacements().map((placement) => placement.sourceNodeId));
-    for (const page of this.listOrganizationNodes().filter((node) => node.kind === "page")) {
+    const placed = new Set(this.segmentPlacements.map((placement) => placement.sourceNodeId));
+    for (const page of this.organizationNodes.filter((node) => node.kind === "page")) {
       const source = nodes.find((node) => node.id === page.sourceNodeId);
       if (!source) continue;
       const fresh = seedPlacementsForPage(page.id, source.sourcePath, nodes)
         .filter((placement) => !placed.has(placement.sourceNodeId));
       for (const placement of fresh) {
-        const position = this.listSegmentPlacements()
+        const position = this.segmentPlacements
           .filter((entry) => entry.pageOrganizationId === page.id && entry.parentSegmentId === placement.parentSegmentId)
           .length;
-        this.insertSegmentPlacement({ ...placement, position });
+        this.segmentPlacements.push({ ...placement, position });
         placed.add(placement.sourceNodeId);
       }
     }
   }
 
   private collectDescendantPlacementIds(placementId: string): string[] {
-    const children = this.listSegmentPlacements().filter((entry) => entry.parentSegmentId === placementId);
+    const children = this.segmentPlacements.filter((entry) => entry.parentSegmentId === placementId);
     return children.flatMap((child) => [child.id, ...this.collectDescendantPlacementIds(child.id)]);
   }
 
   private hasOrganization(): boolean {
-    return Number((this.db.prepare("SELECT count(*) n FROM organization_nodes").get() as any).n) > 0;
-  }
-
-  private insertSourceNode(node: SourceNode): void {
-    this.db.prepare(`INSERT INTO source_nodes
-      (id, kind, explicit_key, source_path, source_locator, content_fingerprint, shape_fingerprint, source_data, scan_id, resolution, candidates_json)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(
-        node.id, node.kind, node.explicitKey ?? null, node.sourcePath, node.sourceLocator,
-        node.contentFingerprint, node.shapeFingerprint, JSON.stringify(node.sourceData),
-        node.scanId, node.resolution, node.candidates ? JSON.stringify(node.candidates) : null,
-      );
-  }
-
-  private insertSegmentPlacement(placement: SegmentPlacement): void {
-    this.db.prepare(`INSERT INTO segment_placement
-      (id, source_node_id, page_organization_id, parent_segment_id, position)
-      VALUES (?, ?, ?, ?, ?)`)
-      .run(placement.id, placement.sourceNodeId, placement.pageOrganizationId, placement.parentSegmentId, placement.position);
+    return this.organizationNodes.length > 0;
   }
 
   private insertDiagnostic(diagnostic: Diagnostic): void {
-    this.db.prepare(`INSERT INTO diagnostics(code, severity, message, document, range_json, organization_node_id, source_node_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?)`)
-      .run(
-        diagnostic.code, diagnostic.severity, diagnostic.message, diagnostic.document ?? null,
-        diagnostic.range ? JSON.stringify(diagnostic.range) : null,
-        diagnostic.organizationNodeId ?? null, diagnostic.sourceNodeId ?? null,
-      );
+    this.diagnosticsList.push(diagnostic);
   }
 
   private requireOrganizationNode(id: string): OrganizationNode {
-    const node = this.listOrganizationNodes().find((entry) => entry.id === id);
+    const node = this.organizationNodes.find((entry) => entry.id === id);
     if (!node) throw new Error(`Unknown organization node ${id}`);
     return node;
+  }
+
+  private patchOrganization(id: string, patch: Partial<OrganizationNode>): void {
+    const node = this.requireOrganizationNode(id);
+    Object.assign(node, patch);
   }
 
   private assertValidMove(node: OrganizationNode, parent: OrganizationNode): void {
@@ -520,148 +541,112 @@ export class WorkingStore {
   }
 
   private assertUniqueOutputSlug(slug: string, exceptId: string, parentId: string | null): void {
-    const collision = this.listOrganizationNodes().find((node) =>
+    const collision = this.organizationNodes.find((node) =>
       node.parentId === parentId && node.outputSlug === slug && node.id !== exceptId);
     if (collision) throw new Error(`Output slug '${slug}' collides with ${collision.id}`);
   }
 
   private normalizeSiblingPositions(parentId: string): void {
-    const siblings = this.listOrganizationNodes()
+    const siblings = this.organizationNodes
       .filter((node) => node.parentId === parentId)
       .sort((left, right) => left.position - right.position || left.title.localeCompare(right.title));
     siblings.forEach((node, index) => {
-      this.db.prepare("UPDATE organization_nodes SET position=? WHERE id=?").run(index, node.id);
+      node.position = index;
     });
   }
 
   private transaction<T>(work: () => T): T {
-    this.db.exec("BEGIN IMMEDIATE");
+    const snapshot = this.capture();
     try {
       const result = work();
-      this.db.exec("COMMIT");
+      this.persist();
       return result;
     } catch (error) {
-      this.db.exec("ROLLBACK");
+      this.restore(snapshot);
       throw error;
     }
   }
 
-  private migrate(): void {
-    const version = Number((this.db.prepare("PRAGMA user_version").get() as any).user_version ?? 0);
-    if (version > 0 && version < SCHEMA_VERSION) {
-      throw new Error("Incompatible .mndmap/state.sqlite schema. Remove .mndmap/ and re-import.");
-    }
-    if (version >= SCHEMA_VERSION) return;
+  private capture(): StoreState {
+    return structuredClone({
+      documents: this.documents,
+      sourceNodes: this.sourceNodes,
+      organizationNodes: this.organizationNodes,
+      segmentPlacements: this.segmentPlacements,
+      segmentOverrides: this.segmentOverrides,
+      diagnostics: this.diagnosticsList,
+      abandonedStaging: this.abandonedStaging,
+    });
+  }
 
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
-      CREATE TABLE IF NOT EXISTS source_documents(path TEXT PRIMARY KEY, revision TEXT NOT NULL, content TEXT NOT NULL);
-      CREATE TABLE IF NOT EXISTS source_nodes(
-        id TEXT PRIMARY KEY,
-        kind TEXT NOT NULL,
-        explicit_key TEXT,
-        source_path TEXT NOT NULL,
-        source_locator TEXT NOT NULL,
-        content_fingerprint TEXT NOT NULL,
-        shape_fingerprint TEXT NOT NULL,
-        source_data TEXT NOT NULL,
-        scan_id TEXT NOT NULL,
-        resolution TEXT NOT NULL,
-        candidates_json TEXT
-      );
-      CREATE TABLE IF NOT EXISTS organization_nodes(
-        id TEXT PRIMARY KEY,
-        source_node_id TEXT,
-        kind TEXT NOT NULL,
-        parent_id TEXT,
-        position INTEGER NOT NULL,
-        title TEXT NOT NULL,
-        output_slug TEXT,
-        diagram_root INTEGER NOT NULL DEFAULT 0,
-        diagram_depth INTEGER,
-        FOREIGN KEY(source_node_id) REFERENCES source_nodes(id)
-      );
-      CREATE TABLE IF NOT EXISTS segment_placement(
-        id TEXT PRIMARY KEY,
-        source_node_id TEXT NOT NULL,
-        page_organization_id TEXT NOT NULL,
-        parent_segment_id TEXT,
-        position INTEGER NOT NULL,
-        FOREIGN KEY(source_node_id) REFERENCES source_nodes(id),
-        FOREIGN KEY(page_organization_id) REFERENCES organization_nodes(id)
-      );
-      CREATE TABLE IF NOT EXISTS segment_override(
-        source_node_id TEXT NOT NULL,
-        field TEXT,
-        content TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        PRIMARY KEY(source_node_id, field)
-      );
-      CREATE TABLE IF NOT EXISTS diagnostics(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        code TEXT NOT NULL,
-        severity TEXT NOT NULL,
-        message TEXT NOT NULL,
-        document TEXT,
-        range_json TEXT,
-        organization_node_id TEXT,
-        source_node_id TEXT
-      );
-      CREATE TABLE IF NOT EXISTS abandoned_staging(
-        path TEXT PRIMARY KEY,
-        reported_at TEXT NOT NULL,
-        reported INTEGER NOT NULL DEFAULT 0
-      );
-    `);
-    this.db.exec(`PRAGMA user_version=${SCHEMA_VERSION}`);
+  private restore(snapshot: StoreState): void {
+    this.documents = snapshot.documents;
+    this.sourceNodes = snapshot.sourceNodes;
+    this.organizationNodes = snapshot.organizationNodes;
+    this.segmentPlacements = snapshot.segmentPlacements;
+    this.segmentOverrides = snapshot.segmentOverrides;
+    this.diagnosticsList = snapshot.diagnostics;
+    this.abandonedStaging = snapshot.abandonedStaging;
+  }
+
+  private persist(): void {
+    if (!this.persistPath) return;
+    mkdirSync(dirname(this.persistPath), { recursive: true });
+    const payload: WorkspaceFile = {
+      version: SCHEMA_VERSION,
+      sourceIdentity: this.sourceNodes.map(toIdentity),
+      organizationNodes: this.organizationNodes,
+      segmentPlacements: this.segmentPlacements,
+      segmentOverrides: this.segmentOverrides,
+      abandonedStaging: this.abandonedStaging,
+    };
+    writeFileSync(this.persistPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+  }
+
+  private load(): void {
+    if (!this.persistPath || !existsSync(this.persistPath)) return;
+    const parsed = JSON.parse(readFileSync(this.persistPath, "utf8")) as WorkspaceFile;
+    if (parsed.version !== SCHEMA_VERSION) {
+      throw new Error("Incompatible .mndmap/workspace.json schema. Remove .mndmap/ and re-import.");
+    }
+    this.sourceNodes = (parsed.sourceIdentity ?? []).map(fromIdentity);
+    this.organizationNodes = parsed.organizationNodes ?? [];
+    this.segmentPlacements = parsed.segmentPlacements ?? [];
+    this.segmentOverrides = parsed.segmentOverrides ?? [];
+    this.abandonedStaging = parsed.abandonedStaging ?? [];
   }
 }
 
-function readSourceNode(row: any): SourceNode {
+function toIdentity(node: SourceNode): SourceIdentity {
   return {
-    id: row.id,
-    kind: row.kind,
-    ...(row.explicit_key ? { explicitKey: row.explicit_key } : {}),
-    sourcePath: row.source_path,
-    sourceLocator: row.source_locator,
-    contentFingerprint: row.content_fingerprint,
-    shapeFingerprint: row.shape_fingerprint,
-    sourceData: JSON.parse(row.source_data),
-    scanId: row.scan_id,
-    resolution: row.resolution,
-    ...(row.candidates_json ? { candidates: JSON.parse(row.candidates_json) } : {}),
+    id: node.id,
+    kind: node.kind,
+    ...(node.explicitKey ? { explicitKey: node.explicitKey } : {}),
+    sourcePath: node.sourcePath,
+    sourceLocator: node.sourceLocator,
+    contentFingerprint: node.contentFingerprint,
+    shapeFingerprint: node.shapeFingerprint,
   };
 }
 
-function readOrganizationNode(row: any): OrganizationNode {
+function fromIdentity(entry: SourceIdentity): SourceNode {
   return {
-    id: row.id,
-    sourceNodeId: row.source_node_id,
-    kind: row.kind,
-    parentId: row.parent_id,
-    position: row.position,
-    title: row.title,
-    outputSlug: row.output_slug,
-    diagramRoot: Boolean(row.diagram_root),
-    diagramDepth: row.diagram_depth,
+    id: entry.id,
+    kind: entry.kind,
+    ...(entry.explicitKey ? { explicitKey: entry.explicitKey } : {}),
+    sourcePath: entry.sourcePath,
+    sourceLocator: entry.sourceLocator,
+    contentFingerprint: entry.contentFingerprint,
+    shapeFingerprint: entry.shapeFingerprint,
+    sourceData: {},
+    scanId: "",
+    resolution: "resolved",
   };
 }
 
-function readSegmentPlacement(row: any): SegmentPlacement {
-  return {
-    id: row.id,
-    sourceNodeId: row.source_node_id,
-    pageOrganizationId: row.page_organization_id,
-    parentSegmentId: row.parent_segment_id,
-    position: row.position,
-  };
-}
-
-function readSegmentOverride(row: any): SegmentOverride {
-  return {
-    sourceNodeId: row.source_node_id,
-    field: row.field,
-    content: row.content,
-    updatedAt: row.updated_at,
-  };
+function compareNullable(left: string | null, right: string | null): number {
+  if (left === right) return 0;
+  if (left === null) return -1;
+  if (right === null) return 1;
+  return left.localeCompare(right);
 }

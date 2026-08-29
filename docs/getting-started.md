@@ -19,7 +19,7 @@ related:
 
 ## Prerequisites
 
-- Node.js 22.5 or newer (the working store uses Node's built-in SQLite)
+- Node.js 20 or newer
 - npm
 - Docker — only if you want to build the mdsite output locally without installing mdsite
 
@@ -90,7 +90,7 @@ npm run ui
 mndmap ui --root /path/to/project
 ```
 
-The dashboard opens in your browser. Drag pages and sections in the tree; the diagram redraws live. Organization is saved in `.mndmap/state.sqlite` — local only, not committed.
+The dashboard opens in your browser. Drag pages and sections in the tree; the diagram redraws live. Organization is saved in `.mndmap/workspace.json` — local only, not committed.
 
 When the layout looks right:
 

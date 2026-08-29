@@ -79,7 +79,7 @@ npm run ui
 
 From another project directory, use the CLI directly: `mndmap ui --root /path/to/project` (source defaults to `docs/` when configured that way in `mndmap.yaml`).
 
-The dashboard keeps organization and segment placements in `.mndmap/state.sqlite`. Reorganize, then export when ready:
+The dashboard keeps organization and segment placements in `.mndmap/workspace.json`. Reorganize, then export when ready:
 
 ```sh
 mndmap export --root /path/to/project
@@ -125,9 +125,9 @@ Selectors for ambiguous structure — which tables and lists are records, and wh
 
 | | Lives in | Rebuilt from |
 |---|---|---|
-| parsed documents, sections, tables, items | `.mndmap/` (interactive only) | `docs/`, in seconds |
-| **the organization** — tree shape, grouping, order, diagram roots | `.mndmap/` (interactive only) | **nothing. This is your work** |
-| **segment placements** — section order per page | `.mndmap/` (interactive only) | seeded from source on first import |
+| parsed documents, sections, tables, items | memory, rebuilt on open / rescan | `docs/`, in seconds |
+| **the organization** — tree shape, grouping, order, diagram roots | `.mndmap/workspace.json` (interactive only) | **nothing. This is your work** |
+| **segment placements** — section order per page | `.mndmap/workspace.json` (interactive only) | seeded from source on first import |
 | the exported collection | `site/` | source + config (`build`) or store (`export`) |
 | `mdsite.yaml` at destination root | `site/mdsite.yaml` | template + generated `nav_order` |
 
@@ -169,7 +169,7 @@ See the [mndsite README](https://github.com/kotulc/mndsite/blob/main/README.md) 
 
 ## Requirements
 
-- Node.js 22.5 or newer — the working store uses Node's built-in SQLite
+- Node.js 20 or newer
 - npm
 - Docker only for building the mdsite output locally
 

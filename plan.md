@@ -19,7 +19,7 @@ It supports two separate workflows:
    It parses source into an ephemeral working store, applies configuration and
    deterministic defaults, and atomically emits the destination.
 2. `mndmap ui --root PATH` is a persistent, user-driven workspace. It keeps
-   one-off organization and content overrides in `.mndmap/state.sqlite` and
+   one-off organization and content overrides in `.mndmap/workspace.json` and
    emits a customized destination only when the user explicitly requests it.
 
 The two workflows do not share hidden authority:
@@ -27,7 +27,7 @@ The two workflows do not share hidden authority:
 - `build` does not automatically read local dashboard state.
 - dashboard decisions affect explicit workspace exports only.
 - the emitted destination is the portable handoff to mdsite.
-- neither SQLite nor an organization manifest needs to be committed.
+- neither the working store nor an organization manifest needs to be committed.
 
 The complete pipeline is:
 
@@ -109,7 +109,7 @@ Rules:
 `mndmap build`:
 
 1. loads and validates configuration;
-2. creates an ephemeral SQLite working store;
+2. creates an ephemeral in-memory working store;
 3. parses every matching source document;
 4. seeds deterministic organization that mirrors source folders and pages;
 5. keeps each source section in its source page;
@@ -132,7 +132,7 @@ persistent working state behind.
 `mndmap ui --root PATH`:
 
 - loads configuration;
-- opens or creates `.mndmap/state.sqlite`;
+- opens or creates `.mndmap/workspace.json`;
 - parses source at startup;
 - serves the local REST API and dashboard;
 - does not watch source automatically;
@@ -147,15 +147,17 @@ non-interactive way to export the existing local workspace. It must never be
 confused with stateless `mndmap build`.
 
 While the schema is still moving, a schema change is answered by deleting
-`.mndmap/`. No version stamp and no migration are written until the model
-settles — either would pin down a shape that is still being chosen.
+`.mndmap/`. `workspace.json` carries a version stamp and refuses an older
+file rather than migrating it.
 
 ## Working-store model
 
-SQLite is used in both workflows:
+The working store is in-memory arrays. Stateless build throws it away.
+The dashboard writes organizing work to `.mndmap/workspace.json`:
 
-- an in-memory or temporary database for stateless build;
-- `.mndmap/state.sqlite` for the dashboard.
+- organization nodes, segment placements, and segment overrides;
+- source identity (ids and fingerprints) so a rescan can match records;
+- parsed document bodies are not stored — they are re-read from `docs/`.
 
 ### Source nodes
 
@@ -312,7 +314,7 @@ generated groups, and pages — never sections. It supports:
 - folder and page selection; and
 - document-level diagram selection.
 
-Accepted intents update SQLite transactionally and immediately rebuild the
+Accepted intents update the working store transactionally and immediately rebuild the
 derived graph.
 
 ### Content panel
@@ -560,7 +562,7 @@ against the released kit.
 - normalize every parsed path to `source.root`, so no source-root folder node,
   route prefix, or root frame is created;
 - add `mndmap build`;
-- create deterministic default organization in ephemeral SQLite;
+- create deterministic default organization in an ephemeral working store;
 - prove byte-identical stateless output.
 
 Exit: a project with non-default source and destination names builds without
@@ -697,7 +699,7 @@ parse, dashboard use, graphing, export, mdsite build, or CI.
 - copied/default mdsite config with user fields preserved;
 - successful replacement removes stale files;
 - every planning failure preserves the prior destination;
-- UI actions update SQLite and redraw immediately.
+- UI actions update the working store and redraw immediately.
 
 ### Cross-project contract
 

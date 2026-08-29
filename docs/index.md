@@ -37,7 +37,7 @@ docs/**/*.{md,mdx}
 ## Two ways to work
 
 1. **`mndmap build`** — stateless CI pipeline. Parses source, applies configuration and deterministic defaults, atomically replaces the destination. No `.mndmap/` directory required.
-2. **`mndmap ui`** — interactive workspace. Keeps organization and segment overrides in `.mndmap/state.sqlite`. Reorganize in the dashboard, then **`mndmap export`** when ready.
+2. **`mndmap ui`** — interactive workspace. Keeps organization and segment overrides in `.mndmap/workspace.json`. Reorganize in the dashboard, then **`mndmap export`** when ready.
 
 `build` does not read dashboard state. Dashboard decisions affect explicit workspace exports only.
 

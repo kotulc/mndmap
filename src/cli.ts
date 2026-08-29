@@ -26,6 +26,11 @@ export async function runCli(argv = process.argv.slice(2), io: CliIo = defaultIo
   }
   const root = takeOption(args, "--root") ?? process.env.MNDMAP_ROOT ?? process.cwd();
   const command = args.shift();
+  if (command === "build") {
+    const configFile = takeOption(args, "--config");
+    output(io, await Mndmap.build(root, configFile ? { configFile } : {}));
+    return;
+  }
   const service = await Mndmap.open(root);
 
   try {
@@ -41,11 +46,6 @@ export async function runCli(argv = process.argv.slice(2), io: CliIo = defaultIo
         const json = service.graphJson();
         if (out) await writeFile(resolve(root, out), json, "utf8");
         else io.stdout.write(`${json}\n`);
-        break;
-      }
-      case "build": {
-        const configFile = takeOption(args, "--config");
-        output(io, await Mndmap.build(root, configFile ? { configFile } : {}));
         break;
       }
       case "export":
@@ -67,7 +67,6 @@ export async function runCli(argv = process.argv.slice(2), io: CliIo = defaultIo
         const port = integer(takeOption(args, "--port") ?? "7341", "port");
         const host = takeOption(args, "--host") ?? "127.0.0.1";
         if (args.length) throw new Error(`Unexpected arguments: ${args.join(" ")}`);
-        await service.import();
         const staticDirectory = resolve(fileURLToPath(new URL("../dist/ui", import.meta.url)));
         const { server, url } = await listenRest(service, { host, port, staticDirectory });
         io.stderr.write(`mndmap UI listening at ${url}\n`);

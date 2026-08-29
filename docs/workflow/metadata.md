@@ -67,4 +67,4 @@ When `desc` and `reading_time` are omitted, mndmap derives them from body text. 
 
 ## No sidecar files
 
-The handoff to mdsite is **frontmatter-only**. mndmap does not emit a parallel metadata database or required JSON sidecar alongside the destination. The SQLite working store never ships to production.
+The handoff to mdsite is **frontmatter-only**. mndmap does not emit a parallel metadata database or required JSON sidecar alongside the destination. The local working store never ships to production.

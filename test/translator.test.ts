@@ -178,4 +178,29 @@ describe("translator workspace", () => {
     expect(await readFile(join(root, "site/keep.txt"), "utf8")).toBe("previous");
     await expect(access(join(root, "site/a.md"))).rejects.toThrow();
   });
+
+  it("persists organization to workspace.json across reopen", async () => {
+    const root = await mkdtemp(join(tmpdir(), "mndmap-persist-"));
+    await mkdir(join(root, "docs"), { recursive: true });
+    await writeFile(join(root, "docs/a.md"), "# A\n\nKept.\n", "utf8");
+    const first = await Mndmap.open(root);
+    services.push(first);
+    first.createGroup({ parentId: first.organization().rootId, title: "Custom" });
+    first.close();
+
+    const saved = JSON.parse(await readFile(join(root, ".mndmap/workspace.json"), "utf8")) as {
+      version: number;
+      organizationNodes: Array<{ title: string }>;
+    };
+    expect(saved.version).toBe(1);
+    expect(saved.organizationNodes.some((node) => node.title === "Custom")).toBe(true);
+    await expect(access(join(root, ".mndmap/state.sqlite"))).rejects.toThrow();
+
+    const second = await Mndmap.open(root);
+    services.push(second);
+    expect(second.organization().nodes.some((node) => node.title === "Custom")).toBe(true);
+    const page = second.organization().nodes.find((node) => node.kind === "page");
+    expect(page).toBeDefined();
+    expect(second.pageSegments(page!.id).length).toBeGreaterThan(0);
+  });
 });
