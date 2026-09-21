@@ -1,9 +1,13 @@
-/* The shell, over the ramp.
+/* mndmap's own shell, over the theme the kit carries.
  *
- * Adapted from mndflow `packages/theme/base.css` at the pinned commit: the
- * reset, the type, the controls and the `.app` grid, narrowed to the two
- * columns this dashboard has. Every value is a ramp token, so the shell cannot
- * drift from the drawing. mndmap's own panels live in `styles.css`. */
+ * The drawing and the tree are the kit's and are styled entirely by
+ * `@mnd/kit/react.css`, which now brings the ramp and the card table with it
+ * — so a card here is a card in mndflow, with nothing to keep in sync.
+ *
+ * What is left is chrome this dashboard has and mndflow does not: three
+ * panels instead of four, and no rail. The reset, the type and the controls
+ * below are mndflow `packages/theme/base.css` verbatim, so a button reads the
+ * same in both; the layout is mndmap's own. Its panels live in `styles.css`. */
 
 * { box-sizing: border-box; }
 
@@ -19,32 +23,73 @@ body {
   overflow: hidden;
 }
 
-button, select, input {
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  padding: 2px 6px;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--border);
+  background: var(--hover);
+}
+
+button:disabled { opacity: 0.35; cursor: default; }
+
+input {
   font: inherit;
   color: inherit;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 3px;
-  padding: 4px 8px;
+  padding: 2px 6px;
+}
+
+input:focus { outline: none; border-color: var(--accent); }
+
+/* A select is mndmap's alone — mndflow has none — so it is drawn as an input
+ * that opens. */
+select {
+  font: inherit;
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 2px 6px;
   cursor: pointer;
 }
 
-button:hover:not(:disabled),
 select:hover { background: var(--hover); }
-button:disabled { opacity: 0.35; cursor: default; }
-input:focus, select:focus { outline: none; border-color: var(--accent); }
+select:focus { outline: none; border-color: var(--accent); }
 
-/* Chrome spans the top; the tree and the panel share the row below. */
+/* Chrome spans the top; the tree runs the height beside a stacked canvas and
+ * tray. Three panels, and no rail. The tree's column is `auto` because the
+ * kit's explorer sets its own width and scrolls itself — a column that sized
+ * it instead would fight the drag handle on its edge. */
 .app {
   display: grid;
-  grid-template-columns: minmax(240px, 320px) 1fr;
-  grid-template-rows: auto auto 1fr;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto 1fr minmax(160px, 38%);
   grid-template-areas:
     "header header"
     "status status"
-    "explorer main";
+    "side   canvas"
+    "side   content";
   height: 100%;
 }
+
+.app.blank {
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
+  grid-template-areas: "status";
+  place-items: center;
+}
+
+.app.over { outline: 2px dashed var(--accent); outline-offset: -6px; }
 
 .app > header {
   grid-area: header;
@@ -83,15 +128,32 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
   color: var(--muted);
 }
 
-.app > .explorer {
-  grid-area: explorer;
+/* The kit's own `.explorer` is the nav inside this; the wrapper only gives it
+ * a row to stand in. */
+.app > .side {
+  grid-area: side;
+  display: flex;
   min-height: 0;
-  overflow: auto;
-  border-right: 1px solid var(--divider);
+  min-width: 0;
 }
 
-.app > .main {
-  grid-area: main;
+.app > .canvas {
+  grid-area: canvas;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app > .content {
+  grid-area: content;
   min-height: 0;
   overflow: auto;
+  border-top: 1px solid var(--divider);
+}
+
+/* The document this run came from, beside the name. */
+.where {
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }

@@ -1,224 +1,81 @@
-export type FieldValue = string | boolean | number | null | FieldValue[];
+/** Every shape mndmap passes around: the config, the map, and what the
+ *  translator hands back. The graph itself is the kit's — nothing here
+ *  redeclares one. */
 
-export interface SourceRange {
-  start: number;
-  end: number;
-  line: number;
-  column: number;
+import type { Id } from "@mnd/kit";
+
+
+/** Where a page takes its name from, in order of preference. */
+export type NameSource = "title" | "heading" | "filename";
+
+/** One `map` section: what each markdown construct becomes. Every value is
+ *  from a closed set, so a map is data rather than code. */
+export interface DocMap {
+  folder: { as: "doc.set" };
+  page: { as: "doc.page"; name: NameSource[] };
+  section: { as: "doc.section"; depth: number; beyond: "body" | "block" };
+  prose: "body";
+  frontmatter: { as: "fields"; tags: "tags"; related: "relation" };
+  link: { as: "relation" | "body"; type: Id; external: "relation" | "body" };
+  /** `rows` makes one block per data row, of `type`, named by the `key`
+   *  column and carrying the rest as fields. */
+  table: { as: "grid" | "body" | "rows"; header: "row"; type: Id; key: string };
+  list: { as: "body" | "group" };
+  task: { as: "body" | "block" };
+  fence: { as: "body" | "block" };
+  image: "body";
 }
 
-export interface Diagnostic {
-  code: string;
-  severity: "info" | "warning" | "error";
-  message: string;
-  document?: string;
-  range?: SourceRange;
-  organizationNodeId?: string;
-  sourceNodeId?: string;
+/** A different map under a heading path. */
+export interface MapOverride {
+  under: string[];
+  map: Partial<DocMap>;
 }
 
-export type SourceNodeKind =
-  | "folder"
-  | "page"
-  | "section"
-  | "table"
-  | "row"
-  | "list"
-  | "item"
-  | "term"
-  | "link";
-
-export type ResolutionState = "resolved" | "unresolved" | "missing";
-
-export interface SourceNode {
-  id: string;
-  kind: SourceNodeKind;
-  explicitKey?: string;
-  sourcePath: string;
-  sourceLocator: string;
-  contentFingerprint: string;
-  shapeFingerprint: string;
-  sourceData: Record<string, unknown>;
-  scanId: string;
-  resolution: ResolutionState;
-  candidates?: string[];
-}
-
-export type OrganizationKind = "folder" | "group" | "page";
-
-export interface OrganizationNode {
-  id: string;
-  sourceNodeId: string | null;
-  kind: OrganizationKind;
-  parentId: string | null;
-  position: number;
-  title: string;
-  outputSlug: string | null;
-  diagramRoot: boolean;
-  diagramDepth: number | null;
-}
-
-export interface SegmentPlacement {
-  id: string;
-  sourceNodeId: string;
-  pageOrganizationId: string;
-  parentSegmentId: string | null;
-  position: number;
-}
-
-export interface SegmentOverride {
-  sourceNodeId: string;
-  field: string | null;
-  content: string;
-  updatedAt: string;
-}
-
-export interface SegmentView {
-  id: string;
-  sourceNodeId: string;
-  pageOrganizationId: string;
-  parentSegmentId: string | null;
-  position: number;
-  kind: SourceNodeKind;
-  title: string;
-  /** What the block shows when it is expanded: the override where there is
-   *  one, and the source section otherwise. */
-  body: string;
-  resolution: ResolutionState;
-  overridden: boolean;
-  children: SegmentView[];
-}
-
-export interface OrganizationSnapshot {
-  rootId: string;
-  nodes: OrganizationNode[];
-}
-
-export interface StructuralNode {
-  kind: "heading" | "section" | "table" | "list" | "list-item" | "link" | "frontmatter" | "mdx-opaque";
-  range: SourceRange;
-  depth?: number;
-  headingPath?: string[];
-  text?: string;
-  destination?: string;
-}
-
-export interface ParsedDocument {
-  path: string;
-  content: string;
-  revision: string;
-  structure: StructuralNode[];
-  diagnostics: Diagnostic[];
-  frontmatter?: unknown;
-}
-
-export interface SelectorConfig {
-  document: string;
-  match: {
-    kind: "table" | "list" | "section" | "frontmatter";
-    under?: string[];
-    headers?: string[];
-    occurrence?: number;
-  };
-  identity?: { field: string };
-  fields?: Record<string, { column?: string; label?: string; frontmatter?: string; section?: "body"; text?: boolean }>;
-}
-
-export interface MndmapConfig {
-  version: 1;
+export interface Config {
+  version: 2;
   source: { root: string; include: string[]; exclude: string[] };
   destination: string;
-  diagrams: { enabled: boolean; depth: number };
-  mdsite?: { config?: string };
-  selectors: SelectorConfig[];
+  publish?: { mdsite: string };
+  suggest: { taggly: string | null; count: number };
+  map: DocMap;
+  overrides: MapOverride[];
 }
 
-export interface ImportResult {
-  sourceNodes: number;
-  organizationNodes: number;
-  diagnostics: Diagnostic[];
+
+/** One document on the way in. `path` is relative to `source.root`. */
+export interface SourceFile {
+  path: string;
+  text: string;
 }
 
-export interface ReconciliationCandidate {
-  sourceNodeId: string;
-  priorNodeId: string;
-  reason: string;
+/** One file on the way out. `path` is relative to the collection root. */
+export interface OutFile {
+  path: string;
+  text: string;
 }
 
-export interface GraphResult {
-  graph: import("@mnd/kit").Graph;
-  tierRootId: string;
+/** An asset to copy verbatim, named by where it came from. */
+export interface OutAsset {
+  path: string;
+  from: string;
 }
 
-export interface ExportPreview {
-  files: Array<{ path: string; bytes: number }>;
-  assets: string[];
-  diagnostics: Diagnostic[];
+/** What a run became, and what it could not read. */
+export interface Report {
+  sets: number;
+  pages: number;
+  sections: number;
+  holders: number;
+  relations: number;
+  faults: string[];
 }
 
-/** @deprecated Use ExportPreview */
-export type EmitPreview = ExportPreview;
-
-export interface GroupingSuggestion {
-  id: string;
-  title: string;
-  nodeIds: string[];
-  reason: string;
-}
-
-export interface GroupingSuggester {
-  suggest(snapshot: OrganizationSnapshot, signal: AbortSignal): Promise<GroupingSuggestion[]>;
-}
-
-export interface MoveOrganizationInput {
-  id: string;
-  parentId: string;
-  position?: number;
-}
-
-export interface CreateGroupInput {
-  parentId: string;
-  title: string;
-  position?: number;
-  nodeIds?: string[];
-}
-
-export interface RenameOrganizationInput {
-  id: string;
-  title?: string;
-  outputSlug?: string | null;
-}
-
-export interface DiagramSettingsInput {
-  id: string;
-  diagramRoot?: boolean;
-  diagramDepth?: number | null;
-}
-
-export interface ResolveReconciliationInput {
-  priorNodeId: string;
-  action: "confirm" | "new" | "remove";
-  candidateId?: string;
-}
-
-export interface MoveSegmentInput {
-  sourceNodeId: string;
-  pageOrganizationId: string;
-  parentSegmentId?: string | null;
-  position: number;
-}
-
-export interface SegmentOverrideInput {
-  sourceNodeId: string;
-  field?: string | null;
-  content: string;
-}
-
-export interface WorkingStoreSnapshot {
-  sourceNodes: SourceNode[];
-  organization: OrganizationSnapshot;
-  segmentPlacements: SegmentPlacement[];
-  segmentOverrides: SegmentOverride[];
-  diagnostics: Diagnostic[];
-  config: MndmapConfig;
-}
+/** Up to `suggest.count` candidates per block or relation. Read-only, keyed
+ *  by the id it is about, and never emitted. */
+export type Suggestions = Record<Id, {
+  name?: string[];
+  tags?: string[];
+  group?: string[];
+  type?: Id[];
+}>;

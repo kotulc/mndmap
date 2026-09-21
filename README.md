@@ -50,49 +50,81 @@ Full guides live in [`docs/`](docs/):
 - [mdsite handoff](docs/publishing/mdsite-handoff.md) — destination contract and `nav_order`
 - [Deployment](docs/publishing/deployment.md) — CI/CD with mndmap and mdsite
 
+Look at the dashboard:
+
+```sh
+npm install
+npm run dev
+```
+
+One command. It regenerates the samples, serves the page on
+`http://localhost:7342`, and opens it on `samples/workspace.json` — this
+repo's own docs, already translated. Edit anything under `src/ui` and the
+page reloads on save.
+
 Build the doc site locally:
 
 ```sh
 npm run build
-mndmap build --root .
-npm run ui
+node dist/src/cli.js translate .            # docs/ -> workspace.json
+node dist/src/cli.js emit workspace.json    # workspace.json -> site/
 # then build site/ with mdsite — see docs/publishing/deployment.md
 ```
 
 ## Quick start
 
-### Stateless build (CI and pipelines)
+> The guides under `docs/` still describe the enrichment pipeline this repo
+> replaced — a working store, segments and a REST service. `plan.md` is what
+> the code does now; the commands in this section are current.
+
+### The two verbs
 
 ```sh
-npm install
-npm run build
-mndmap build --root /path/to/project
+mndmap translate <root>   # markdown in, one workspace.json out
+mndmap emit <file>        # a workspace.json in, the collection out
 ```
 
-`build` is stateless: it parses source, applies configuration and deterministic defaults, and atomically replaces the destination. No `.mndmap/` directory is required or left behind.
-
-### Interactive workspace
+Both are stateless. Nothing is kept between runs, no `.mndmap/` directory is
+written, and the same two pure functions run in the browser.
 
 ```sh
-npm run ui
+mndmap translate /path/to/project              # writes workspace.json
+mndmap emit /path/to/project/workspace.json    # writes the destination
 ```
 
-From another project directory, use the CLI directly: `mndmap ui --root /path/to/project` (source defaults to `docs/` when configured that way in `mndmap.yaml`).
+Options: `--config FILE` to read a configuration other than `mndmap.yaml`,
+and `--out PATH` to write somewhere other than the default.
 
-The dashboard keeps organization and segment placements in `.mndmap/workspace.json`. Reorganize, then export when ready:
+### The dashboard
+
+The browser is the product: translate, reorganize and emit all run there.
 
 ```sh
-mndmap export --root /path/to/project
+npm run dev        # the page, on a sample, reloading on save
+npm run preview    # the built bundle, which opens empty
 ```
 
-Headless verbs:
+Drop a folder of markdown on the page and it is translated in the tab; drop a
+`workspace.json` and it is opened as it is. **Emit** hands back a zip holding
+the collection and `mdsite.yaml`.
 
-```sh
-mndmap import          # scan and parse into the working store
-mndmap graph           # print the block tree, or write the mndflow file
-mndmap export          # write the document collection to the destination
-mndmap vocab --check   # validate the definitions mndmap ships
-```
+Nothing is uploaded and nothing is kept — the tab is the whole of the run.
+
+### The samples
+
+`samples/` holds three translated workspaces, committed so there is always
+something to look at, and **regenerated rather than migrated** — `npm run
+sample` reads the corpora again, so the sample can never disagree with what
+the reader does now. `predev` runs it, so `npm run dev` is always current.
+
+| Open | Shows |
+|---|---|
+| `/` | `samples/workspace.json` — sets, pages, sections, grids and links |
+| `/?file=/samples/map.json` | every construct the map can move: grid, group, tasks, fences, overrides |
+| `/?file=/samples/req.json` | requirements as typed rows, with `satisfies` and `verifies` |
+
+The samples are served by the dev server only. The built page starts empty,
+because a real run starts with a dropped folder.
 
 ## Configuration
 

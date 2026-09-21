@@ -1,0 +1,206 @@
+/* Vendored from mndflow `packages/theme/ramp.css` at the pinned commit.
+ *
+ * `@mnd/kit/react.css` styles the Viewer and the Explorer in terms of ramp
+ * steps and card families, and names no colour of its own. The table lives
+ * here rather than in the kit, so a host that does not carry it draws
+ * nothing. Keep in sync with `mndflow-pin.json`. */
+
+/* The colour ramp (Y.5). Slots × steps, and nothing anywhere names a colour. */
+
+:root {
+  /* Two accent families and two greys, per theme. */
+  --primary-h: 150; --primary-c: 0.19;
+  --secondary-h: 200; --secondary-c: 0.12;
+  --neutral-h: 160; --neutral-c: 0.05;
+  --muted-h: 160; --muted-c: 0.025;
+
+  /* Reserved: the app speaking about your model rather than the model speaking, so a definition
+     can never pick one. */
+  --away-h: 286; --away-c: 0.12;
+  --note-h: 78; --note-c: 0.09;
+  --error-h: 25; --error-c: 0.18;
+  --warn-h: 50; --warn-c: 0.14;
+}
+
+/* A theme is its ladder plus twelve numbers. */
+
+/* `retro` — the greens the app was built in. */
+:root,
+:root[data-theme="retro"] {
+  --l-ground: 0.145;
+  --l-fill: 0.195;
+  --l-raised: 0.255;
+  --l-divide: 0.245;
+  --l-line: 0.335;
+  --l-stroke: 0.420;
+  --l-edge: 0.800;
+  --l-dim: 0.600;
+  --l-ink: 0.880;
+  --l-outside: 0.085;
+  --outside-a: 0.72;
+  color-scheme: dark;
+
+  --primary-h: 150; --primary-c: 0.19;
+  --secondary-h: 200; --secondary-c: 0.12;
+  --neutral-h: 160; --neutral-c: 0.05;
+  --muted-h: 160; --muted-c: 0.025;
+}
+
+/* `modern` — a cyanotype, on blue paper with its own ladder. */
+:root[data-theme="modern"] {
+  --l-ground: 0.225;
+  --l-fill: 0.275;
+  --l-raised: 0.335;
+  --l-divide: 0.320;
+  --l-line: 0.450;
+  --l-stroke: 0.545;
+  --l-edge: 0.860;
+  --l-dim: 0.680;
+  --l-ink: 0.945;
+  --l-outside: 0.150;
+  --outside-a: 0.62;
+  color-scheme: dark;
+
+  /* Blue, not blue-green, so primary never reads as green. */
+  --primary-h: 230; --primary-c: 0.13;
+  --secondary-h: 195; --secondary-c: 0.11;
+  --neutral-h: 245; --neutral-c: 0.075;
+  --muted-h: 245; --muted-c: 0.045;
+}
+
+/* `light` — the whiteprint the cyanotype became: blue ink on pale paper. */
+:root[data-theme="light"] {
+  --l-ground: 0.958;
+  --l-fill: 0.985;
+  --l-raised: 0.930;
+  --l-divide: 0.900;
+  --l-line: 0.800;
+  --l-stroke: 0.620;
+  --l-edge: 0.500;
+  --l-dim: 0.495;
+  --l-ink: 0.265;
+  --l-outside: 0.895;
+  --outside-a: 0.55;
+  color-scheme: light;
+
+  --primary-h: 235; --primary-c: 0.14;
+  --secondary-h: 200; --secondary-c: 0.11;
+  --neutral-h: 232; --neutral-c: 0.026;
+  --muted-h: 232; --muted-c: 0.014;
+}
+
+/* The steps, written once; chroma scales per step as well as per slot. */
+:root {
+  --s-primary-fill: oklch(var(--l-fill) calc(var(--primary-c) * 0.18) var(--primary-h));
+  --s-primary-raised: oklch(var(--l-raised) calc(var(--primary-c) * 0.26) var(--primary-h));
+  --s-primary-line: oklch(var(--l-line) calc(var(--primary-c) * 0.40) var(--primary-h));
+  --s-primary-stroke: oklch(var(--l-stroke) calc(var(--primary-c) * 0.45) var(--primary-h));
+  --s-primary-edge: oklch(var(--l-edge) var(--primary-c) var(--primary-h));
+  --s-primary-dim: oklch(var(--l-dim) calc(var(--primary-c) * 0.30) var(--primary-h));
+  --s-primary-ink: oklch(var(--l-ink) calc(var(--primary-c) * 0.32) var(--primary-h));
+
+  --s-secondary-fill: oklch(var(--l-fill) calc(var(--secondary-c) * 0.18) var(--secondary-h));
+  --s-secondary-raised: oklch(var(--l-raised) calc(var(--secondary-c) * 0.26) var(--secondary-h));
+  --s-secondary-line: oklch(var(--l-line) calc(var(--secondary-c) * 0.40) var(--secondary-h));
+  --s-secondary-stroke: oklch(var(--l-stroke) calc(var(--secondary-c) * 0.45) var(--secondary-h));
+  --s-secondary-edge: oklch(var(--l-edge) var(--secondary-c) var(--secondary-h));
+  --s-secondary-dim: oklch(var(--l-dim) calc(var(--secondary-c) * 0.30) var(--secondary-h));
+  --s-secondary-ink: oklch(var(--l-ink) calc(var(--secondary-c) * 0.32) var(--secondary-h));
+
+
+
+  /* The greys carry the shell, so only they have a ground and a divider. */
+  --s-neutral-ground: oklch(var(--l-ground) calc(var(--neutral-c) * 0.30) var(--neutral-h));
+  --s-neutral-fill: oklch(var(--l-fill) calc(var(--neutral-c) * 0.35) var(--neutral-h));
+  --s-neutral-raised: oklch(var(--l-raised) calc(var(--neutral-c) * 0.40) var(--neutral-h));
+  --s-neutral-divide: oklch(var(--l-divide) calc(var(--neutral-c) * 0.40) var(--neutral-h));
+  --s-neutral-line: oklch(var(--l-line) calc(var(--neutral-c) * 0.55) var(--neutral-h));
+  --s-neutral-stroke: oklch(var(--l-stroke) calc(var(--neutral-c) * 0.60) var(--neutral-h));
+  --s-neutral-dim: oklch(var(--l-dim) calc(var(--neutral-c) * 0.70) var(--neutral-h));
+  --s-neutral-ink: oklch(var(--l-ink) var(--neutral-c) var(--neutral-h));
+
+  --s-muted-fill: oklch(var(--l-fill) calc(var(--muted-c) * 0.35) var(--muted-h));
+  --s-muted-line: oklch(var(--l-line) calc(var(--muted-c) * 0.55) var(--muted-h));
+  --s-muted-stroke: oklch(var(--l-stroke) calc(var(--muted-c) * 0.60) var(--muted-h));
+  --s-muted-dim: oklch(var(--l-dim) calc(var(--muted-c) * 0.70) var(--muted-h));
+  --s-muted-ink: oklch(var(--l-ink) var(--muted-c) var(--muted-h));
+
+  --s-away-fill: oklch(var(--l-fill) calc(var(--away-c) * 0.20) var(--away-h));
+  --s-away-line: oklch(var(--l-line) calc(var(--away-c) * 0.44) var(--away-h));
+  --s-away-stroke: oklch(var(--l-stroke) calc(var(--away-c) * 0.50) var(--away-h));
+  --s-away-edge: oklch(var(--l-edge) calc(var(--away-c) * 0.70) var(--away-h));
+  --s-away-dim: oklch(var(--l-dim) calc(var(--away-c) * 0.38) var(--away-h));
+  --s-away-ink: oklch(var(--l-ink) calc(var(--away-c) * 0.34) var(--away-h));
+
+  --s-note-fill: oklch(var(--l-fill) calc(var(--note-c) * 0.18) var(--note-h));
+  --s-note-line: oklch(var(--l-line) calc(var(--note-c) * 0.40) var(--note-h));
+  --s-note-stroke: oklch(var(--l-stroke) calc(var(--note-c) * 0.44) var(--note-h));
+  --s-note-edge: oklch(var(--l-edge) calc(var(--note-c) * 0.72) var(--note-h));
+  --s-note-dim: oklch(var(--l-dim) calc(var(--note-c) * 0.32) var(--note-h));
+  --s-note-ink: oklch(var(--l-ink) calc(var(--note-c) * 0.30) var(--note-h));
+
+  /* What a usage's own two numbers are measured against. */
+  --tint-ceiling: 0.19;
+
+  --s-error-edge: oklch(var(--l-edge) var(--error-c) var(--error-h));
+  --s-error-ink: oklch(var(--l-ink) calc(var(--error-c) * 0.45) var(--error-h));
+  --s-warn-edge: oklch(var(--l-edge) var(--warn-c) var(--warn-h));
+}
+
+/* The shell reads the ramp rather than a palette of its own (Y.5). */
+:root {
+  --bg: var(--s-neutral-ground);
+  --surface: var(--s-neutral-fill);
+  --hover: var(--s-neutral-raised);
+  /* What a banded row sits on. A wash, not a step. */
+  --band: color-mix(in oklch, var(--s-neutral-ink) 3%, transparent);
+  --divider: var(--s-neutral-divide);
+  --border: var(--s-neutral-line);
+  --line: var(--s-neutral-line);
+  --raised: var(--s-neutral-raised);
+  --text: var(--s-neutral-ink);
+  --muted: var(--s-neutral-dim);
+  --faint: var(--s-muted-dim);
+  --accent: var(--s-primary-edge);
+  --tint: var(--s-primary-fill);
+  --away: var(--s-away-stroke);
+  --away-dim: var(--s-away-line);
+  --note: var(--s-note-dim);
+  --note-dim: var(--s-note-stroke);
+  --error: var(--s-error-edge);
+  --warn: var(--s-warn-edge);
+  /* Translucent panels keep an alpha. */
+  --chrome: oklch(var(--l-fill) calc(var(--neutral-c) * 0.35) var(--neutral-h) / 0.92);
+
+  /* What the drawing reads, named for the thing rather than the slot. */
+  --card-fill: var(--s-neutral-fill);
+  --card-line: var(--s-neutral-line);
+  --card-raised: var(--s-neutral-raised);
+  --card-lit: var(--s-primary-dim);
+  --card-veil: oklch(var(--l-fill) calc(var(--neutral-c) * 0.35) var(--neutral-h) / 0.6);
+  --card-veil-lit: oklch(var(--l-raised) calc(var(--neutral-c) * 0.4) var(--neutral-h) / 0.75);
+  --glow: color-mix(in oklch, var(--accent) 35%, transparent);
+  /* Walls and interfaces are the engine's own structure, so they carry the app's hue rather than a
+     definition's. */
+  --wall: var(--s-primary-stroke);
+  --wall-lit: var(--s-primary-dim);
+  /* Ink that has to read on a filled warning or error patch. */
+  --on-loud: var(--s-neutral-ground);
+  /* Routes, handed to React Flow as stroke values. */
+  --route: var(--s-primary-stroke);
+  --route-head: var(--s-primary-dim);
+  /* A tie takes the note's hue. */
+  --route-tie: var(--s-note-stroke);
+  /* Beyond the frame: dimmer, taken from the ladder. */
+  --outside: oklch(var(--l-outside) calc(var(--neutral-c) * 0.3) var(--neutral-h)
+                   / var(--outside-a));
+
+  /* Doubling, because a border cannot be half a device pixel. */
+  --weight-thin: 1px;
+  --weight-medium: 2px;
+  --weight-thick: 4px;
+
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 13px;
+  color: var(--text);
+}

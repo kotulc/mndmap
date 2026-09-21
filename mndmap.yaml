@@ -1,4 +1,4 @@
-version: 1
+version: 2
 
 source:
   root: docs
@@ -8,9 +8,24 @@ source:
 
 destination: site
 
-diagrams:
-  enabled: true
-  depth: 3
+publish:
+  mdsite: mdsite.yaml
 
-mdsite:
-  config: mdsite.yaml
+suggest:
+  taggly: null
+  count: 3
+
+map:
+  folder: { as: doc.set }
+  page: { as: doc.page, name: [title, heading, filename] }
+  section: { as: doc.section, depth: 3, beyond: body }
+  prose: body
+  frontmatter: { as: fields, tags: tags, related: relation }
+  link: { as: relation, type: doc.link, external: body }
+  table: { as: grid, header: row }
+  list: { as: body }
+  task: { as: body }
+  fence: { as: body }
+  image: body
+
+overrides: []

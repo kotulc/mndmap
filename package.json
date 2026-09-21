@@ -1,7 +1,7 @@
 {
   "name": "mndmap",
   "version": "1.0.0",
-  "description": "A live editor for how a documentation site is organized.",
+  "description": "A browser dashboard for translated content, markdown first.",
   "type": "module",
   "files": [
     "dist/src"
@@ -19,10 +19,12 @@
     "build:core": "tsc -p tsconfig.json",
     "build:ui": "vite build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run test",
-    "preui": "npm run build",
-    "ui": "tsx src/cli.ts ui --root .",
-    "cli": "tsx src/cli.ts"
+    "sample": "tsx scripts/sample.ts",
+    "predev": "npm run sample",
+    "dev": "vite --port 7342 --open",
+    "preview": "vite preview --outDir dist/ui --port 7342",
+    "cli": "tsx src/cli.ts",
+    "roundtrip": "tsx scripts/roundtrip.ts . && tsx scripts/roundtrip.ts fixtures/map && tsx scripts/roundtrip.ts fixtures/req"
   },
   "repository": {
     "type": "git",
@@ -36,8 +38,10 @@
   },
   "homepage": "https://github.com/kotulc/mndmap#readme",
   "dependencies": {
-    "@mnd/kit": "file:vendor/mnd-kit-0.3.0.tgz",
-    "fast-glob": "^3.3.3",
+    "@mnd/kit": "file:vendor/mnd-kit-0.6.0.tgz",
+    "@xyflow/react": "^12.11.6",
+    "jszip": "^3.10.2",
+    "marked": "^18.0.13",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "remark-frontmatter": "^5.0.0",
@@ -45,20 +49,15 @@
     "remark-mdx": "^3.1.1",
     "remark-parse": "^11.0.0",
     "unified": "^11.0.5",
-    "yaml": "^2.9.0",
-    "zod": "^4.4.3"
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
-    "@testing-library/react": "^16.3.2",
-    "@testing-library/user-event": "^14.6.5",
     "@types/node": "^26.2.0",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^6.1.0",
-    "jsdom": "^29.1.1",
     "tsx": "^4.23.12",
     "typescript": "^7.0.2",
-    "vite": "^8.2.2",
-    "vitest": "^4.1.11"
+    "vite": "^8.2.2"
   }
 }

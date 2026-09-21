@@ -1,0 +1,146 @@
+{
+  "schema": "2.0",
+  "id": "doc",
+  "graph": {
+    "root": "ws",
+    "defs": {
+      "doc.set": {
+        "id": "doc.set",
+        "from": "doc",
+        "group": "block",
+        "name": "document set",
+        "about": "A tree of pages: a site, a manual, a repository's docs.",
+        "extends": "folder",
+        "components": {
+          "card": {},
+          "allows": {
+            "holds": [
+              "doc.set",
+              "doc.page"
+            ],
+            "ports": false
+          }
+        }
+      },
+      "doc.page": {
+        "id": "doc.page",
+        "from": "doc",
+        "group": "block",
+        "name": "page",
+        "about": "One markdown file. Its body is the prose before the first heading.",
+        "extends": "block",
+        "components": {
+          "card": {},
+          "style": {
+            "family": "primary",
+            "border_width": "medium"
+          },
+          "allows": {
+            "holds": [
+              "doc.section",
+              "doc.item",
+              "doc.code"
+            ]
+          }
+        }
+      },
+      "doc.section": {
+        "id": "doc.section",
+        "from": "doc",
+        "group": "block",
+        "name": "section",
+        "about": "A heading and what reads under it. `level` is the heading depth.",
+        "extends": "block",
+        "fields": [
+          {
+            "name": "level",
+            "form": "number"
+          }
+        ],
+        "components": {
+          "card": {},
+          "style": {
+            "family": "secondary"
+          },
+          "allows": {
+            "holds": [
+              "doc.section",
+              "doc.item",
+              "doc.code"
+            ]
+          },
+          "expects": {
+            "required": [
+              "level"
+            ]
+          }
+        }
+      },
+      "doc.item": {
+        "id": "doc.item",
+        "from": "doc",
+        "group": "block",
+        "name": "item",
+        "about": "A paragraph, a list entry, a table cell \u00e2\u20ac\u201d one run of prose, held in its body.",
+        "extends": "block",
+        "components": {
+          "card": {},
+          "style": {
+            "family": "muted"
+          },
+          "allows": {
+            "holds": false,
+            "ports": false
+          }
+        }
+      },
+      "doc.code": {
+        "id": "doc.code",
+        "from": "doc",
+        "group": "block",
+        "name": "code",
+        "about": "A fenced block. Its body is the source; `lang` is the word on the fence.",
+        "extends": "block",
+        "fields": [
+          {
+            "name": "lang",
+            "form": "text"
+          }
+        ],
+        "components": {
+          "card": {},
+          "style": {
+            "family": "neutral",
+            "fill": "hatch"
+          },
+          "allows": {
+            "holds": false,
+            "ports": false
+          }
+        }
+      },
+      "doc.link": {
+        "id": "doc.link",
+        "from": "doc",
+        "group": "relation",
+        "name": "link",
+        "about": "A markdown link, from where it was written to what it names.",
+        "extends": "line",
+        "components": {
+          "line": {
+            "to_arrow": "open"
+          }
+        }
+      }
+    },
+    "blocks": {
+      "ws": {
+        "id": "ws",
+        "parent": null,
+        "type": "folder",
+        "name": "workspace"
+      }
+    },
+    "edges": {}
+  }
+}

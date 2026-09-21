@@ -1,95 +1,68 @@
-/* mndmap's own panels: the diagnostics dialog and the content stack.
+/* The content tray: mndmap's own panel.
  *
  * The shell and the ramp are `base.css` and `theme.css`; nothing here names a
  * colour of its own. */
 
-.dialog-backdrop {
-  position: fixed;
-  inset: 0;
-  background: var(--outside);
-  display: grid;
-  place-items: center;
-  z-index: 100;
-}
+.tray { padding: 10px 14px 20px; display: flex; flex-direction: column; gap: 10px; }
+.tray.empty { color: var(--muted); padding: 24px 14px; }
 
-.dialog {
-  width: min(720px, 92vw);
-  max-height: 80vh;
-  overflow: auto;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 16px;
-}
+.tray > header { display: flex; align-items: baseline; gap: 8px; }
+.tray > header h2 { margin: 0; font-size: 15px; cursor: text; }
+.tray > header input { flex: 1; }
+.tray .kind { color: var(--muted); font-size: 11px; }
 
-.dialog header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-}
+/* Tags read as one row: what the block carries, then what is offered. */
+.tags { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.tags input { width: 6em; }
 
-.dialog pre { white-space: pre-wrap; margin: 0; }
-
-.content-panel { padding: 12px 16px 24px; }
-
-.segment-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-/* A nested stack reads as inset rather than as another top-level list. */
-.segment-block .segment-list { margin: 0 12px 12px; }
-
-.segment-block {
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: var(--surface);
-}
-
-.segment-block summary {
-  cursor: pointer;
-  padding: 8px 12px;
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.segment-block .badge {
+.tag, .chip {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 1px 8px;
   font-size: 11px;
-  padding: 1px 6px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  color: var(--muted);
+  background: var(--surface);
 }
 
-.segment-block .badge.warn { border-color: var(--warn); color: var(--warn); }
+.tag.offered, .chip { border-style: dashed; color: var(--muted); }
+.tag:hover, .chip:hover { border-color: var(--accent); color: var(--accent); }
 
-.segment-block .body {
-  padding: 0 12px 12px;
-  margin: 0;
-  white-space: pre-wrap;
-  color: var(--dim, var(--muted));
+.chips { display: inline-flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+.chip-label { color: var(--muted); font-size: 11px; }
+
+.fields { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; font-size: 12px; }
+.fields > div { display: contents; }
+.fields dt { color: var(--muted); }
+.fields dd { margin: 0; overflow-wrap: anywhere; }
+
+/* A body is read, never written. */
+.body { border-top: 1px solid var(--divider); padding-top: 8px; line-height: 1.55; }
+.body :first-child { margin-top: 0; }
+.body pre { overflow-x: auto; background: var(--surface); padding: 8px; border-radius: 3px; }
+.body code { background: var(--surface); padding: 0 3px; border-radius: 2px; }
+.body pre code { background: none; padding: 0; }
+.body table { border-collapse: collapse; }
+.body th, .body td { border: 1px solid var(--line); padding: 3px 7px; text-align: left; }
+.body img { max-width: 100%; }
+.body a { color: var(--accent); }
+
+/* What a block holds, as chips: a button here is navigation, and mndflow's
+ * chrome buttons are borderless until hover, which reads as bare words in a
+ * row. */
+.holds { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px; }
+
+.holds button {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 1px 8px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.segment-actions { display: flex; gap: 4px; margin-left: auto; }
+.holds button:hover { border-color: var(--accent); color: var(--accent); }
 
-.empty-state { color: var(--muted); padding: 24px; }
-
-/* A folder and a page are different kinds of thing, and four pixels of glyph
- * is not enough to say so. The kit names each row's kind; this reads it. */
-.explorer li[data-mark="folder"] > .label {
-  font-weight: 600;
-  color: var(--text);
-}
-
-.explorer li[data-mark="leaf"] > .label,
-.explorer li[data-mark="container"] > .label {
-  color: var(--dim, var(--muted));
-}
-
-.explorer li[data-mark="folder"] > .mark { color: var(--accent); }
+.relations { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; font-size: 12px; }
+.relations li { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.relations .way { color: var(--muted); }
+.relations .type { color: var(--accent); }

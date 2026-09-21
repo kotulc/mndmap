@@ -1,19 +1,20 @@
-import { dirname, extname, relative, sep } from "node:path";
+/** Paths, slugs and anchors.
+ *
+ *  One place decides what an emitted file is called and what a link to it
+ *  looks like, so the reader, the emitter and the nav order cannot disagree. */
 
-/** mdsite-compatible page URL from an emitted relative path. */
-export function pageRoute(emitPath: string): string {
-  const normalized = emitPath.replaceAll("\\", "/");
-  const parts = normalized.split("/").filter(Boolean);
+/** An mdsite page URL from an emitted relative path. */
+export function route(path: string): string {
+  const parts = path.replaceAll("\\", "/").split("/").filter(Boolean);
   if (parts.length === 0) return "/";
-  const last = parts[parts.length - 1]!;
-  const base = last.replace(/\.(md|mdx)$/i, "");
+  const base = parts[parts.length - 1]!.replace(/\.(md|mdx)$/i, "");
   const dir = parts.slice(0, -1);
-  const slugParts = base === "index" ? dir : [...dir, base];
-  return slugParts.length === 0 ? "/" : `/${slugParts.join("/")}`;
+  const segments = base === "index" ? dir : [...dir, base];
+  return segments.length === 0 ? "/" : `/${segments.join("/")}`;
 }
 
-/** mdsite-compatible heading anchor (Nextra/GitHub style). */
-export function sectionAnchor(name: string): string {
+/** A heading anchor, GitHub style. */
+export function anchor(name: string): string {
   return String(name || "")
     .toLowerCase()
     .trim()
@@ -21,14 +22,8 @@ export function sectionAnchor(name: string): string {
     .replace(/\s+/g, "-");
 }
 
-/** Full emitted link target for a page and optional heading. */
-export function sourceLink(emitPath: string, heading?: string): string {
-  const route = pageRoute(emitPath);
-  return heading ? `${route}#${sectionAnchor(heading)}` : route;
-}
-
-/** Output path segment from a title or explicit slug. */
-export function slugifySegment(value: string): string {
+/** A directory or file segment from a name somebody typed. */
+export function slug(value: string): string {
   return value
     .toLowerCase()
     .trim()
@@ -37,25 +32,58 @@ export function slugifySegment(value: string): string {
     .replace(/^-+|-+$/g, "") || "untitled";
 }
 
-/** Default emitted file path for a page under a directory prefix. */
-export function defaultPagePath(dirPrefix: string, title: string, extension: ".md" | ".mdx" = ".md"): string {
-  const dir = dirPrefix ? `${dirPrefix.replace(/\/$/, "")}/` : "";
-  return `${dir}${slugifySegment(title)}${extension}`;
+/** A full link target: the page, and a heading within it. */
+export function link_to(path: string, heading?: string): string {
+  return heading ? `${route(path)}#${anchor(heading)}` : route(path);
 }
 
-/** Relative asset path under _assets/ preserving docs-relative structure. */
-export function assetOutputPath(docsRelative: string): string {
-  return `_assets/${docsRelative.replaceAll("\\", "/")}`;
-}
-
-/** Resolve a relative link target from a source document path. */
-export function resolveRelativeTarget(fromDoc: string, target: string): string | null {
+/** A source-relative target resolved against the document that names it.
+ *  Null where it escapes the source root, which is a refusal. */
+export function resolve(from: string, target: string): string | null {
   if (!target || target.startsWith("#")) return null;
-  if (/^[a-z][a-z0-9+.-]*:/i.test(target)) return null;
-  const hashIndex = target.indexOf("#");
-  const pathPart = hashIndex >= 0 ? target.slice(0, hashIndex) : target;
-  if (!pathPart) return fromDoc.replaceAll("\\", "/");
-  const base = dirname(fromDoc.replaceAll("\\", "/"));
-  const joined = relative("", `${base}/${pathPart}`.replace(/\/+/g, "/")).replaceAll(sep, "/");
-  return joined.startsWith("..") ? null : joined;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(target) || target.startsWith("//")) return null;
+  const base = from.replaceAll("\\", "/").split("/").slice(0, -1);
+  const parts = [...base, ...target.split("/")];
+  const out: string[] = [];
+  for (const part of parts) {
+    if (!part || part === ".") continue;
+    if (part === "..") {
+      if (out.length === 0) return null;
+      out.pop();
+      continue;
+    }
+    out.push(part);
+  }
+  return out.join("/");
+}
+
+/** Whether a target names a place rather than a file to fetch. */
+export function is_external(target: string): boolean {
+  return /^[a-z][a-z0-9+.-]*:/i.test(target) || target.startsWith("//") || target.startsWith("#");
+}
+
+export function is_markdown(path: string): boolean {
+  return /\.(md|mdx)$/i.test(path);
+}
+
+export function dir_of(path: string): string {
+  const at = path.lastIndexOf("/");
+  return at < 0 ? "" : path.slice(0, at);
+}
+
+export function base_of(path: string): string {
+  const at = path.lastIndexOf("/");
+  return at < 0 ? path : path.slice(at + 1);
+}
+
+/** A path relative to a directory, as a link may be written. */
+export function relative_to(from_dir: string, path: string): string {
+  const here = from_dir ? from_dir.split("/") : [];
+  const there = path.split("/");
+  let same = 0;
+  while (same < here.length && same < there.length - 1 && here[same] === there[same]) same++;
+  const up = here.slice(same).map(() => "..");
+  const down = there.slice(same);
+  const out = [...up, ...down].join("/");
+  return out.startsWith(".") ? out : `./${out}`;
 }

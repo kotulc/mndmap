@@ -23,8 +23,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm test
       - run: npm run typecheck
+      - run: npm run roundtrip
       - run: npm run build
 
   mndsite:
@@ -43,8 +43,10 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build:core
-      - name: Emit documentation destination
-        run: node dist/src/cli.js build --root .
+      - name: Translate and emit the documentation collection
+        run: |
+          node dist/src/cli.js translate .
+          node dist/src/cli.js emit workspace.json
       - name: Install mndsite dependencies
         run: npm ci
         working-directory: mndsite

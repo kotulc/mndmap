@@ -1,0 +1,669 @@
+{
+  "schema": "2.0",
+  "id": "mndmap",
+  "graph": {
+    "root": "ws",
+    "blocks": {
+      "doc": {
+        "id": "doc",
+        "parent": "ws",
+        "type": "doc.set",
+        "name": "docs",
+        "source": "docs",
+        "order": 1
+      },
+      "page:design.md": {
+        "id": "page:design.md",
+        "parent": "doc",
+        "type": "doc.page",
+        "name": "Design",
+        "source": "design.md",
+        "order": 1,
+        "fields": [
+          {
+            "name": "title",
+            "form": "text",
+            "value": "Design"
+          }
+        ]
+      },
+      "page:index.md": {
+        "id": "page:index.md",
+        "parent": "doc",
+        "type": "doc.page",
+        "name": "Payload handling",
+        "source": "index.md",
+        "order": 2,
+        "fields": [
+          {
+            "name": "title",
+            "form": "text",
+            "value": "Payload handling"
+          }
+        ]
+      },
+      "page:tests.md": {
+        "id": "page:tests.md",
+        "parent": "doc",
+        "type": "doc.page",
+        "name": "Suite",
+        "source": "tests.md",
+        "order": 3,
+        "fields": [
+          {
+            "name": "title",
+            "form": "text",
+            "value": "Suite"
+          }
+        ]
+      },
+      "row:sec:index.md#payload-handling/requirements:1": {
+        "id": "row:sec:index.md#payload-handling/requirements:1",
+        "parent": "sec:index.md#payload-handling/requirements",
+        "type": "req.requirement",
+        "name": "R-1",
+        "order": 1,
+        "fields": [
+          {
+            "name": "row.key",
+            "form": "text",
+            "value": "id"
+          },
+          {
+            "name": "id",
+            "form": "text",
+            "value": "R-1"
+          },
+          {
+            "name": "shall",
+            "form": "text",
+            "value": "The reader shall accept MDX."
+          },
+          {
+            "name": "method",
+            "form": "text",
+            "value": "test"
+          },
+          {
+            "name": "satisfies",
+            "form": "text",
+            "value": "[Parser](design.md)"
+          },
+          {
+            "name": "verifies",
+            "form": "text",
+            "value": "[Suite](tests.md)"
+          }
+        ]
+      },
+      "row:sec:index.md#payload-handling/requirements:2": {
+        "id": "row:sec:index.md#payload-handling/requirements:2",
+        "parent": "sec:index.md#payload-handling/requirements",
+        "type": "req.requirement",
+        "name": "R-2",
+        "order": 2,
+        "fields": [
+          {
+            "name": "row.key",
+            "form": "text",
+            "value": "id"
+          },
+          {
+            "name": "id",
+            "form": "text",
+            "value": "R-2"
+          },
+          {
+            "name": "shall",
+            "form": "text",
+            "value": "The emitter shall not write to the source."
+          },
+          {
+            "name": "method",
+            "form": "text",
+            "value": "inspection"
+          },
+          {
+            "name": "satisfies",
+            "form": "text",
+            "value": "[Emitter](design.md)"
+          },
+          {
+            "name": "verifies",
+            "form": "text",
+            "value": "[Suite](tests.md)"
+          }
+        ]
+      },
+      "sec:design.md#design": {
+        "id": "sec:design.md#design",
+        "parent": "page:design.md",
+        "type": "doc.section",
+        "name": "Design",
+        "source": "design.md#design",
+        "order": 1,
+        "fields": [
+          {
+            "name": "level",
+            "form": "number",
+            "value": "1"
+          }
+        ],
+        "body": "How the reader and the emitter are built."
+      },
+      "sec:index.md#payload-handling": {
+        "id": "sec:index.md#payload-handling",
+        "parent": "page:index.md",
+        "type": "doc.section",
+        "name": "Payload handling",
+        "source": "index.md#payload-handling",
+        "order": 1,
+        "fields": [
+          {
+            "name": "level",
+            "form": "number",
+            "value": "1"
+          }
+        ],
+        "body": "The first traceability corpus: one table of requirements, and the links out of it."
+      },
+      "sec:index.md#payload-handling/notes": {
+        "id": "sec:index.md#payload-handling/notes",
+        "parent": "sec:index.md#payload-handling",
+        "type": "doc.section",
+        "name": "Notes",
+        "source": "index.md#payload-handling/notes",
+        "order": 2,
+        "fields": [
+          {
+            "name": "level",
+            "form": "number",
+            "value": "2"
+          }
+        ],
+        "body": "This table stays a table.\n\n| Left | Right |\n| --- | --- |\n| a | b |"
+      },
+      "sec:index.md#payload-handling/requirements": {
+        "id": "sec:index.md#payload-handling/requirements",
+        "parent": "sec:index.md#payload-handling",
+        "type": "doc.section",
+        "name": "Requirements",
+        "source": "index.md#payload-handling/requirements",
+        "order": 1,
+        "fields": [
+          {
+            "name": "level",
+            "form": "number",
+            "value": "2"
+          }
+        ]
+      },
+      "sec:tests.md#suite": {
+        "id": "sec:tests.md#suite",
+        "parent": "page:tests.md",
+        "type": "doc.section",
+        "name": "Suite",
+        "source": "tests.md#suite",
+        "order": 1,
+        "fields": [
+          {
+            "name": "level",
+            "form": "number",
+            "value": "1"
+          }
+        ],
+        "body": "What proves it."
+      },
+      "ws": {
+        "id": "ws",
+        "parent": null,
+        "name": "workspace",
+        "type": "folder"
+      }
+    },
+    "edges": {
+      "link:0": {
+        "id": "link:0",
+        "from": "page:design.md",
+        "to": "row:sec:index.md#payload-handling/requirements:1",
+        "type": "req.satisfy",
+        "name": "Parser",
+        "tags": [
+          "body"
+        ]
+      },
+      "link:1": {
+        "id": "link:1",
+        "from": "page:tests.md",
+        "to": "row:sec:index.md#payload-handling/requirements:1",
+        "type": "req.verify",
+        "name": "Suite",
+        "tags": [
+          "body"
+        ]
+      },
+      "link:2": {
+        "id": "link:2",
+        "from": "page:design.md",
+        "to": "row:sec:index.md#payload-handling/requirements:2",
+        "type": "req.satisfy",
+        "name": "Emitter",
+        "tags": [
+          "body"
+        ]
+      },
+      "link:3": {
+        "id": "link:3",
+        "from": "page:tests.md",
+        "to": "row:sec:index.md#payload-handling/requirements:2",
+        "type": "req.verify",
+        "name": "Suite",
+        "tags": [
+          "body"
+        ]
+      }
+    },
+    "defs": {
+      "block": {
+        "id": "block",
+        "from": "base",
+        "group": "block",
+        "name": "block",
+        "components": {
+          "block": {
+            "module": "block"
+          },
+          "card": {},
+          "style": {
+            "family": "primary"
+          }
+        }
+      },
+      "doc.code": {
+        "id": "doc.code",
+        "from": "doc",
+        "group": "block",
+        "name": "code",
+        "about": "A fenced block. Its body is the source; `lang` is the word on the fence.",
+        "extends": "block",
+        "fields": [
+          {
+            "name": "lang",
+            "form": "text"
+          }
+        ],
+        "components": {
+          "card": {},
+          "style": {
+            "family": "neutral",
+            "fill": "hatch"
+          },
+          "allows": {
+            "holds": false,
+            "ports": false
+          }
+        }
+      },
+      "doc.item": {
+        "id": "doc.item",
+        "from": "doc",
+        "group": "block",
+        "name": "item",
+        "about": "A paragraph, a list entry, a table cell â€” one run of prose, held in its body.",
+        "extends": "block",
+        "components": {
+          "card": {},
+          "style": {
+            "family": "muted"
+          },
+          "allows": {
+            "holds": false,
+            "ports": false
+          }
+        }
+      },
+      "doc.link": {
+        "id": "doc.link",
+        "from": "doc",
+        "group": "relation",
+        "name": "link",
+        "about": "A markdown link, from where it was written to what it names.",
+        "extends": "line",
+        "components": {
+          "line": {
+            "to_arrow": "open"
+          }
+        }
+      },
+      "doc.page": {
+        "id": "doc.page",
+        "group": "block",
+        "name": "page",
+        "about": "One markdown file. Its body is the prose before the first heading.",
+        "extends": "block",
+        "components": {
+          "card": {},
+          "style": {
+            "family": "primary",
+            "border_width": "medium"
+          },
+          "allows": {
+            "holds": [
+              "doc.section",
+              "doc.item",
+              "doc.code",
+              "req.requirement"
+            ]
+          }
+        }
+      },
+      "doc.section": {
+        "id": "doc.section",
+        "group": "block",
+        "name": "section",
+        "about": "A heading and what reads under it. `level` is the heading depth.",
+        "extends": "block",
+        "fields": [
+          {
+            "name": "level",
+            "form": "number"
+          }
+        ],
+        "components": {
+          "card": {},
+          "style": {
+            "family": "secondary"
+          },
+          "allows": {
+            "holds": [
+              "doc.section",
+              "doc.item",
+              "doc.code",
+              "req.requirement"
+            ]
+          },
+          "expects": {
+            "required": [
+              "level"
+            ]
+          }
+        }
+      },
+      "doc.set": {
+        "id": "doc.set",
+        "from": "doc",
+        "group": "block",
+        "name": "document set",
+        "about": "A tree of pages: a site, a manual, a repository's docs.",
+        "extends": "folder",
+        "components": {
+          "card": {},
+          "allows": {
+            "holds": [
+              "doc.set",
+              "doc.page"
+            ],
+            "ports": false
+          }
+        }
+      },
+      "folder": {
+        "id": "folder",
+        "from": "base",
+        "group": "block",
+        "name": "folder",
+        "components": {
+          "block": {
+            "module": "block"
+          },
+          "card": {},
+          "style": {
+            "family": "neutral",
+            "border_contrast": "faint",
+            "name_contrast": "faint"
+          }
+        }
+      },
+      "grid": {
+        "id": "grid",
+        "from": "base",
+        "group": "block",
+        "name": "grid",
+        "components": {
+          "card": {},
+          "style": {
+            "family": "muted",
+            "border_contrast": "faint",
+            "name_contrast": "faint"
+          },
+          "allows": {
+            "ports": false
+          }
+        }
+      },
+      "group": {
+        "id": "group",
+        "from": "base",
+        "group": "block",
+        "name": "group",
+        "components": {
+          "card": {},
+          "style": {
+            "family": "muted",
+            "border_contrast": "faint",
+            "name_contrast": "faint"
+          },
+          "allows": {
+            "ports": false
+          }
+        }
+      },
+      "interface": {
+        "id": "interface",
+        "from": "base",
+        "group": "block",
+        "name": "interface",
+        "components": {
+          "block": {
+            "module": "interface"
+          },
+          "card": {},
+          "style": {
+            "family": "secondary",
+            "border_width": "thin"
+          }
+        }
+      },
+      "line": {
+        "id": "line",
+        "from": "base",
+        "group": "relation",
+        "name": "line",
+        "components": {
+          "relation": {
+            "module": "line"
+          },
+          "line": {}
+        }
+      },
+      "note": {
+        "id": "note",
+        "from": "base",
+        "group": "block",
+        "name": "note",
+        "components": {
+          "block": {
+            "module": "block"
+          },
+          "card": {
+            "height": "free"
+          },
+          "style": {
+            "family": "note",
+            "border_contrast": "strong",
+            "name_contrast": "faint",
+            "fill": "wash",
+            "opacity": 0.06
+          },
+          "allows": {
+            "ports": false,
+            "holds": false
+          }
+        }
+      },
+      "reference": {
+        "id": "reference",
+        "from": "base",
+        "group": "block",
+        "name": "reference",
+        "components": {
+          "block": {
+            "module": "reference"
+          },
+          "card": {},
+          "style": {
+            "family": "away",
+            "border_contrast": "strong",
+            "name_contrast": "strong",
+            "fill": "hatch",
+            "opacity": 0.55
+          }
+        }
+      },
+      "req.group": {
+        "id": "req.group",
+        "from": "requirements",
+        "group": "block",
+        "name": "requirement group",
+        "extends": "folder",
+        "components": {
+          "card": {},
+          "allows": {
+            "holds": [
+              "req.requirement",
+              "req.group"
+            ]
+          }
+        }
+      },
+      "req.requirement": {
+        "id": "req.requirement",
+        "from": "requirements",
+        "group": "block",
+        "name": "requirement",
+        "about": "Something the system shall do, and how that is shown.",
+        "extends": "block",
+        "fields": [
+          {
+            "name": "id",
+            "form": "text"
+          },
+          {
+            "name": "shall",
+            "form": "text"
+          },
+          {
+            "name": "method",
+            "form": "choice",
+            "choices": [
+              "inspection",
+              "analysis",
+              "demonstration",
+              "test"
+            ]
+          }
+        ],
+        "components": {
+          "card": {},
+          "style": {
+            "family": "neutral",
+            "fill": "hatch",
+            "border_contrast": "faint",
+            "name_contrast": "faint"
+          },
+          "expects": {
+            "required": [
+              "id",
+              "shall"
+            ]
+          }
+        }
+      },
+      "req.satisfy": {
+        "id": "req.satisfy",
+        "from": "requirements",
+        "group": "relation",
+        "name": "satisfies",
+        "extends": "line",
+        "components": {
+          "allows": {
+            "ends": {
+              "to": [
+                "req.requirement"
+              ]
+            },
+            "degree": {
+              "out": {
+                "min": 1
+              }
+            }
+          }
+        }
+      },
+      "req.table": {
+        "id": "req.table",
+        "from": "requirements",
+        "group": "view",
+        "name": "requirements",
+        "components": {
+          "view": {
+            "module": "table"
+          }
+        }
+      },
+      "req.verify": {
+        "id": "req.verify",
+        "from": "requirements",
+        "group": "relation",
+        "name": "verifies",
+        "extends": "line",
+        "components": {
+          "allows": {
+            "ends": {
+              "to": [
+                "req.requirement"
+              ]
+            }
+          }
+        }
+      },
+      "tie": {
+        "id": "tie",
+        "from": "base",
+        "group": "relation",
+        "name": "tie",
+        "components": {
+          "relation": {
+            "module": "tie"
+          },
+          "line": {}
+        }
+      }
+    },
+    "packages": {
+      "base": {
+        "id": "base",
+        "name": "base"
+      },
+      "doc": {
+        "id": "doc",
+        "name": "doc"
+      },
+      "requirements": {
+        "id": "requirements",
+        "name": "requirements"
+      }
+    },
+    "holders": {}
+  }
+}

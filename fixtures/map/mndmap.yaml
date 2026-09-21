@@ -1,0 +1,22 @@
+version: 2
+
+source:
+  root: docs
+  include: ["**/*.{md,mdx}"]
+  exclude: []
+
+destination: site
+
+map:
+  section: { depth: 2, beyond: body }
+  table: { as: grid, header: row }
+  list: { as: group }
+  task: { as: block }
+  fence: { as: block }
+
+overrides:
+  - under: ["Map fixture", "Reference"]
+    map:
+      table: { as: body }
+      list: { as: body }
+      fence: { as: body }

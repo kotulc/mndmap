@@ -1,0 +1,158 @@
+{
+  "page:configuration.md": {
+    "name": [
+      "Configuration (tidied)"
+    ],
+    "tags": [
+      "draft",
+      "reviewed",
+      "stale"
+    ]
+  },
+  "page:getting-started.md": {
+    "name": [
+      "Getting Started (tidied)"
+    ],
+    "tags": [
+      "draft",
+      "reviewed",
+      "stale"
+    ]
+  },
+  "page:index.md": {
+    "name": [
+      "mndmap (tidied)"
+    ],
+    "tags": [
+      "draft",
+      "reviewed",
+      "stale"
+    ]
+  },
+  "page:publishing/deployment.md": {
+    "name": [
+      "Deployment (tidied)"
+    ],
+    "tags": [
+      "draft",
+      "reviewed",
+      "stale"
+    ]
+  },
+  "page:publishing/mdsite-handoff.md": {
+    "name": [
+      "mdsite handoff (tidied)"
+    ],
+    "tags": [
+      "draft",
+      "reviewed",
+      "stale"
+    ]
+  },
+  "page:specifications/emit-contract.md": {
+    "name": [
+      "Export contract (tidied)"
+    ],
+    "tags": [
+      "draft",
+      "reviewed",
+      "stale"
+    ]
+  },
+  "page:specifications/pipeline-split.md": {
+    "name": [
+      "Pipeline split (tidied)"
+    ],
+    "tags": [
+      "draft",
+      "reviewed",
+      "stale"
+    ]
+  },
+  "page:updates/roadmap.md": {
+    "name": [
+      "Roadmap (tidied)"
+    ],
+    "tags": [
+      "draft",
+      "reviewed",
+      "stale"
+    ]
+  },
+  "page:workflow/diagrams.md": {
+    "name": [
+      "Diagrams (tidied)"
+    ],
+    "tags": [
+      "draft",
+      "reviewed",
+      "stale"
+    ]
+  },
+  "page:workflow/interactive-workspace.md": {
+    "name": [
+      "Interactive workspace (tidied)"
+    ],
+    "tags": [
+      "draft",
+      "reviewed",
+      "stale"
+    ]
+  },
+  "page:workflow/metadata.md": {
+    "name": [
+      "Metadata (tidied)"
+    ],
+    "tags": [
+      "draft",
+      "reviewed",
+      "stale"
+    ]
+  },
+  "page:workflow/organization-and-structure.md": {
+    "name": [
+      "Organization and structure (tidied)"
+    ],
+    "tags": [
+      "draft",
+      "reviewed",
+      "stale"
+    ]
+  },
+  "link:0": {
+    "type": [
+      "req.satisfy",
+      "req.verify"
+    ]
+  },
+  "link:1": {
+    "type": [
+      "req.satisfy",
+      "req.verify"
+    ]
+  },
+  "link:10": {
+    "type": [
+      "req.satisfy",
+      "req.verify"
+    ]
+  },
+  "link:11": {
+    "type": [
+      "req.satisfy",
+      "req.verify"
+    ]
+  },
+  "link:12": {
+    "type": [
+      "req.satisfy",
+      "req.verify"
+    ]
+  },
+  "link:13": {
+    "type": [
+      "req.satisfy",
+      "req.verify"
+    ]
+  }
+}

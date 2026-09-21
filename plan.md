@@ -1,734 +1,152 @@
-# mndmap enrichment pipeline plan
+# Plan
 
-## Status and authority
+**mndmap, rebuilt on the kit as it is now.** A browser dashboard for translated content, markdown first. This plan supersedes the enrichment pipeline plan; README.md, translator.md and archive.md describe the retired product until they are rewritten, and where they disagree with this file, this file is authoritative.
 
-This is the implementation plan for mndmap.
 
-`README.md` describes the product. `archive.md` describes the retired ledger
-product and is historical only. Where older documents disagree with this plan,
-this plan is authoritative.
+## What mndmap is
 
-## Product contract
+**A translator with a dashboard.** It reads a collection of markdown into a mndflow graph, shows that graph as three panels somebody can re-organize and tag, and emits a new collection — optionally published through mndsite. mndflow is the diagram editor and the foundation; mndmap is a simpler surface over the same graph, for looking at translated content and rearranging it. **It is not an editor.** Bodies are read, not written; relations are drawn, not made.
 
-mndmap enriches and reshapes a Markdown or MDX collection without modifying its
-source.
-
-It supports two separate workflows:
-
-1. `mndmap build --config mndmap.yaml` is a stateless, reproducible pipeline.
-   It parses source into an ephemeral working store, applies configuration and
-   deterministic defaults, and atomically emits the destination.
-2. `mndmap ui --root PATH` is a persistent, user-driven workspace. It keeps
-   one-off organization and content overrides in `.mndmap/workspace.json` and
-   emits a customized destination only when the user explicitly requests it.
-
-The two workflows do not share hidden authority:
-
-- `build` does not automatically read local dashboard state.
-- dashboard decisions affect explicit workspace exports only.
-- the emitted destination is the portable handoff to mdsite.
-- neither the working store nor an organization manifest needs to be committed.
-
-The complete pipeline is:
-
-```text
-configured source
-  -> parse
-  -> optional enrichment
-  -> working store
-  -> defaults or dashboard decisions
-  -> validated destination documents
-  -> mdsite
-  -> static site
+```
+docs/*.md, folders ──translate──▶ workspace.json ──▶ explorer | viewer | content tray ──emit──▶ zip: collection + mdsite.yaml
+                                  suggestions.json        re-organize, tag, pick                          │ optional
+                                                                                                       mndsite ──▶ site
 ```
 
-Taggly enrichment is deferred. The initial product preserves manual metadata,
-adds deterministic `description` and `reading_time` frontmatter when absent,
-and defines the seam that a later Taggly adapter will use.
+| | |
+|---|---|
+| **stateless** | one run: a folder in, a zip out. Nothing is kept between runs, and there is no store. What the dashboard changes lives in the graph it holds, for as long as the tab is open |
+| **the browser is the product** | translate, dashboard and emit all run there, from a folder dropped on the page. A minimal CLI wraps translate and emit for CI, and nothing else |
+| **the kit is used as it is** | `Explorer` and `Viewer` from `@mnd/kit/react`, the theme, `open`, `validate` and `write`. What the kit does not have, mndmap builds in the same style. **Nothing in mndflow is for mndmap**; a change mndmap needs there is a general one or it is mndmap's own job |
+| **the graph is edited as data** | a move sets `parent` and `order`; a tag sets `tags`; a group sets a holder. mndmap writes the fields, asks `validate`, and keeps a stack of graphs for undo. No session, no log, no actions |
+| **the file is the seam** | the same `workspace.json` opens in mndflow, with the look the `doc` package gives it |
+| **markdown first** | then requirements traceability, then a codebase. Each is a vocabulary package and a `map`, never a change to the dashboard |
 
-## Authority and immutability
 
-- Source Markdown and MDX are authoritative for original content.
-- mndmap never writes to the configured source root.
-- Dashboard content edits are destination-only segment overrides.
-- `.mndmap/` is authoritative only for the local interactive workspace.
-- A stateless build starts from source and configuration every time.
-- The destination is wholly owned by mndmap and is replaced atomically.
-- mdsite consumes the destination and does not reorganize or semantically
-  enrich it.
+## The translator
 
-## Source and destination configuration
+**Two pure functions, and the CLI wraps both.** `read(files, config)` returns a mndflow file and a sidecar of suggestions; `emit(graph, config)` returns the collection as files. Both run in the browser; `mndmap translate` and `mndmap emit` run them under node for CI.
 
-The first implementation supports one source root, include and exclude globs
-relative to that root, and one destination:
+**What survives from today**: the remark parser, the link and asset rewriting, the mdsite config merge and `nav_order`, and the fill-only metadata. **What goes**: the working store, segments, placements, overrides, reconciliation, the REST service, the React dashboard, and the `selectors` config.
+
+### The `doc` vocabulary
+
+**Shipped by mndflow as a package**, so a translated file opens there with its look. mndmap reads it through the kit rather than carrying a copy.
+
+| Definition | Over | Carries |
+|---|---|---|
+| `doc.set` | `folder` | a directory |
+| `doc.page` | `block` | a file. `source.uri` is its path; front matter is its fields; prose before the first heading is its body |
+| `doc.section` | `block` | a heading. `source.at` is the heading path; the prose under it is its body |
+| `doc.item` | `block` | a list item made into a block, with a `done` flag where it was a task |
+| `doc.code` | `block` | a fence made into a block, with a `language` field and the code as its body |
+| `doc.link` | `line` | a link from one document or heading to another |
+
+**A table is a grid holder and a list is a group holder.** Neither is a block, so neither needs a definition: the holder's `of` names the section it sits in, header cells are header blocks, and members are blocks with a body.
+
+### The map
+
+**One `map` section says how markdown lands in the graph.** Each construct names its target from a closed set; the defaults give folders to folders, files to pages, headings to blocks to a depth, and everything else to prose. `overrides` applies a different map under a heading path.
 
 ```yaml
-version: 1
-
-source:
-  root: docs
-  include:
-    - "**/*.{md,mdx}"
-  exclude: []
-
+version: 2
+source:      { root: docs, include: ["**/*.{md,mdx}"], exclude: [] }
 destination: site
+publish:     { mdsite: mdsite.yaml }          # optional; the template mdsite.yaml merged into the zip
+suggest:     { taggly: null, count: 3 }       # null: no suggestions, and everything else still works
 
-diagrams:
-  enabled: true
-  depth: 3
-
-mdsite:
-  config: mdsite.yaml  # optional template path
-
-selectors: []
+map:
+  folder:      { as: doc.set }
+  page:        { as: doc.page, name: [title, heading, filename] }
+  section:     { as: doc.section, depth: 3, beyond: body }      # beyond: body | block
+  prose:       body
+  frontmatter: { as: fields, tags: tags, related: relation }
+  link:        { as: relation, type: doc.link, external: body } # relation | body
+  table:       { as: grid, header: row }                        # grid | body
+  list:        { as: body }                                     # body | group
+  task:        { as: body }                                     # body | block
+  fence:       { as: body }                                     # body | block
+  image:       body
+overrides: []   # [{ under: ["Heading", "Path"], map: { table: { as: body } } }]
 ```
 
-Rules:
+| Markdown | Reads in as | Emits as |
+|---|---|---|
+| directory | `doc.set` | a directory, with a landing page where the source has none |
+| file | `doc.page`, front matter to fields, `source.uri` | a file at the block's path, front matter from fields |
+| heading within `depth` | `doc.section` under the enclosing block, `order`, `source.at` | a heading at the depth of its nesting |
+| prose, and headings beyond `depth` | the enclosing block's `body`, opaque markdown | written as is |
+| front matter `tags` | block `tags` | front matter `tags` |
+| link to a document or heading | `doc.link` from the enclosing block to the target | the body link unchanged, and a front matter `related` entry, which mndsite reads |
+| table as `grid` | a grid holder with `of` the section; header row as header blocks; cells as blocks with a body | a table from cells and headers |
+| list as `group` | a group holder with `doc.item` members | a list from the members in order |
+| task as `block` | `doc.item` with a `done` flag | a checkbox item |
+| fence as `block` | `doc.code` with `language`, the code as body | a fence |
+| image | body; the asset copied at emit | body, asset under `_assets/` |
 
-- `source.root` and `destination` are workspace-relative directories.
-- A page is **named** by its document — frontmatter `title`, then its first
-  heading, then its filename — and **filed** by its filename. Two questions,
-  two answers: renaming a heading never moves a page.
-- Neither canonical path may contain the other.
-- The destination and `.mndmap/` are always excluded from discovery.
-- No implementation may assume the source is named `docs` or the destination
-  is named `site`.
-- Missing source roots, empty matches, unknown keys, invalid globs, and path
-  overlap are configuration errors.
-- Selector document paths are source-root-relative.
-- mdsite configuration precedence is: explicitly configured template, then a
-  workspace-root `mdsite.yaml`, then built-in defaults.
-- mndmap preserves user mdsite identity, theme, output, and deployment fields,
-  but owns `content` and `nav_order` in the emitted copy.
-- Ledger-era keys are rejected with a reference to `archive.md`.
-- Configuration remains `version: 1`; pre-enrichment version-1 shapes are
-  incompatible and receive a clear error.
+- **A page is named by its document and filed by its filename**, as before: renaming a heading never moves a page.
+- **`source.at` is the heading path**, and it is how a section is found again after a move: the emitter writes what the graph says, and never looks at the source.
+- **Bodies are opaque.** Whether a list, a table or a fence becomes structure is the map's call, per construct and per path; the body is never parsed a second time except to tell a read relation from a drawn one.
+- **The round trip is the test.** A real README read in and emitted must diff clean under the default map. That is what says whether opaque bodies hold, and it runs before the dashboard is built on the answer.
 
-## Stateless build
+### Suggestions
 
-`mndmap build`:
+**A sidecar, never the graph.** Translation may produce `suggestions.json`, keyed by block or relation id, carrying up to `count` candidates each for a name, tags, a group and a relation type. Picking one writes the graph; the sidecar is read-only and is not emitted.
 
-1. loads and validates configuration;
-2. creates an ephemeral in-memory working store;
-3. parses every matching source document;
-4. seeds deterministic organization that mirrors source folders and pages;
-5. keeps each source section in its source page;
-6. preserves manual frontmatter and fills deterministic metadata gaps;
-7. derives and validates the complete mndflow graph;
-8. plans links, assets, output paths, anchors, landing pages, and diagrams;
-9. copies or defaults mdsite configuration and writes generated navigation;
-10. reports all blocking diagnostics together;
-11. stages the complete destination; and
-12. atomically replaces the previous destination.
-
-The same source, configuration, and dependency versions must produce
-byte-identical output.
-
-`build` succeeds without an existing `.mndmap/` directory and leaves no
-persistent working state behind.
-
-## Interactive workspace
-
-`mndmap ui --root PATH`:
-
-- loads configuration;
-- opens or creates `.mndmap/workspace.json`;
-- parses source at startup;
-- serves the local REST API and dashboard;
-- does not watch source automatically;
-- reconciles source only after an explicit Rescan;
-- persists organization, generated groups, diagram settings, and segment
-  overrides;
-- previews output without mutating the destination; and
-- exports only after an explicit action.
-
-The workspace may also expose `mndmap export --root PATH` as a
-non-interactive way to export the existing local workspace. It must never be
-confused with stateless `mndmap build`.
-
-While the schema is still moving, a schema change is answered by deleting
-`.mndmap/`. `workspace.json` carries a version stamp and refuses an older
-file rather than migrating it.
-
-## Working-store model
-
-The working store is in-memory arrays. Stateless build throws it away.
-The dashboard writes organizing work to `.mndmap/workspace.json`:
-
-- organization nodes, segment placements, and segment overrides;
-- source identity (ids and fingerprints) so a rescan can match records;
-- parsed document bodies are not stored — they are re-read from `docs/`.
-
-### Source nodes
-
-A source node represents a parsed folder, page, section, table, row, list,
-item, term, or link.
-
-Minimum semantics:
-
-```text
-source_node
-  id
-  kind
-  explicit_key
-  source_path
-  source_locator
-  source_range
-  content_fingerprint
-  shape_fingerprint
-  source_data
-  scan_id
-  resolution
+```
+suggestions { [id]: { name?: string[]; tags?: string[]; group?: string[]; type?: Id[] } }
 ```
 
-Every path is normalized relative to `source.root`, never to the workspace.
+**Taggly makes them, and it is optional.** `suggest.taggly` names the endpoint; unset, the sidecar is absent and the dashboard shows no chips. Taggly never runs in CI and never decides anything: what somebody picked is ordinary graph data.
 
-**The configured root is the tree, and is never in it.** What sits directly
-under `source.root` becomes the top level, and moving the root moves the whole
-tree with it:
 
-- with `source.root: docs`, `docs/workflow/overview.md` parses as
-  `workflow/overview.md`, and `workflow` is a top-level folder;
-- with `source.root: .`, the same file parses as `docs/workflow/overview.md`,
-  and `docs` is the top-level folder.
+## The dashboard
 
-So the root never appears as a folder node, a route prefix, or a second frame
-around the tier root.
+**Three panels, no rail, no editing tools.** The explorer on the left, the canvas top right, the content tray bottom right. It wears mndflow's theme and reads as the same family.
 
-### Organization nodes
+| Panel | Is | Does |
+|---|---|---|
+| **explorer** | the kit's `Explorer`, `menu={false}` | the tree of sets, pages and sections. Drag re-parents and reorders; a click reveals; a double click renames |
+| **canvas** | the kit's `Viewer` | the open layer, drawn. A click picks, a double click walks in or out. Nothing is dragged |
+| **content tray** | mndmap's own, in the tray's style | the picked block: its name, tags, fields, its body rendered as markdown, its relations, and the suggestion chips for each |
 
-Explorer organization contains only folders, generated groups, and pages:
+**What a gesture may do, and nothing else**: move, reorder, group, rename, tag, and pick a suggestion. A body is read. A relation is retyped from a suggestion and never drawn or deleted. **Every gesture is a data edit on the held graph** followed by `validate`; a graph that would not validate is refused with the fault, and the stack holds the one before it.
 
-```text
-organization_node
-  id
-  source_node_id
-  kind                  folder | group | page
-  parent_id
-  position
-  title
-  output_slug
-  diagram_root
-  diagram_depth
-```
+**Loading**: a folder dropped on the page is translated there; a `workspace.json` dropped on the page is opened as is, with its sidecar if one sits beside it; `?file=` fetches one. **Emit** hands back a zip.
 
-Rules:
 
-- `kind` is closed: `folder | group | page`. There is no generic source kind.
-- Sections, tables, lists, items, terms, and links are never seeded into
-  organization; they reach a page through segment placement only.
-- The organization root is the tier root itself, not a node inside it.
+## Emit
 
-### Page composition and overrides
+**A collection, and the mdsite handoff, as one zip.** The rules carried over from the export contract stand: internal links rewrite to emitted paths and anchors, local assets copy under `_assets/`, static MDX imports rewrite, duplicate paths and anchors block, and `mdsite.yaml` at the root carries `content: .` and a generated `nav_order`.
 
-Sections are organized through a page-scoped segments model:
+- **A relation that the body already links is emitted nowhere else.** One the body does not link — retyped, or the target moved — goes to front matter `related`.
+- **A moved section takes its body with it** and its links follow, because the rewrite reads the graph's paths.
+- **Nothing is written to the source.** The zip is the second collection, and publishing it is mndsite's.
 
-```text
-segment_placement
-  source_node_id
-  page_organization_id
-  parent_segment_id
-  position
 
-segment_override
-  source_node_id
-  field                 null for the whole segment
-  content
-  updated_at
-```
+## Order of work
 
-Rules:
+| | Step | Done when |
+|---|---|---|
+| **M0** | **Strip.** Keep `parser.ts`, the rewriting in `export/index.ts`, `mdsite-config.ts` and `metadata.ts`. Delete the working store, segments, service, REST, routes, the UI and `selectors`. Pin the kit at 0.4.0 | `tsc --noEmit` clean against the real types |
+| **M1** | **The reader**, default map. `mndmap translate <root>` writes `workspace.json` and a report of what became what | mndflow's CLI checks, folds and projects the file untouched, and the web app opens it |
+| **M2** | **The emitter.** `mndmap emit workspace.json` | translate then emit over mndflow's own `docs/` diffs clean |
+| **M3** | **The dashboard.** Three panels over a loaded file; the six gestures as data edits; undo | reorganize a section, the canvas and tray follow, undo returns it |
+| **M4** | **In the browser.** Folder drop in, zip out, `mdsite.yaml` inside | one run from a folder to a zip with no CLI |
+| **M5** | **Suggestions.** The Taggly adapter, the sidecar, chips in the tray | pick one, it lands in the graph, it emits |
+| **M6** | **The rest of the map.** `overrides`, table as grid, list as group, fence as block, task as block | each round-trips a fixture |
+| **M7** | **Requirements.** A second map: a table under a chosen heading reads as `req.requirement` rows, and links as `satisfies` and `verifies` | the first traceability corpus reads in and emits |
 
-- a section appears in at most one emitted page;
-- sibling positions are unique and contiguous;
-- nesting is acyclic and produces valid heading depth;
-- overrides replace only the corresponding emitted segment, or one field
-  within it when `field` is set;
-- a field override re-serializes one structure — a table cell rewrites that
-  cell, a list item rewrites that item — and never the whole segment;
-- the original source range remains available for reconciliation;
-- deleting source never silently deletes a placement or override;
-- unresolved or missing placed segments block workspace export.
+**M2 before M3 on purpose.** The dashboard is the product, but the round trip proves the graph carries the content, and it is cheap to run headless.
 
-## Reconciliation
+**Depends on**: `remark` as today; `jszip` for the zip; the File System Access API for the drop; Taggly by fetch. In mndflow, the kit re-packed at HEAD and the `doc` package shipped.
 
-Each dashboard rescan is one transaction:
 
-1. parse all configured source documents into a new scan;
-2. match explicit IDs exactly;
-3. match unchanged normalized path and structural locator;
-4. match a unique content and shape fingerprint;
-5. create IDs for genuinely new nodes;
-6. mark unmatched prior nodes missing;
-7. record multiple plausible matches as unresolved; and
-8. commit derived parse data only after the full scan succeeds.
+## Open
 
-Reconciliation never guesses. The dashboard supports confirming a candidate,
-treating it as new, or removing a missing placement. Existing segment
-overrides follow a confirmed identity match.
-
-## Dashboard contract
-
-### Shell
-
-The dashboard wears mndflow's chrome so the two applications read as one
-family. The mndflow theme is vendored beside the pinned commit: `ramp.css`
-for colour and `base.css` for the shell.
-
-Every surface the kit exposes is used rather than reimplemented: `Explorer`
-draws the document tree and `Viewer` draws the diagram. The kit exposes no
-other component, so the header and the content panel are mndmap's own, written
-against mndflow's CSS. If the kit later exposes more, they adopt it.
-
-Layout is mndflow's `.app` grid and nothing else:
-
-- a header spanning the top;
-- the Explorer as the left column;
-- the main panel filling the rest.
-
-Header rules:
-
-- the product name sits at the left;
-- every control sits at the right in one `.tools` group;
-- the controls are: panel toggle (Content / Diagram), Rescan, Preview,
-  Export, Diagnostics, and theme;
-- `Export` and `Preview` name the export contract below. No surface says
-  `emit` — not the controls, the CLI, the REST paths, or the staging
-  directory. `emitted` survives only as ordinary prose for the output;
-- nothing else occupies layout — the panel toggle changes what the main panel
-  draws, never how much room it gets.
-
-Diagnostics and parse logs never sit in the page. They open once in a
-dismissible dialog on load when the scan produced any, and otherwise only when
-the Diagnostics control is pressed. A one-line status reports the result of the
-last action.
-
-### Explorer
-
-Explorer is the document tree and holds nothing else. Rows are folders,
-generated groups, and pages — never sections. It supports:
-
-- move and reorder;
-- create and dissolve generated groups;
-- rename and output-slug changes;
-- folder and page selection; and
-- document-level diagram selection.
-
-Accepted intents update the working store transactionally and immediately rebuild the
-derived graph.
-
-### Content panel
-
-Selecting a page draws its content in the main panel as one vertical list of
-segment blocks in emitted order — the page as a stack of parts, not a document
-preview.
-
-Each block:
-
-- is collapsed by default to its heading, kind, and state;
-- expands to show the section's content;
-- shows missing, unresolved, and overridden state on the block itself.
-
-The list is **linear**, and nesting is drawn as an indent. A page whose
-heading holds the rest of the page would otherwise hide the whole document
-behind one closed row, which is the opposite of a stack of parts.
-
-The list is managed by direct manipulation:
-
-- drag to reorder within the page;
-- remove to drop a section from the emitted page.
-
-A block expands to **fields** rather than Markdown: prose is one `text` field,
-a table is one field per column with its rows beneath, a list is one field per
-item, a term is a name/value pair, and a link is a `link` field. Each field is
-editable and every edit is a destination-only override. This is the panel's
-end state; blocks land first and fields follow, so the ordering and removal
-gestures are settled before the editor is built on top of them.
-
-The first implementation does not create, split, or merge sections, does not
-move a section to another page, and never writes to source. Removing a block
-removes its placement, not the source.
-
-### Diagram panel
-
-The panel toggle swaps the content list for the mndflow diagram. The diagram
-draws one open layer: its children, side by side, with the picked block lit.
-
-**One click sets context, two act on what it is on.** Clicking a row in the
-Explorer goes to the layer holding that block and lights it there, so selecting
-always shows a thing among its siblings and never lands you inside it. Walking
-in is clicking a child. Double-clicking renames.
-
-The diagram reads the same pair: one click picks, and two always navigate —
-into a card, or back out of the layer. Renaming there is done from inside a
-block, by double-clicking the frame's name.
-
-- Every layer block carries `arrangement: "down"`, so a layer's children read
-  as a vertical column and the diagram matches the Explorer's ordering.
-- One layer draws exactly one frame. The organization root is the tier root,
-  so there is never a `docs` block inside a `docs` frame.
-- Selecting a page shows it among its siblings in its folder's layer, rather
-  than opening a frame of its own.
-- Layer selection changes projection, not graph construction.
-- Fold and pick are view state, not persisted graph layout.
-
-**This behavior belongs to mndflow, not to mndmap.** One click and two clicks
-are one pair of gestures with one meaning, and the Explorer, Stage, and Viewer
-are where that meaning lives. mndmap does not carry a local variant, a
-host-side workaround, or an option that turns it on — it consumes the
-components and gets the behavior. mndflow changes; mndmap upgrades its
-`@mnd/kit` pin.
-
-## Graph and mndflow contract
-
-mndmap consumes an exact semantic version of `@mnd/kit` from the public npm
-registry. The kit is a shared contract rather than a library to work around:
-where a component behaves wrongly for mndmap, it is wrong for mndflow too, and
-the fix is a kit release both products take. mndmap never wraps, forks, or
-locally overrides a kit component's behavior. The matching mndflow commit is recorded beside the dependency for
-fixtures and debugging. A sibling checkout is never required for installation
-or CI, and projects cannot select a different kit version through
-`mndmap.yaml`.
-
-The graph builder:
-
-- is pure and synchronous;
-- accepts an immutable working-store snapshot;
-- emits the real mndflow file schema;
-- includes the documentation vocabulary on the tier root;
-- produces deterministic IDs and ordering;
-- includes a destination link on every navigable block;
-- sets `arrangement: "down"` on every layer block;
-- never emits a block for the organization root;
-- constructs the complete graph after every accepted organization change;
-- applies global diagram depth and per-node overrides during projection;
-- stores neither layout nor projected scenes; and
-- passes `validate` and `review` before export.
-
-`mndmap graph` remains available as a diagnostic/developer command. Its output
-must pass untouched through the real mndflow open, check, review, project, and
-SVG APIs.
-
-## Export contract
-
-### Documents and frontmatter
-
-- Ordinary pages remain ordinary Markdown or MDX.
-- Existing frontmatter values are preserved; mndmap does not overwrite
-  page-specific metadata already supplied by the author.
-- Missing `description` is generated from the first non-heading prose
-  paragraph, normalized and length-capped.
-- Missing `reading_time` is plain-text words divided by 200, rounded up, with a
-  minimum of one minute.
-- Tags, categories, publish dates, and related pages are preserved when present
-  but are not generated before Taggly.
-- Every container — folder and generated group alike — has a landing page.
-- A landing is an ordinary `index.md` or `index.mdx` with title, child links,
-  deterministic metadata, and an optional diagram.
-- **A source `index` page is its container's landing.** mndmap generates one
-  only where the source has none, so an author's page is never shadowed by a
-  generated file, and the two never collide on one path.
-- There is no `compose:` protocol.
-
-The handoff to mdsite is frontmatter-only: no mndmap-specific database or
-required metadata sidecar accompanies the destination.
-
-### mdsite configuration
-
-- mndmap writes `mdsite.yaml` at the destination root.
-- It copies an explicitly configured template when present.
-- Otherwise it copies workspace-root `mdsite.yaml` when present.
-- Otherwise it starts from built-in defaults.
-- User-owned identity, theme, output, and deployment settings are preserved.
-- mndmap sets `content: .` because the config lives at the destination root and
-  replaces `nav_order` with maps derived from the physical organization and
-  sibling positions.
-- mdsite remains compatible with publication-ready Markdown not produced by
-  mndmap.
-
-### Structure and segments
-
-- Emitted directories physically match the organization tree, so the
-  destination root holds the top-level folders and pages directly.
-- Moving a page changes its emitted path.
-- Moving a section changes the page containing its emitted content.
-- Segment ordering and destination-only overrides are applied during planning.
-- Duplicate output paths, routes, or anchors are blocking diagnostics.
-- Silent suffixes are forbidden.
-
-### Links, assets, and MDX
-
-- Internal links are rewritten to emitted page and heading targets.
-- Referenced local assets are copied beneath `_assets/` while preserving paths
-  relative to `source.root`.
-- Markdown and MDX references are rewritten relative to emitted locations.
-- Static relative MDX imports and exports are rewritten when targets move.
-- Dynamic or unresolved local references block export.
-- References escaping `source.root` block export unless a future explicit policy
-  allows them.
-
-### Diagrams
-
-- Generated landing pages include inline SVG by default.
-- `diagrams.enabled: false` disables emitted diagrams globally.
-- Ordinary pages include inline SVG only when explicitly marked as diagram
-  roots in configuration or the dashboard.
-- Inline SVG appears after title and introductory prose and before generated
-  child links or page sections.
-- Global depth defaults to three; per-node depth overrides it.
-- Every diagram box links to the emitted page and anchor represented by its
-  source.
-- Complete mndflow graph JSON remains diagnostic output and is not included in
-  the mdsite handoff.
-
-### Atomic replacement
-
-Planning and validation finish before destination mutation. Files are written
-under `.mndmap/export-<unique-id>/`, validated, then atomically replace the
-destination. Any failure preserves the previous destination. Successful
-replacement removes stale files.
-
-## REST surface
-
-The local API supports only the interactive workspace:
-
-```text
-POST /import
-POST /rescan
-GET  /organization
-POST /organization/move
-POST /organization/group
-POST /organization/rename
-POST /organization/diagram
-GET  /pages/:id/segments
-POST /segments/move
-POST /segments/remove
-POST /segments/override
-POST /reconciliation/resolve
-GET  /graph
-GET  /graph/:layer
-POST /export/preview
-POST /export
-GET  /diagnostics
-GET  /health
-```
-
-Mutation payloads and responses are validated. Organization and segment
-mutations are transactional. `/segments/override` takes an optional `field`
-and rewrites only that field when given.
-
-## Delivery stages
-
-Each stage carries where it stands. `done` means the exit condition holds.
-
-### S0 — Lock external contracts — done
-
-- publish and install an exact `@mnd/kit` version from public npm;
-- pin the matching mndflow commit and supported mdsite revision;
-- define frontmatter fill-only rules and mdsite configuration ownership;
-- replace legacy publication fixtures with cross-project fixtures.
-
-Exit: clean checkout installation works without sibling repositories, and a
-fixture graph passes real mndflow validation, review, projection, and SVG.
-
-### S0b — Align the components upstream — mndflow work, done
-
-Done in mndflow, because both products must gesture the same way. **One click
-sets context; two act on what they are on.**
-
-- `Explorer` click emits `reveal` — the layer holding the row, with the row
-  picked there — and double click renames;
-- `Stage` double click always navigates — into a card, or out of the layer —
-  and double-clicking the frame's name renames the layer it is the frame of;
-- `Viewer` accepts `picked` and `layer` as values a host may drive, with
-  `onPick` and `onLook`, and treats a name as the card it names;
-- `Hit` gains `title` for the frame's name, reported by the renderer because
-  text has no region a projection could compute.
-
-Also upstream, in 0.3.0: a layer whose blocks relate to nothing lays out along
-its arrangement rather than ranking them all together — `down` reads as a
-column — and Explorer rows carry their kind, so a host can tell a folder from
-a page by more than a glyph.
-
-Released as `@mnd/kit` 0.3.0 and pinned here.
-
-Exit: one click means the same thing in both products, and mndmap builds
-against the released kit.
-
-### S1 — Generalize configuration and stateless build — done
-
-- implement `source.root` plus relative include/exclude globs;
-- remove hardcoded `docs/` and `site/` behavior;
-- normalize every parsed path to `source.root`, so no source-root folder node,
-  route prefix, or root frame is created;
-- add `mndmap build`;
-- create deterministic default organization in an ephemeral working store;
-- prove byte-identical stateless output.
-
-Exit: a project with non-default source and destination names builds without
-creating `.mndmap/`, and its emitted routes carry no source-root prefix.
-
-### S2 — Complete the persistent workspace model — done
-
-- harden identity reconciliation;
-- close `organization_node.kind` to `folder | group | page` and stop seeding
-  sections into organization;
-- add the `segment_placement` and `segment_override` tables and seed each
-  page's sections as placements;
-- persist destination-only segment and field overrides;
-- enforce organization and composition invariants.
-
-Exit: organization and overrides survive reload and representative rescans
-without modifying source.
-
-### S3 — Complete graph projection and diagrams — done
-
-- project the open layer, its siblings, and the picked block;
-- take the S0b kit release rather than reproducing its behavior here;
-- apply configured and per-node depth;
-- produce valid destination links;
-- validate and review every complete graph.
-
-Exit: layer projections render through `Viewer` and `draw_svg` with correct
-links and deterministic output, and no gesture reaches an empty frame.
-
-### S4 — Complete physical export — done
-
-- export ordinary generated landing pages and ordered child links;
-- apply page moves, segment moves, ordering, and overrides;
-- preserve page metadata and fill missing description and reading time;
-- merge mdsite template/defaults and generate `nav_order`;
-- rewrite links, MDX references, and assets;
-- stage, validate, and atomically replace the destination.
-
-Exit: source is byte-identical, a failed export preserves the prior destination,
-and all emitted references resolve.
-
-### S5 — Build the dashboard shell and content blocks — partial
-
-- adopt mndflow's shell: vendored `ramp.css` and `base.css`, the `.app` grid,
-  and every control in the header's right-hand `.tools` group;
-- keep the kit's `Explorer` and `Viewer`, and limit Explorer to folders,
-  groups, and pages;
-- wire all organization intents;
-- draw the selected page as a vertical list of expandable segment blocks;
-- support drag to reorder and remove within a page;
-- add the Content/Diagram toggle, and wire Explorer selection to the Viewer
-  through the S0b props;
-- move diagnostics into a load-time dialog and rename every emit surface —
-  CLI, REST, staging directory, and controls — to `export`;
-- add reconciliation workflows.
-
-Still open: reordering is by control rather than by drag; creating and
-dissolving groups, output-slug editing, and per-node diagram settings have
-REST and store support but no control in the dashboard; reconciliation has no
-surface at all.
-
-Exit: every supported action persists and redraws without reload, and explicit
-export produces the previewed destination.
-
-### S5b — Reveal segment content as fields — deferred
-
-Held until the block list, its gestures, and the export they produce are
-settled, so the editor is built on a fixed shape rather than a moving one.
-
-- project a section's tables, lists, terms, and links into mndflow fields;
-- edit a field and store it as a destination-only override on that field;
-- re-serialize one field without rewriting its segment;
-- show which fields carry an override, and clear one.
-
-Exit: a table cell and a list item can each be edited, exported, and cleared
-without touching source or any neighbouring content.
-
-### S6 — Migrate mdsite — partial
-
-- remove automatic local semantic tagging and related-page scoring;
-- remove vendored model requirements;
-- consume mndmap frontmatter and generated `nav_order`;
-- avoid reorganization and semantic rewriting during ingest;
-- retain rendering, theming, static export, and deployment.
-
-Exit: the same mndmap destination builds locally and in the mdsite container.
-
-### S7 — Cross-project hardening and legacy retirement — not started
-
-- remove `.publication/`, ledger, MCP, and obsolete adapter artifacts;
-- remove stale local-package and custom-renderer dependencies;
-- add clean-checkout, Windows, and Linux workflow tests;
-- establish dashboard redraw budgets on a representative corpus.
-
-Exit: documented commands, tests, typecheck, build, and the cross-project
-fixture all pass.
-
-### After the core — optional Taggly integration
-
-Define an optional enrichment interface over immutable parsed content and
-organization snapshots. Add discovery, timeout, cancellation, suggestions,
-accept/ignore, and invalidation. Absence or failure of Taggly must never block
-parse, dashboard use, graphing, export, mdsite build, or CI.
-
-## Test plan
-
-### Unit
-
-- source-root-relative discovery and path safety;
-- parser nodes, source ranges, and selectors;
-- identity and reconciliation precedence;
-- organization and segment invariants;
-- destination-only segment and field override application;
-- table, list, term, and link projection into fields, and back;
-- output path, route, and anchor collisions;
-- link, MDX, and asset rewriting;
-- diagram depth and projection;
-- frontmatter preservation and fill-only metadata;
-- first-paragraph description and 200-WPM reading time;
-- mdsite template precedence and `nav_order` generation;
-- deterministic graph and export planning.
-
-### Integration
-
-- stateless build without `.mndmap/`;
-- persistent import, reload, and explicit rescan;
-- page/group move and rename;
-- section move and reorder within and across pages;
-- destination-only segment edit;
-- destination-only field edit inside a table and a list;
-- segment removed from a page without touching source;
-- generated landing with ordered links;
-- global diagram disable and explicit page diagram;
-- copied/default mdsite config with user fields preserved;
-- successful replacement removes stale files;
-- every planning failure preserves the prior destination;
-- UI actions update the working store and redraw immediately.
-
-### Cross-project contract
-
-- install released `@mnd/kit` in a clean checkout;
-- open, validate, review, and project untouched mndmap graph output;
-- build a mndmap destination with the pinned simplified mdsite;
-- verify routes, anchors, frontmatter metadata, navigation order, assets, MDX,
-  and diagram links in the built site.
-
-### Golden corpus
-
-Include nested folders, repeated headings, output collisions, cross-page and
-heading links, images and other assets, static MDX imports, tables, lists,
-explicit IDs, fingerprint reconciliation, ambiguous candidates, generated
-groups, segment overrides, and diagram-depth overrides.
-
-## Definition of done
-
-The enrichment pipeline is complete when:
-
-1. `mndmap build` reproducibly emits from any valid configured source root.
-2. `mndmap ui` persists one-off organization and destination-only edits.
-3. Explorer manages folders, groups, and pages while the content panel manages
-   section placement, ordering, removal, and field-level overrides.
-4. Document and page diagrams render through released mndflow APIs.
-5. Emission atomically writes publication-ready Markdown/MDX without modifying
-   source.
-6. Generated landings, fill-only metadata, generated `nav_order`, links,
-   assets, MDX, and diagram navigation work in simplified mdsite.
-7. Taggly is optional and deferred without weakening the integration seam.
-8. Legacy ledger/publication code and sibling-package assumptions are gone.
-9. Core, dashboard, contract, and cross-project tests pass on clean checkouts.
+| | |
+|---|---|
+| **a renamed heading** | `source.at` changes with it. Fine while the graph is authoritative for the run; it matters only if a run is ever resumed |
+| **a section moved into a section it links** | the rewrite handles the path; whether the `related` entry should then be dropped is unanswered |
+| **MDX** | expressions are opaque today and stay opaque. Whether a component instance is a block is a map question for later |
+| **what `beyond: block` means for depth** | a heading past the depth as a block flattens under the last block in depth. Whether that is wanted, or the depth should simply be raised, is decided by use |

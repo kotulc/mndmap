@@ -1,0 +1,709 @@
+{
+  "schema": "2.0",
+  "id": "mndmap",
+  "graph": {
+    "root": "ws",
+    "blocks": {
+      "cell:grid:sec:guide/detail.md#detail:1:0:0": {
+        "id": "cell:grid:sec:guide/detail.md#detail:1:0:0",
+        "parent": "sec:guide/detail.md#detail",
+        "type": "doc.item",
+        "body": "Key",
+        "group": "grid:sec:guide/detail.md#detail:1",
+        "cell": {
+          "r": 0,
+          "c": 0
+        },
+        "order": 2,
+        "header": true
+      },
+      "cell:grid:sec:guide/detail.md#detail:1:0:1": {
+        "id": "cell:grid:sec:guide/detail.md#detail:1:0:1",
+        "parent": "sec:guide/detail.md#detail",
+        "type": "doc.item",
+        "body": "Value",
+        "group": "grid:sec:guide/detail.md#detail:1",
+        "cell": {
+          "r": 0,
+          "c": 1
+        },
+        "order": 3,
+        "header": true
+      },
+      "cell:grid:sec:guide/detail.md#detail:1:1:0": {
+        "id": "cell:grid:sec:guide/detail.md#detail:1:1:0",
+        "parent": "sec:guide/detail.md#detail",
+        "type": "doc.item",
+        "body": "one",
+        "group": "grid:sec:guide/detail.md#detail:1",
+        "cell": {
+          "r": 1,
+          "c": 0
+        },
+        "order": 4
+      },
+      "cell:grid:sec:guide/detail.md#detail:1:1:1": {
+        "id": "cell:grid:sec:guide/detail.md#detail:1:1:1",
+        "parent": "sec:guide/detail.md#detail",
+        "type": "doc.item",
+        "body": "1",
+        "group": "grid:sec:guide/detail.md#detail:1",
+        "cell": {
+          "r": 1,
+          "c": 1
+        },
+        "order": 5
+      },
+      "cell:grid:sec:index.md#map-fixture/tables:1:0:0": {
+        "id": "cell:grid:sec:index.md#map-fixture/tables:1:0:0",
+        "parent": "sec:index.md#map-fixture/tables",
+        "type": "doc.item",
+        "body": "Construct",
+        "group": "grid:sec:index.md#map-fixture/tables:1",
+        "cell": {
+          "r": 0,
+          "c": 0
+        },
+        "order": 2,
+        "header": true
+      },
+      "cell:grid:sec:index.md#map-fixture/tables:1:0:1": {
+        "id": "cell:grid:sec:index.md#map-fixture/tables:1:0:1",
+        "parent": "sec:index.md#map-fixture/tables",
+        "type": "doc.item",
+        "body": "Target",
+        "group": "grid:sec:index.md#map-fixture/tables:1",
+        "cell": {
+          "r": 0,
+          "c": 1
+        },
+        "order": 3,
+        "header": true
+      },
+      "cell:grid:sec:index.md#map-fixture/tables:1:1:0": {
+        "id": "cell:grid:sec:index.md#map-fixture/tables:1:1:0",
+        "parent": "sec:index.md#map-fixture/tables",
+        "type": "doc.item",
+        "body": "table",
+        "group": "grid:sec:index.md#map-fixture/tables:1",
+        "cell": {
+          "r": 1,
+          "c": 0
+        },
+        "order": 4
+      },
+      "cell:grid:sec:index.md#map-fixture/tables:1:1:1": {
+        "id": "cell:grid:sec:index.md#map-fixture/tables:1:1:1",
+        "parent": "sec:index.md#map-fixture/tables",
+        "type": "doc.item",
+        "body": "grid",
+        "group": "grid:sec:index.md#map-fixture/tables:1",
+        "cell": {
+          "r": 1,
+          "c": 1
+        },
+        "order": 5
+      },
+      "cell:grid:sec:index.md#map-fixture/tables:1:2:0": {
+        "id": "cell:grid:sec:index.md#map-fixture/tables:1:2:0",
+        "parent": "sec:index.md#map-fixture/tables",
+        "type": "doc.item",
+        "body": "list",
+        "group": "grid:sec:index.md#map-fixture/tables:1",
+        "cell": {
+          "r": 2,
+          "c": 0
+        },
+        "order": 6
+      },
+      "cell:grid:sec:index.md#map-fixture/tables:1:2:1": {
+        "id": "cell:grid:sec:index.md#map-fixture/tables:1:2:1",
+        "parent": "sec:index.md#map-fixture/tables",
+        "type": "doc.item",
+        "body": "group",
+        "group": "grid:sec:index.md#map-fixture/tables:1",
+        "cell": {
+          "r": 2,
+          "c": 1
+        },
+        "order": 7
+      },
+      "code:sec:index.md#map-fixture/fences:1": {
+        "id": "code:sec:index.md#map-fixture/fences:1",
+        "parent": "sec:index.md#map-fixture/fences",
+        "type": "doc.code",
+        "name": "ts",
+        "body": "export const answer = 42;",
+        "order": 1,
+        "fields": [
+          {
+            "name": "lang",
+            "form": "text",
+            "value": "ts"
+          }
+        ]
+      },
+      "doc": {
+        "id": "doc",
+        "parent": "ws",
+        "type": "doc.set",
+        "name": "docs",
+        "source": "docs",
+        "order": 1
+      },
+      "item:list:sec:index.md#map-fixture/lists:1:0": {
+        "id": "item:list:sec:index.md#map-fixture/lists:1:0",
+        "parent": "sec:index.md#map-fixture/lists",
+        "type": "doc.item",
+        "body": "first member with a [link](guide/detail.md)",
+        "group": "list:sec:index.md#map-fixture/lists:1",
+        "order": 2
+      },
+      "item:list:sec:index.md#map-fixture/lists:1:1": {
+        "id": "item:list:sec:index.md#map-fixture/lists:1:1",
+        "parent": "sec:index.md#map-fixture/lists",
+        "type": "doc.item",
+        "body": "second member",
+        "group": "list:sec:index.md#map-fixture/lists:1",
+        "order": 3
+      },
+      "item:list:sec:index.md#map-fixture/lists:1:2": {
+        "id": "item:list:sec:index.md#map-fixture/lists:1:2",
+        "parent": "sec:index.md#map-fixture/lists",
+        "type": "doc.item",
+        "body": "third member",
+        "group": "list:sec:index.md#map-fixture/lists:1",
+        "order": 4
+      },
+      "page:guide/detail.md": {
+        "id": "page:guide/detail.md",
+        "parent": "set:guide",
+        "type": "doc.page",
+        "name": "Detail",
+        "source": "guide/detail.md",
+        "order": 1,
+        "fields": [
+          {
+            "name": "title",
+            "form": "text",
+            "value": "Detail"
+          },
+          {
+            "name": "related",
+            "form": "text",
+            "value": "[{\"title\":\"Map fixture\",\"url\":\"/index\"}]",
+            "tags": [
+              "json"
+            ]
+          }
+        ]
+      },
+      "page:index.md": {
+        "id": "page:index.md",
+        "parent": "doc",
+        "type": "doc.page",
+        "name": "Map fixture",
+        "source": "index.md",
+        "order": 2,
+        "tags": [
+          "fixture",
+          "map"
+        ],
+        "fields": [
+          {
+            "name": "title",
+            "form": "text",
+            "value": "Map fixture"
+          }
+        ]
+      },
+      "prose:sec:guide/detail.md#detail:6": {
+        "id": "prose:sec:guide/detail.md#detail:6",
+        "parent": "sec:guide/detail.md#detail",
+        "type": "doc.item",
+        "body": "Prose after the table, which must stay after it.\n\n#### Beyond the depth\n\nThis heading is past the depth, so it stays in the body.",
+        "order": 6
+      },
+      "sec:guide/detail.md#detail": {
+        "id": "sec:guide/detail.md#detail",
+        "parent": "page:guide/detail.md",
+        "type": "doc.section",
+        "name": "Detail",
+        "source": "guide/detail.md#detail",
+        "order": 1,
+        "fields": [
+          {
+            "name": "level",
+            "form": "number",
+            "value": "1"
+          }
+        ],
+        "body": "Prose before the table."
+      },
+      "sec:index.md#map-fixture": {
+        "id": "sec:index.md#map-fixture",
+        "parent": "page:index.md",
+        "type": "doc.section",
+        "name": "Map fixture",
+        "source": "index.md#map-fixture",
+        "order": 1,
+        "fields": [
+          {
+            "name": "level",
+            "form": "number",
+            "value": "1"
+          }
+        ],
+        "body": "Every construct the map can move, in one page."
+      },
+      "sec:index.md#map-fixture/fences": {
+        "id": "sec:index.md#map-fixture/fences",
+        "parent": "sec:index.md#map-fixture",
+        "type": "doc.section",
+        "name": "Fences",
+        "source": "index.md#map-fixture/fences",
+        "order": 3,
+        "fields": [
+          {
+            "name": "level",
+            "form": "number",
+            "value": "2"
+          }
+        ]
+      },
+      "sec:index.md#map-fixture/lists": {
+        "id": "sec:index.md#map-fixture/lists",
+        "parent": "sec:index.md#map-fixture",
+        "type": "doc.section",
+        "name": "Lists",
+        "source": "index.md#map-fixture/lists",
+        "order": 1,
+        "fields": [
+          {
+            "name": "level",
+            "form": "number",
+            "value": "2"
+          }
+        ],
+        "body": "A group holder and its members."
+      },
+      "sec:index.md#map-fixture/reference": {
+        "id": "sec:index.md#map-fixture/reference",
+        "parent": "sec:index.md#map-fixture",
+        "type": "doc.section",
+        "name": "Reference",
+        "source": "index.md#map-fixture/reference",
+        "order": 5,
+        "fields": [
+          {
+            "name": "level",
+            "form": "number",
+            "value": "2"
+          }
+        ],
+        "body": "### Raw\n\nNothing under here is lifted.\n\n| Left | Right |\n| --- | --- |\n| a | b |\n\n- plain item\n- another\n\n```sh\necho untouched\n```"
+      },
+      "sec:index.md#map-fixture/tables": {
+        "id": "sec:index.md#map-fixture/tables",
+        "parent": "sec:index.md#map-fixture",
+        "type": "doc.section",
+        "name": "Tables",
+        "source": "index.md#map-fixture/tables",
+        "order": 4,
+        "fields": [
+          {
+            "name": "level",
+            "form": "number",
+            "value": "2"
+          }
+        ]
+      },
+      "sec:index.md#map-fixture/tasks": {
+        "id": "sec:index.md#map-fixture/tasks",
+        "parent": "sec:index.md#map-fixture",
+        "type": "doc.section",
+        "name": "Tasks",
+        "source": "index.md#map-fixture/tasks",
+        "order": 2,
+        "fields": [
+          {
+            "name": "level",
+            "form": "number",
+            "value": "2"
+          }
+        ]
+      },
+      "set:guide": {
+        "id": "set:guide",
+        "parent": "doc",
+        "type": "doc.set",
+        "name": "guide",
+        "source": "guide",
+        "order": 1
+      },
+      "task:sec:index.md#map-fixture/tasks:1:0": {
+        "id": "task:sec:index.md#map-fixture/tasks:1:0",
+        "parent": "sec:index.md#map-fixture/tasks",
+        "type": "doc.item",
+        "body": "done already",
+        "order": 1,
+        "fields": [
+          {
+            "name": "done",
+            "form": "flag",
+            "value": "true"
+          }
+        ]
+      },
+      "task:sec:index.md#map-fixture/tasks:2:1": {
+        "id": "task:sec:index.md#map-fixture/tasks:2:1",
+        "parent": "sec:index.md#map-fixture/tasks",
+        "type": "doc.item",
+        "body": "still to do",
+        "order": 2,
+        "fields": [
+          {
+            "name": "done",
+            "form": "flag",
+            "value": "false"
+          }
+        ]
+      },
+      "ws": {
+        "id": "ws",
+        "parent": null,
+        "name": "workspace",
+        "type": "folder"
+      }
+    },
+    "edges": {
+      "link:0": {
+        "id": "link:0",
+        "from": "item:list:sec:index.md#map-fixture/lists:1:0",
+        "to": "page:guide/detail.md",
+        "type": "doc.link",
+        "name": "link",
+        "tags": [
+          "body"
+        ]
+      }
+    },
+    "defs": {
+      "block": {
+        "id": "block",
+        "from": "base",
+        "group": "block",
+        "name": "block",
+        "components": {
+          "block": {
+            "module": "block"
+          },
+          "card": {},
+          "style": {
+            "family": "primary"
+          }
+        }
+      },
+      "doc.code": {
+        "id": "doc.code",
+        "from": "doc",
+        "group": "block",
+        "name": "code",
+        "about": "A fenced block. Its body is the source; `lang` is the word on the fence.",
+        "extends": "block",
+        "fields": [
+          {
+            "name": "lang",
+            "form": "text"
+          }
+        ],
+        "components": {
+          "card": {},
+          "style": {
+            "family": "neutral",
+            "fill": "hatch"
+          },
+          "allows": {
+            "holds": false,
+            "ports": false
+          }
+        }
+      },
+      "doc.item": {
+        "id": "doc.item",
+        "from": "doc",
+        "group": "block",
+        "name": "item",
+        "about": "A paragraph, a list entry, a table cell â€” one run of prose, held in its body.",
+        "extends": "block",
+        "components": {
+          "card": {},
+          "style": {
+            "family": "muted"
+          },
+          "allows": {
+            "holds": false,
+            "ports": false
+          }
+        }
+      },
+      "doc.link": {
+        "id": "doc.link",
+        "from": "doc",
+        "group": "relation",
+        "name": "link",
+        "about": "A markdown link, from where it was written to what it names.",
+        "extends": "line",
+        "components": {
+          "line": {
+            "to_arrow": "open"
+          }
+        }
+      },
+      "doc.page": {
+        "id": "doc.page",
+        "from": "doc",
+        "group": "block",
+        "name": "page",
+        "about": "One markdown file. Its body is the prose before the first heading.",
+        "extends": "block",
+        "components": {
+          "card": {},
+          "style": {
+            "family": "primary",
+            "border_width": "medium"
+          },
+          "allows": {
+            "holds": [
+              "doc.section",
+              "doc.item",
+              "doc.code"
+            ]
+          }
+        }
+      },
+      "doc.section": {
+        "id": "doc.section",
+        "from": "doc",
+        "group": "block",
+        "name": "section",
+        "about": "A heading and what reads under it. `level` is the heading depth.",
+        "extends": "block",
+        "fields": [
+          {
+            "name": "level",
+            "form": "number"
+          }
+        ],
+        "components": {
+          "card": {},
+          "style": {
+            "family": "secondary"
+          },
+          "allows": {
+            "holds": [
+              "doc.section",
+              "doc.item",
+              "doc.code"
+            ]
+          },
+          "expects": {
+            "required": [
+              "level"
+            ]
+          }
+        }
+      },
+      "doc.set": {
+        "id": "doc.set",
+        "from": "doc",
+        "group": "block",
+        "name": "document set",
+        "about": "A tree of pages: a site, a manual, a repository's docs.",
+        "extends": "folder",
+        "components": {
+          "card": {},
+          "allows": {
+            "holds": [
+              "doc.set",
+              "doc.page"
+            ],
+            "ports": false
+          }
+        }
+      },
+      "folder": {
+        "id": "folder",
+        "from": "base",
+        "group": "block",
+        "name": "folder",
+        "components": {
+          "block": {
+            "module": "block"
+          },
+          "card": {},
+          "style": {
+            "family": "neutral",
+            "border_contrast": "faint",
+            "name_contrast": "faint"
+          }
+        }
+      },
+      "grid": {
+        "id": "grid",
+        "from": "base",
+        "group": "block",
+        "name": "grid",
+        "components": {
+          "card": {},
+          "style": {
+            "family": "muted",
+            "border_contrast": "faint",
+            "name_contrast": "faint"
+          },
+          "allows": {
+            "ports": false
+          }
+        }
+      },
+      "group": {
+        "id": "group",
+        "from": "base",
+        "group": "block",
+        "name": "group",
+        "components": {
+          "card": {},
+          "style": {
+            "family": "muted",
+            "border_contrast": "faint",
+            "name_contrast": "faint"
+          },
+          "allows": {
+            "ports": false
+          }
+        }
+      },
+      "interface": {
+        "id": "interface",
+        "from": "base",
+        "group": "block",
+        "name": "interface",
+        "components": {
+          "block": {
+            "module": "interface"
+          },
+          "card": {},
+          "style": {
+            "family": "secondary",
+            "border_width": "thin"
+          }
+        }
+      },
+      "line": {
+        "id": "line",
+        "from": "base",
+        "group": "relation",
+        "name": "line",
+        "components": {
+          "relation": {
+            "module": "line"
+          },
+          "line": {}
+        }
+      },
+      "note": {
+        "id": "note",
+        "from": "base",
+        "group": "block",
+        "name": "note",
+        "components": {
+          "block": {
+            "module": "block"
+          },
+          "card": {
+            "height": "free"
+          },
+          "style": {
+            "family": "note",
+            "border_contrast": "strong",
+            "name_contrast": "faint",
+            "fill": "wash",
+            "opacity": 0.06
+          },
+          "allows": {
+            "ports": false,
+            "holds": false
+          }
+        }
+      },
+      "reference": {
+        "id": "reference",
+        "from": "base",
+        "group": "block",
+        "name": "reference",
+        "components": {
+          "block": {
+            "module": "reference"
+          },
+          "card": {},
+          "style": {
+            "family": "away",
+            "border_contrast": "strong",
+            "name_contrast": "strong",
+            "fill": "hatch",
+            "opacity": 0.55
+          }
+        }
+      },
+      "tie": {
+        "id": "tie",
+        "from": "base",
+        "group": "relation",
+        "name": "tie",
+        "components": {
+          "relation": {
+            "module": "tie"
+          },
+          "line": {}
+        }
+      }
+    },
+    "packages": {
+      "base": {
+        "id": "base",
+        "name": "base"
+      },
+      "doc": {
+        "id": "doc",
+        "name": "doc"
+      }
+    },
+    "holders": {
+      "grid:sec:guide/detail.md#detail:1": {
+        "id": "grid:sec:guide/detail.md#detail:1",
+        "parent": "sec:guide/detail.md#detail",
+        "of": "sec:guide/detail.md#detail",
+        "arrangement": "grid",
+        "rows": 2,
+        "cols": 2,
+        "order": 1
+      },
+      "grid:sec:index.md#map-fixture/tables:1": {
+        "id": "grid:sec:index.md#map-fixture/tables:1",
+        "parent": "sec:index.md#map-fixture/tables",
+        "of": "sec:index.md#map-fixture/tables",
+        "arrangement": "grid",
+        "rows": 3,
+        "cols": 2,
+        "order": 1
+      },
+      "list:sec:index.md#map-fixture/lists:1": {
+        "id": "list:sec:index.md#map-fixture/lists:1",
+        "parent": "sec:index.md#map-fixture/lists",
+        "of": "sec:index.md#map-fixture/lists",
+        "arrangement": "free",
+        "order": 1
+      }
+    }
+  }
+}
