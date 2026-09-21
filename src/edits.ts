@@ -1,4 +1,4 @@
-/** The six gestures, as edits on a held graph.
+/** The gestures, as edits on a held graph.
  *
  *  Every gesture is a field written and nothing else: no session, no log and
  *  no actions. An edit that would not validate is refused with the fault and
@@ -6,7 +6,7 @@
  *  one. */
 
 import { children, validate, type Block, type Graph, type Id } from "@mnd/kit";
-import { with_field, PAGE } from "./doc.js";
+import { with_field, PAGE, SET, TIER_ROOT } from "./doc.js";
 import type { Suggestions } from "./types.js";
 
 
@@ -19,6 +19,10 @@ export type Edit =
   | { do: "group"; ids: Id[]; name: string | null }
   | { do: "rename"; id: Id; name: string }
   | { do: "tag"; id: Id; tags: string[] }
+  /** A page or folder under a parent, named in the explorer. */
+  | { do: "create"; parent: Id; name: string; type?: "folder" }
+  /** Drop a block and everything it holds. */
+  | { do: "delete"; id: Id }
   /** Take one of the sidecar's candidates for a block or a relation. */
   | { do: "pick"; id: Id; of: "name" | "tags" | "group" | "type"; value: string };
 
@@ -110,6 +114,51 @@ function run(graph: Graph, edit: Edit): string | null {
       if (tags.length) block.tags = tags; else delete block.tags;
       return null;
     }
+    case "create": {
+      if (!graph.blocks[edit.parent]) return `there is nowhere called ${edit.parent}`;
+      const name = edit.name.trim();
+      if (!name) return "a name cannot be blank";
+      const folder = edit.type === "folder";
+      const kind = folder ? SET : PAGE;
+      const slug = slugify(name);
+      const id = mint(graph, folder ? `set:${slug}` : `page:${slug}.md`);
+      const source = folder ? slug : `${slug}.md`;
+      graph.blocks[id] = {
+        id,
+        parent: edit.parent,
+        type: kind,
+        name,
+        source,
+        order: children(graph, edit.parent).length + 1,
+        ...(folder ? {} : { fields: [{ name: TITLE, form: "text" as const, value: name }] }),
+      };
+      return null;
+    }
+    case "delete": {
+      if (!graph.blocks[edit.id]) return `nothing here is called ${edit.id}`;
+      if (edit.id === graph.root || edit.id === TIER_ROOT) {
+        return "the workspace root cannot be deleted";
+      }
+      const drop = new Set<Id>();
+      const walk = (id: Id) => {
+        drop.add(id);
+        for (const child of children(graph, id)) walk(child.id);
+      };
+      walk(edit.id);
+      for (const id of drop) delete graph.blocks[id];
+      for (const [id, edge] of Object.entries(graph.edges)) {
+        if (drop.has(edge.from) || drop.has(edge.to)) delete graph.edges[id];
+      }
+      for (const [id, holder] of Object.entries(graph.holders)) {
+        if (drop.has(holder.parent) || (holder.of && drop.has(holder.of))) {
+          delete graph.holders[id];
+        }
+      }
+      for (const block of Object.values(graph.blocks)) {
+        if (block.group && !graph.holders[block.group]) delete block.group;
+      }
+      return null;
+    }
     case "pick": {
       if (edit.of === "type") {
         const relation = graph.edges[edit.id];
@@ -155,6 +204,19 @@ function name_of(graph: Graph, id: Id): string {
   return graph.blocks[id]?.name ?? id;
 }
 
+function slugify(name: string): string {
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  return slug || "untitled";
+}
+
+/** An unused id with this stem, so a second "notes" does not collide. */
+function mint(graph: Graph, stem: Id): Id {
+  if (!graph.blocks[stem]) return stem;
+  let n = 2;
+  while (graph.blocks[`${stem}-${n}`]) n += 1;
+  return `${stem}-${n}`;
+}
+
 function clone(graph: Graph): Graph {
   const copied = <T>(record: Record<string, T>): Record<string, T> =>
     Object.fromEntries(Object.entries(record).map(([id, held]) => [id, { ...held }]));
@@ -173,22 +235,44 @@ function clone(graph: Graph): Graph {
  *  sitting and nothing is kept between them. */
 export class Stack {
   private readonly held: Graph[] = [];
+  /** Undone graphs, newest last, so a new edit can drop them. */
+  private readonly ahead: Graph[] = [];
   private readonly cap: number;
 
   constructor(cap = 50) {
     this.cap = cap;
   }
 
+  /** Remember the graph an edit replaced. A new edit ends the redo run. */
   push(graph: Graph): void {
+    this.ahead.length = 0;
     this.held.push(graph);
     if (this.held.length > this.cap) this.held.shift();
   }
 
-  pop(): Graph | undefined {
-    return this.held.pop();
+  /** Step back. `current` becomes the redo. */
+  undo(current: Graph): Graph | undefined {
+    const back = this.held.pop();
+    if (!back) return undefined;
+    this.ahead.push(current);
+    return back;
+  }
+
+  /** Step forward again. `current` goes back on the undo stack. */
+  redo(current: Graph): Graph | undefined {
+    const next = this.ahead.pop();
+    if (!next) return undefined;
+    this.held.push(current);
+    if (this.held.length > this.cap) this.held.shift();
+    return next;
   }
 
   get depth(): number {
     return this.held.length;
+  }
+
+  /** How many undone steps a redo would walk. */
+  get forward(): number {
+    return this.ahead.length;
   }
 }

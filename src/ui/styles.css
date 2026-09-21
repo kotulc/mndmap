@@ -31,10 +31,184 @@
   text-align: center;
 }
 
-.app > main > .stage,
-.app > main > .mnd-flow {
+.app > main > .mm-canvas {
+  position: relative;
   flex: 1;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.app > main > .mm-canvas > .stage,
+.app > main > .mm-canvas > .mnd-flow {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Ruled lattice behind the cards — the kit Viewer does not expose its own. */
+.mm-lattice {
+  position: absolute;
+  inset: -5000px;
+  width: 10000px;
+  height: 10000px;
+  pointer-events: none;
+  z-index: -1;
+  background-image:
+    linear-gradient(to right, color-mix(in oklch, var(--card-line) 30%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in oklch, var(--card-line) 30%, transparent) 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-position: 12px 12px;
+}
+
+/* Let file-add / emit share the kit tools' 2px gap. */
+.explorer .bar .mm-add-slot {
+  display: contents;
+}
+
+/* The key to the open layer, over the canvas's right-hand corner. */
+.mm-canvas > .mm-legend {
+  position: absolute;
+  right: 10px;
+  z-index: 4;
+  max-width: 30%;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--chrome);
+  color: var(--muted);
+  font-size: 11px;
+  pointer-events: none;
+}
+.mm-canvas > .mm-legend.top { top: 8px; }
+.mm-canvas > .mm-legend.bottom { bottom: 8px; }
+.mm-canvas > .mm-legend ul { margin: 0; padding: 0; list-style: none; }
+.mm-canvas > .mm-legend li {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 0;
+  white-space: nowrap;
+}
+
+/* Workspace tab: the same bands mndflow draws for a root. */
+.tray-body .panel.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-areas: "identity file";
+  gap: 10px 14px;
+  padding: 8px 10px 10px;
+  align-items: start;
+}
+.tray-body .panel > .col { display: flex; flex-direction: column; min-width: 0; }
+.tray-body .panel.workspace > .col.identity { grid-area: identity; }
+.tray-body .panel.workspace > .col.file { grid-area: file; }
+
+.tray-body .rail {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 28px;
+  padding: 3px 8px;
+  border-bottom: 1px solid var(--divider);
+  background: var(--surface);
+}
+.tray-body .rail > h5 {
+  flex: none;
+  width: 6.8em;
+  margin: 0;
+  color: var(--faint);
+  font-size: 9px;
+  font-weight: normal;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.tray-body .rows { display: flex; flex-direction: column; min-width: 0; font-size: 12px; }
+.tray-body .rows + .rows { margin-top: 8px; }
+.tray-body .rows > .row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 30px;
+  padding: 3px 8px;
+  border-bottom: 1px solid var(--divider);
+}
+.tray-body .rows > .row > label {
+  flex: none;
+  width: 6.8em;
+  color: var(--faint);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.tray-body .rows > .row > .line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.tray-body .rows > .row > .line > .read { color: var(--muted); }
+.tray-body .rows > .row > .line > input,
+.tray-body .rows > .row > .line > .tags > input {
+  flex: 1 1 0;
+  min-width: 0;
+  box-sizing: border-box;
+  height: 22px;
+  color: inherit;
+  background: var(--band);
+  border: 1px solid transparent;
+  border-radius: 2px;
+  padding: 0 6px;
+  font: inherit;
+}
+.tray-body .rows > .row > .line > input:hover,
+.tray-body .rows > .row > .line > .tags > input:hover { border-color: var(--divider); }
+.tray-body .rows > .row > .line > input:focus,
+.tray-body .rows > .row > .line > .tags > input:focus { outline: none; border-color: var(--accent); }
+.tray-body .rows > .row.card > .line { gap: 6px; flex-wrap: nowrap; }
+.tray-body .rows > .row.card > .line > input { flex: 0 1 4.5em; }
+.tray-body .rows > .row.key > .line > .check:first-child { margin-right: 6px; }
+.tray-body .rows > .row > .line > .into,
+.tray-body .rows > .row > .line > .alias { flex: none; color: var(--faint); font-size: 11px; }
+.tray-body .rows > .row > .line > .check {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  white-space: nowrap;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+.tray-body .rows > .row > .line > .check input { margin: 0; accent-color: var(--accent); }
+.tray-body .rows > .row > .line > .tags {
+  display: flex;
+  flex: 1 1 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+}
+.tray-body .rows > .row > .line > .tags > .tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 1px 8px;
+  font-size: 11px;
+  background: var(--surface);
+}
+.tray-body .rows > .row > .line > .tags > input { flex: 1 1 8ch; min-width: 8ch; }
+
+@container tray (min-width: 960px) {
+  .tray-body .panel.workspace {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
 }
 
 /* ── Document outline ── */

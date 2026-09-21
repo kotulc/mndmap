@@ -10,7 +10,7 @@ import {
   documentOutline, orgChildren, pageOf, type OutlineRow,
 } from "./project.js";
 
-export type TrayTab = "Content" | "Metadata" | "Links";
+export type TrayTab = "Workspace" | "Content" | "Metadata" | "Links";
 
 interface TrayProps {
   graph: Graph;

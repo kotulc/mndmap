@@ -182,7 +182,7 @@ async function undo() {
 async function emit() {
   mkdirSync(DOWNLOADS, { recursive: true });
   const wait = page.waitForEvent("download", { timeout: 30000 });
-  await page.getByRole("button", { name: "Emit" }).click();
+  await page.locator(".explorer").getByRole("button", { name: "Emit" }).click();
   const download = await wait;
   const target = join(DOWNLOADS, download.suggestedFilename());
   await download.saveAs(target);
@@ -224,7 +224,7 @@ async function shot(name) {
 async function smoke() {
   const out = [await goto()];
   out.push(await rows());
-  const first = await page.$$eval(".side li[data-mark] .label", (list) =>
+  const first = await page.$$eval(".explorer li[data-mark] .label", (list) =>
     list.map((label) => (label.textContent ?? "").trim()).filter(Boolean));
   if (first[1]) {
     out.push(await click(first[1]));
