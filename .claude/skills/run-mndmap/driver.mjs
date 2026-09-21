@@ -81,15 +81,14 @@ page.on("console", (message) => {
 async function goto(query) {
   errors.length = 0;
   await page.goto(BASE + "/" + (query ?? FILE), { waitUntil: "domcontentloaded" });
-  await page.waitForSelector(".side li", { timeout: 20000 });
+  await page.waitForSelector(".explorer li", { timeout: 20000 });
   await page.waitForTimeout(600);
   return "loaded " + BASE + "/" + (query ?? FILE);
 }
 
-/** Every row the tree offers. A cell, an item or a fence showing up here is
- *  the bug this answers: the tree is sets, pages and sections and no more. */
+/** Every row the tree offers. Organization only: sets and pages. */
 async function rows() {
-  const found = await page.$$eval(".side li[data-mark]", (list) =>
+  const found = await page.$$eval(".explorer li[data-mark]", (list) =>
     list.map((row) => ({
       mark: row.getAttribute("data-mark"),
       label: (row.querySelector(".label")?.textContent ?? "").trim(),
@@ -99,64 +98,84 @@ async function rows() {
 }
 
 async function click(label) {
-  const row = page.locator(".side li", { hasText: label }).first();
-  if (!(await row.count())) return 'no row matching "' + label + '"';
-  await row.click();
-  await page.waitForTimeout(400);
-  return "clicked " + label + " -> " + (await page.locator(".tray h2").textContent().catch(() => "(nothing)"));
+  /** Tray tabs share names with pages (e.g. Metadata) — prefer an exact tab hit. */
+  const tab = page.locator(".tray-tabs button", { hasText: new RegExp(`^${label}$`) }).first();
+  if (await tab.count()) {
+    await tab.click();
+    await page.waitForTimeout(200);
+    return "tab " + label;
+  }
+  const row = page.locator(".explorer li", { hasText: label }).first();
+  if (await row.count()) {
+    await row.click();
+    await page.waitForTimeout(400);
+    return "clicked " + label + " -> " + (await page.locator(".tray .mm-title, .tray .name").first().textContent().catch(() => "(nothing)"));
+  }
+  return 'no row matching "' + label + '"';
 }
 
-/** What the tray says about what is picked. */
+/** What the tray says about what is picked (active tab). */
 async function tray() {
+  const tab = await page.locator(".tray-tabs button.on").textContent({ timeout: 2000 }).catch(() => null);
+  const title = page.locator(".tray .mm-title, .tray-context .name").first();
+  const empty = page.locator(".mm-empty").first();
   const out = {
-    name: await page.locator(".tray h2").textContent().catch(() => null),
-    kind: await page.locator(".tray .kind").textContent().catch(() => null),
-    tags: await page.locator(".tray .tag:not(.offered)").allTextContents(),
-    fields: await page.locator(".tray .fields dt").allTextContents(),
-    body: ((await page.locator(".tray .body").textContent().catch(() => "")) ?? "").slice(0, 160),
-    holds: await page.locator(".tray .holds li").count(),
-    relations: await page.locator(".tray .relations li").count(),
+    tab,
+    name: await title.count() ? await title.textContent() : null,
+    word: await page.locator(".tray-context .word").textContent({ timeout: 1000 }).catch(() => null),
+    outline: await page.locator(".mm-outline .mm-row").count(),
+    tags: await page.locator(".mm-tag:not(.mm-offered)").allTextContents(),
+    fields: await page.locator(".mm-fields dt").allTextContents(),
+    links: await page.locator(".mm-link-group").count(),
+    empty: await empty.count() ? await empty.textContent() : null,
   };
   return JSON.stringify(out, null, 1);
 }
 
 async function rename(name) {
-  await page.locator(".tray h2").dblclick();
-  const box = page.locator(".tray > header input");
+  const title = page.locator(".mm-title").first();
+  await title.dblclick();
+  const box = page.locator(".mm-title-input");
   await box.fill(name);
   await box.press("Enter");
   await page.waitForTimeout(300);
-  return "named " + (await page.locator(".tray h2").textContent());
+  return "named " + (await page.locator(".mm-title").first().textContent());
 }
 
 async function tag(name) {
-  const box = page.locator(".tray .tags input");
+  await page.locator(".tray-tabs button", { hasText: "Metadata" }).click();
+  await page.waitForTimeout(200);
+  const box = page.locator(".mm-tags input");
   await box.fill(name);
   await box.press("Enter");
   await page.waitForTimeout(300);
-  return JSON.stringify(await page.locator(".tray .tag:not(.offered)").allTextContents());
+  return JSON.stringify(await page.locator(".mm-tag:not(.mm-offered)").allTextContents());
 }
 
 /** What the sidecar offers here. Empty without `?suggestions=`. */
 async function chips() {
+  await page.locator(".tray-tabs button", { hasText: "Metadata" }).click();
+  await page.waitForTimeout(200);
   return JSON.stringify({
-    names: await page.locator(".tray .chips .chip").allTextContents(),
-    tags: await page.locator(".tray .tag.offered").allTextContents(),
+    names: await page.locator(".mm-chips .mm-chip").allTextContents(),
+    tags: await page.locator(".mm-tag.mm-offered").allTextContents(),
   });
 }
 
 async function pick(index) {
-  const chip = page.locator(".tray .chips .chip").nth(Number(index) || 0);
+  await page.locator(".tray-tabs button", { hasText: "Metadata" }).click();
+  await page.waitForTimeout(200);
+  const chip = page.locator(".mm-chips .mm-chip").nth(Number(index) || 0);
   if (!(await chip.count())) return "no chip " + index;
   await chip.click();
   await page.waitForTimeout(300);
-  return "picked -> " + (await page.locator(".tray h2").textContent());
+  return "picked -> " + (await page.locator(".mm-title").first().textContent());
 }
 
 async function undo() {
   await page.getByRole("button", { name: "Undo" }).click();
   await page.waitForTimeout(300);
-  return "undone -> " + (await page.locator(".tray h2").textContent().catch(() => "(nothing)"));
+  return "undone -> " + (await page.locator(".tray-context .name").textContent().catch(() => "(nothing)"));
 }
 
 /** The whole point of the run: a folder in, a zip out. */
@@ -167,7 +186,7 @@ async function emit() {
   const download = await wait;
   const target = join(DOWNLOADS, download.suggestedFilename());
   await download.saveAs(target);
-  return "zip: " + target + "  (" + (await page.locator(".status").first().textContent().catch(() => "")) + ")";
+  return "zip: " + target + "  (" + (await page.locator(".mm-status").first().textContent().catch(() => "")) + ")";
 }
 
 /** Where the cards actually landed on screen. React Flow places each node
@@ -175,13 +194,13 @@ async function emit() {
  *  means the base stylesheet never loaded and everything is in document flow.
  *  That has shipped for real, and it reads as an empty canvas. */
 async function boxes() {
-  const found = await page.$$eval(".canvas .react-flow__node", (nodes) =>
+  const found = await page.$$eval("main .react-flow__node", (nodes) =>
     nodes.map((node) => {
       const box = node.getBoundingClientRect();
       return { frame: node.className.includes("frame"), x: Math.round(box.x), y: Math.round(box.y),
                w: Math.round(box.width), h: Math.round(box.height) };
     }));
-  const panel = await page.$eval(".canvas", (el) => {
+  const panel = await page.$eval("main", (el) => {
     const box = el.getBoundingClientRect();
     return { top: box.top, bottom: box.bottom, left: box.left, right: box.right };
   });

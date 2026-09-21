@@ -1,0 +1,108 @@
+/** Organization and document projections. */
+
+import { readFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
+import { open, type Graph } from "@mnd/kit";
+import { CODE, ITEM, PAGE, SECTION, SET, TIER_ROOT } from "../src/doc.js";
+import { KEY } from "../src/read.js";
+import { documentOutline, organizationGraph, pageOf } from "../src/ui/project.js";
+
+function tiny(): Graph {
+  return {
+    root: "ws",
+    blocks: {
+      ws: { id: "ws", parent: null, name: "workspace", type: "folder", order: 1 },
+      [TIER_ROOT]: { id: TIER_ROOT, parent: "ws", type: SET, name: "docs", order: 1 },
+      "page:a": { id: "page:a", parent: TIER_ROOT, type: PAGE, name: "A", order: 1 },
+      "sec:1": {
+        id: "sec:1", parent: "page:a", type: SECTION, name: "Intro", order: 1,
+        fields: [{ name: "level", value: "1" }],
+      },
+      "item:1": { id: "item:1", parent: "sec:1", type: ITEM, body: "Hello", order: 1 },
+      "code:1": {
+        id: "code:1", parent: "sec:1", type: CODE, body: "x = 1", order: 2,
+        fields: [{ name: "lang", value: "js" }],
+      },
+    },
+    edges: {},
+    holders: {},
+    defs: {},
+    packages: {},
+  };
+}
+
+describe("organizationGraph", () => {
+  it("keeps only sets and pages, re-rooted at doc", () => {
+    const org = organizationGraph(tiny());
+    expect(org.root).toBe(TIER_ROOT);
+    expect(Object.keys(org.blocks).sort()).toEqual([TIER_ROOT, "page:a"].sort());
+    expect(org.blocks["page:a"]!.parent).toBe(TIER_ROOT);
+    expect(org.blocks[TIER_ROOT]!.parent).toBeNull();
+    expect(org.edges).toEqual({});
+    expect(org.holders).toEqual({});
+  });
+
+  it("drops sections and items from a real fixture", () => {
+    const graph = open(readFileSync("fixtures/map/workspace.json", "utf8")).graph;
+    const org = organizationGraph(graph);
+    for (const block of Object.values(org.blocks)) {
+      expect([SET, PAGE]).toContain(block.type);
+    }
+    expect(Object.values(org.blocks).some((b) => b.type === SECTION)).toBe(false);
+    expect(Object.values(org.blocks).some((b) => b.type === ITEM)).toBe(false);
+  });
+});
+
+describe("documentOutline", () => {
+  it("returns empty for an empty page", () => {
+    const graph = tiny();
+    graph.blocks["page:empty"] = {
+      id: "page:empty", parent: TIER_ROOT, type: PAGE, name: "Empty", order: 2,
+    };
+    expect(documentOutline(graph, "page:empty")).toEqual([]);
+  });
+
+  it("nests sections and emits prose, code", () => {
+    const rows = documentOutline(tiny(), "page:a");
+    expect(rows.map((r) => r.kind)).toEqual(["section", "prose", "code"]);
+    expect(rows[0]).toMatchObject({ kind: "section", title: "Intro", depth: 0 });
+    expect(rows[1]).toMatchObject({ kind: "prose", markdown: "Hello", depth: 1 });
+    expect(rows[2]).toMatchObject({ kind: "code", language: "js", text: "x = 1", depth: 1 });
+  });
+
+  it("emits a list from done items and a table from keyed rows", () => {
+    const graph = tiny();
+    graph.blocks["page:b"] = { id: "page:b", parent: TIER_ROOT, type: PAGE, name: "B", order: 2 };
+    graph.blocks["item:t1"] = {
+      id: "item:t1", parent: "page:b", type: ITEM, body: "one", order: 1,
+      fields: [{ name: "done", value: "false" }],
+    };
+    graph.blocks["item:t2"] = {
+      id: "item:t2", parent: "page:b", type: ITEM, body: "two", order: 2,
+      fields: [{ name: "done", value: "true" }],
+    };
+    graph.blocks["row:1"] = {
+      id: "row:1", parent: "page:b", type: ITEM, order: 3,
+      fields: [{ name: KEY, value: "r1" }, { name: "Name", value: "Alpha" }],
+    };
+    graph.blocks["row:2"] = {
+      id: "row:2", parent: "page:b", type: ITEM, order: 4,
+      fields: [{ name: KEY, value: "r2" }, { name: "Name", value: "Beta" }],
+    };
+    const rows = documentOutline(graph, "page:b");
+    expect(rows[0]?.kind).toBe("list");
+    expect(rows[1]?.kind).toBe("table");
+    if (rows[1]?.kind === "table") {
+      expect(rows[1].headers).toEqual(["Name"]);
+      expect(rows[1].rows).toEqual([["Alpha"], ["Beta"]]);
+    }
+  });
+});
+
+describe("pageOf", () => {
+  it("walks to the owning page", () => {
+    expect(pageOf(tiny(), "item:1")).toBe("page:a");
+    expect(pageOf(tiny(), "page:a")).toBe("page:a");
+    expect(pageOf(tiny(), TIER_ROOT)).toBeNull();
+  });
+});

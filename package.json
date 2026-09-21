@@ -19,6 +19,7 @@
     "build:core": "tsc -p tsconfig.json",
     "build:ui": "vite build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
     "sample": "tsx scripts/sample.ts",
     "predev": "npm run sample",
     "dev": "vite --port 7342 --open",
@@ -38,7 +39,7 @@
   },
   "homepage": "https://github.com/kotulc/mndmap#readme",
   "dependencies": {
-    "@mnd/kit": "file:vendor/mnd-kit-0.6.0.tgz",
+    "@mnd/kit": "file:vendor/mnd-kit-0.7.0.tgz",
     "@xyflow/react": "^12.11.6",
     "jszip": "^3.10.2",
     "marked": "^18.0.13",
@@ -58,6 +59,7 @@
     "@vitejs/plugin-react": "^6.1.0",
     "tsx": "^4.23.12",
     "typescript": "^7.0.2",
-    "vite": "^8.2.2"
+    "vite": "^8.2.2",
+    "vitest": "^3.2.4"
   }
 }

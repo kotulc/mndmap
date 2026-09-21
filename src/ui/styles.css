@@ -1,21 +1,128 @@
-/* The content tray: mndmap's own panel.
+/* mndmap content styles over kit react.css + shell.css.
  *
- * The shell and the ramp are `base.css` and `theme.css`; nothing here names a
- * colour of its own. */
+ * Shell owns header, `.app` grid, explorer bar height, and tray frame.
+ * Everything below is mndmap meaning (`mm-` prefix) plus the blank drop. */
 
-.tray { padding: 10px 14px 20px; display: flex; flex-direction: column; gap: 10px; }
-.tray.empty { color: var(--muted); padding: 24px 14px; }
+.app.blank {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
+}
 
-.tray > header { display: flex; align-items: baseline; gap: 8px; }
-.tray > header h2 { margin: 0; font-size: 15px; cursor: text; }
-.tray > header input { flex: 1; }
-.tray .kind { color: var(--muted); font-size: 11px; }
+.app.over { outline: 2px dashed var(--accent); outline-offset: -6px; }
 
-/* Tags read as one row: what the block carries, then what is offered. */
-.tags { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
-.tags input { width: 6em; }
+/* Two columns: explorer | main (viewer + tray). No options rail. */
+.app:not(.blank) {
+  grid-template-columns: auto 1fr;
+}
 
-.tag, .chip {
+.mm-status {
+  margin: 0;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--divider);
+  color: var(--muted);
+  grid-column: 1 / -1;
+}
+
+.app.blank .mm-status {
+  border: none;
+  text-align: center;
+}
+
+.app > main > .stage,
+.app > main > .mnd-flow {
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── Document outline ── */
+
+.mm-outline {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 4px 16px;
+}
+
+.mm-empty, .mm-note {
+  color: var(--muted);
+  padding: 12px 4px;
+  margin: 0;
+}
+
+.mm-row { min-width: 0; }
+.mm-row.mm-focus { outline: 1px solid var(--tint); }
+
+.mm-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: text;
+}
+
+.mm-title-input { width: 100%; font-size: 14px; font-weight: 600; }
+
+.mm-prose { line-height: 1.55; }
+.mm-prose :first-child { margin-top: 0; }
+.mm-prose pre { overflow-x: auto; background: var(--surface); padding: 8px; border-radius: 3px; }
+.mm-prose code { background: var(--surface); padding: 0 3px; border-radius: 2px; }
+.mm-prose pre code { background: none; padding: 0; }
+.mm-prose a { color: var(--accent); }
+.mm-prose img { max-width: 100%; }
+
+.mm-code {
+  margin: 0;
+  padding: 8px;
+  background: var(--surface);
+  border-radius: 3px;
+  overflow-x: auto;
+  position: relative;
+}
+.mm-lang {
+  position: absolute;
+  top: 4px;
+  right: 8px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.mm-table { border-collapse: collapse; width: 100%; font-size: 12px; }
+.mm-table th, .mm-table td {
+  border: 1px solid var(--line);
+  padding: 3px 7px;
+  text-align: left;
+}
+.mm-table th { background: var(--surface); color: var(--muted); font-weight: normal; }
+
+.mm-list { margin: 0; padding-left: 1.2em; }
+.mm-check { color: var(--muted); }
+
+.mm-record-label { font-weight: 600; margin-bottom: 4px; }
+
+.mm-folder { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.mm-folder .mm-kind {
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-right: 8px;
+}
+
+/* ── Metadata / links ── */
+
+.mm-meta, .mm-links { display: flex; flex-direction: column; gap: 10px; padding: 8px 4px 16px; }
+
+.mm-fields { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; font-size: 12px; }
+.mm-fields > div { display: contents; }
+.mm-fields dt { color: var(--muted); }
+.mm-fields dd { margin: 0; overflow-wrap: anywhere; }
+
+.mm-tags { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.mm-tags input { width: 6em; }
+
+.mm-tag, .mm-chip {
   border: 1px solid var(--line);
   border-radius: 10px;
   padding: 1px 8px;
@@ -23,46 +130,18 @@
   background: var(--surface);
 }
 
-.tag.offered, .chip { border-style: dashed; color: var(--muted); }
-.tag:hover, .chip:hover { border-color: var(--accent); color: var(--accent); }
+.mm-tag.mm-offered, .mm-chip { border-style: dashed; color: var(--muted); }
+.mm-tag:hover, .mm-chip:hover { border-color: var(--accent); color: var(--accent); }
 
-.chips { display: inline-flex; gap: 4px; align-items: center; flex-wrap: wrap; }
-.chip-label { color: var(--muted); font-size: 11px; }
+.mm-chips { display: inline-flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+.mm-chip-label { color: var(--muted); font-size: 11px; }
 
-.fields { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; font-size: 12px; }
-.fields > div { display: contents; }
-.fields dt { color: var(--muted); }
-.fields dd { margin: 0; overflow-wrap: anywhere; }
-
-/* A body is read, never written. */
-.body { border-top: 1px solid var(--divider); padding-top: 8px; line-height: 1.55; }
-.body :first-child { margin-top: 0; }
-.body pre { overflow-x: auto; background: var(--surface); padding: 8px; border-radius: 3px; }
-.body code { background: var(--surface); padding: 0 3px; border-radius: 2px; }
-.body pre code { background: none; padding: 0; }
-.body table { border-collapse: collapse; }
-.body th, .body td { border: 1px solid var(--line); padding: 3px 7px; text-align: left; }
-.body img { max-width: 100%; }
-.body a { color: var(--accent); }
-
-/* What a block holds, as chips: a button here is navigation, and mndflow's
- * chrome buttons are borderless until hover, which reads as bare words in a
- * row. */
-.holds { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px; }
-
-.holds button {
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 1px 8px;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.holds button:hover { border-color: var(--accent); color: var(--accent); }
-
-.relations { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; font-size: 12px; }
-.relations li { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
-.relations .way { color: var(--muted); }
-.relations .type { color: var(--accent); }
+.mm-links { list-style: none; margin: 0; padding: 0; }
+.mm-link-group { margin-bottom: 8px; }
+.mm-link-head { display: flex; gap: 8px; align-items: baseline; font-size: 12px; }
+.mm-link-edges { list-style: none; margin: 4px 0 0; padding: 0 0 0 12px;
+                 display: flex; flex-direction: column; gap: 3px; font-size: 12px; }
+.mm-link-edges li { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.mm-way { color: var(--muted); }
+.mm-type { color: var(--accent); }
+.mm-count { color: var(--muted); font-size: 11px; margin-left: auto; }

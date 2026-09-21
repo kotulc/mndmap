@@ -1,115 +1,331 @@
 ---
-name: Coherent dashboard design
-overview: Make mndmap a visually faithful, reduced mndflow workspace by sharing general shell chrome from mndflow while giving Explorer/canvas an organization-only projection and the tray a document-specific content projection. Preserve the full graph for round-trip and emit, as selected, so this is a presentation/interaction correction rather than a file-format rewrite.
-todos:
-  - id: mndflow-shell
-    content: Extract and adopt generic shell/header/tray-frame primitives in mndflow, add typed/capability-aware Explorer intents and optional Viewer breadcrumbs, test, and release a new kit.
-    status: pending
-  - id: mndmap-projections
-    content: Implement organization-only graph and ordered document-outline projections with page ownership and relation roll-up tests.
-    status: pending
-  - id: mndmap-interactions
-    content: Wire Explorer/Viewer to the organization projection and correct reveal, rename, move, selection, and toolbar behavior.
-    status: pending
-  - id: mndmap-tray
-    content: Build the project-specific Content/Metadata/Links tray inside shared mndflow chrome.
-    status: pending
-  - id: visual-verification
-    content: Remove imitation shell CSS, update docs/browser harness, and verify both repositories plus cross-theme responsive screenshots and round-trip emit.
-    status: pending
-isProject: false
+name: Coherent dashboard design (revised)
+overview: Make mndmap a visually coherent, reduced mndflow workspace by fixing organization/content projections and kit wiring in mndmap immediately, extracting generic shell/Explorer capabilities in mndflow in parallel, then merging for visual parity.
 ---
 
-# Coherent mndmap dashboard
+# Revised coherent mndmap dashboard
 
-## Findings that drive the plan
+Prior proposal: [plan.md](plan.md). This document is the execution plan.
 
-- mndmap is not currently using the mndflow shell. [src/ui/main.tsx](C:/Users/clayt/Development/mndmap/src/ui/main.tsx) imports only `@mnd/kit/react.css`; the pinned kit exports only `Viewer` and `Explorer`, while mndmap recreates the header/grid in [src/ui/base.css](C:/Users/clayt/Development/mndmap/src/ui/base.css) and the entire tray in [src/ui/Tray.tsx](C:/Users/clayt/Development/mndmap/src/ui/Tray.tsx). The mndflow header, stage chrome, and tray frame remain private to [apps/web/src/App.tsx](C:/Users/clayt/Development/mndflow/apps/web/src/App.tsx), [packages/theme/base.css](C:/Users/clayt/Development/mndflow/packages/theme/base.css), and [packages/tray/src/Tray.tsx](C:/Users/clayt/Development/mndflow/packages/tray/src/Tray.tsx).
-- The deep structure is intentional in the current rewrite, not a renderer defect. [src/read.ts](C:/Users/clayt/Development/mndmap/src/read.ts) creates `doc.section`, `doc.item`, and `doc.code` blocks; [mndmap.yaml](C:/Users/clayt/Development/mndmap/mndmap.yaml) maps headings through depth 3; and [src/ui/App.tsx](C:/Users/clayt/Development/mndmap/src/ui/App.tsx) explicitly retains sections in the Explorer while passing the full graph to `Viewer`. This reverses the earlier organization/content split documented in [docs/workflow/organization-and-structure.md](C:/Users/clayt/Development/mndmap/docs/workflow/organization-and-structure.md).
-- Explorer integration is also behaviorally out of contract: mndmap treats `reveal` as selection-only and expects `rename.label` / singular `move.id`, while the pinned Explorer emits reveal-as-open-parent, `rename.name`, and plural move arguments. Its create/delete toolbar remains visible even though mndmap does not implement those commands. That makes the tree and canvas drift and leaves inert controls on screen.
-- The current tray is a flat dump of identity, tags, fields, rendered body, child pills, and relations. It has no stable context bar, tabs, document order, or construct-specific rendering, so a page reads as an undifferentiated chip cloud rather than a document.
-- The 0.6.0 tarball is integrity-pinned, but its bundled CSS matches later mndflow build output rather than what the recorded `abea9d8` source commit reproduces. The replacement release must come from a clean commit so version, source SHA, generated bundle, and integrity describe the same artifact.
+---
 
-## Target architecture
+## Diagnosis (answers to the “why” questions)
+
+### Why it looks different and ugly
+
+mndmap is **not** running the mndflow shell. It imports only `@mnd/kit/react` (`Viewer`, `Explorer`) and `@mnd/kit/react.css`, then invents its own chrome:
+
+- Custom 3-panel grid and header in [src/ui/base.css](src/ui/base.css) / [src/ui/App.tsx](src/ui/App.tsx) (tray permanently ~38% height; text buttons; no icon bar).
+- Entire tray reinvented in [src/ui/Tray.tsx](src/ui/Tray.tsx) + [src/ui/styles.css](src/ui/styles.css) — flat dump of tags, fields, markdown body, **child pills**, relations.
+- mndflow’s real shell lives in [`apps/web/src/App.tsx`](https://github.com/kotulc/mndflow/blob/abea9d84a651ff5722145b4477e9b4f5d780f15c/apps/web/src/App.tsx) + [`packages/theme/base.css`](https://github.com/kotulc/mndflow/blob/abea9d84a651ff5722145b4477e9b4f5d780f15c/packages/theme/base.css) + [`packages/tray/src/Tray.tsx`](https://github.com/kotulc/mndflow/blob/abea9d84a651ff5722145b4477e9b4f5d780f15c/packages/tray/src/Tray.tsx) (pin SHA from [mndflow-pin.json](mndflow-pin.json)). Kit `react.css` **does not** include `base.css` or tray CSS (see [`packages/kit/tsup.config.ts`](https://github.com/kotulc/mndflow/blob/abea9d84a651ff5722145b4477e9b4f5d780f15c/packages/kit/tsup.config.ts): icons + flow/routes/groups + explorer only).
+
+Cards/explorer paint can match; **layout chrome cannot**, until a shared shell seam exists.
+
+### Why deeply nested blocks appear
+
+Not a renderer bug. [src/read.ts](src/read.ts) intentionally builds a **content graph**: nested `doc.section` (heading depth ≤ 3), plus `doc.item` / `doc.code` / grid-group holders under pages. That graph is correct for emit/round-trip.
+
+The UI mistake: [App.tsx](src/ui/App.tsx) keeps **sections in Explorer** and passes the **full graph to Viewer**, so opening a page shows sections → items → cells as canvas cards. Product docs ([docs/workflow/organization-and-structure.md](docs/workflow/organization-and-structure.md)) say organization = folders/pages only; sections belong in a **document outline tray** — a linear indent stack in emitted order, not a nested canvas.
+
+### Why the tray is unintelligible
+
+Current tray answers every question at once (identity + tags + fields + body + child navigation pills + relations) with no tabs, no document order, and no construct-specific rendering. Child buttons re-navigate the canvas into content layers — amplifying the nesting mess.
+
+### What must change in mndflow (general only)
+
+| Needed in mndflow | Not needed in mndflow |
+|---|---|
+| Extract graph-agnostic `WorkspaceHeader`, `TrayFrame`, shell CSS (`@mnd/kit/shell` + `shell.css`) | Markdown/document semantics, Content/Metadata/Links tabs |
+| Explorer `tools` / capability flags to hide create/delete/filter | Organization vs content projections |
+| Opt-in Viewer breadcrumbs (reuse Stage `Crumbs` via `project().trail`) | Page-link aggregation, suggest chips |
+| Keep/clarify `onAct` rename=`name`, move=`ids`+`before` (document + tests); typed intent adapter optional | Graph schema, layout algorithms, card ramp |
+
+---
+
+## Gaps and issues in [plan.md](plan.md)
+
+1. **Blocks all mndmap UI work on a new kit release.** Org projection, reveal/rename/move fixes, and tray rebuild work against kit **0.6.0 today**. Shell chrome alone needs the new kit. Parallel tracks get coherence weeks faster.
+2. **Underspecifies the smoking-gun wiring bugs.** Explorer emits `rename.name` and `move.ids`/`before`; mndmap listens for `label` / singular `id` / `at` — so tree rename and drag **never run**. `reveal` only sets `picked`, not `layer`. Agents need explicit adapter code.
+3. **`menu={false}` does not hide the toolbar.** Create/delete/filter stay visible; need an Explorer `tools` prop (or equivalent) in mndflow.
+4. **`react.css` contents wrong implicitly.** Plan says “import react.css + shell.css” but never lists that shell must ship `base.css` layout tokens (`--bar`), header rules, and tray-frame CSS that kit currently omits.
+5. **`documentOutline` / `organizationGraph` algorithms underspecified** for agents (root re-rooting, notes under `doc`, holders, machine fields, edge filtering).
+6. **Page-link edges left “optional.”** Lock: **no org-canvas edges in v1**; Links tab is the full account.
+7. **Tray edit scope too large for one step.** Split: readable outline first; then sibling reorder/rename; defer cross-page move.
+8. **No `npm test` / live `test/` tree** in mndmap. Plan assumes tests without bootstrap steps.
+9. **Weak agent checklist:** missing file-level DoD, driver command expectations, screenshot paths, CSS prefix (`mm-`), and skill updates (`rows` must become set+page only).
+10. **Over-weights typed `ExplorerIntent` as a gate.** A thin mndmap adapter unblocks immediately; typed intents can follow in mndflow without blocking coherence.
+
+What `plan.md` got right (retain): one authoritative graph + two UI projections; shared chrome / project-owned meaning; ownership boundary; kit integrity/reproducibility; do not put markdown into mndflow.
+
+---
+
+## Locked decisions
+
+- **Org surfaces** (`Explorer` + `Viewer`): `doc.set` + `doc.page` only. No sections, items, code, holders, notes, or synthetic extra roots as rows/cards. Re-root display at collection root `doc` (`TIER_ROOT`).
+- **Content surface** (tray Content tab): emitted-order outline for the selected **page** (or folder summary for a set). Nesting = indentation, not canvas descent.
+- **Selection model:** `picked` / `layer` always refer to org ids visible on the projection. Tray may hold a local `focusId` for an outline row **without** changing Viewer layer to that content id.
+- **Org canvas edges:** none in v1.
+- **Shell adoption:** after new kit is vendored; until then, tray can use a **local** `TrayFrame` markup that mirrors mndflow class names so swap is mechanical.
+- **Translate/emit/read graph:** unchanged. Projections are UI-only.
 
 ```mermaid
-flowchart LR
-  FullGraph["Full translation graph"] --> OrgProjection["Organization projection: folders and pages"]
-  FullGraph --> ContentProjection["Content projection: ordered document outline"]
-  OrgProjection --> Explorer["Shared Explorer"]
-  OrgProjection --> Viewer["Shared Viewer canvas"]
-  ContentProjection --> DocTray["mndmap document tray"]
-  SharedShell["mndflow shell primitives"] --> Explorer
-  SharedShell --> Viewer
-  SharedShell --> DocTray
-  FullGraph --> Emit["Existing emit and round-trip"]
+flowchart TB
+  FullGraph["Full graph: read/emit/edits"]
+  FullGraph --> Org["organizationGraph: set + page"]
+  FullGraph --> Outline["documentOutline: page content"]
+  Org --> Explorer
+  Org --> Viewer
+  Outline --> DocTray["mndmap Content / Metadata / Links"]
+  Shell["mndflow WorkspaceHeader + TrayFrame"] --> Explorer
+  Shell --> Viewer
+  Shell --> DocTray
 ```
 
-### Design invariants
+---
 
-- **One authoritative graph, two read-only UI projections.** An edit always targets the full graph; organization and content projections are rebuilt after every edit and undo. Neither projection is emitted or saved.
-- **Organization means folders and files.** The Explorer and canvas may show `doc.set` and `doc.page` only. The UI projection is re-rooted at the collection's top `doc.set`, so the synthetic `ws` block, sections, items, code blocks, cells, and holders never become organization rows or cards.
-- **Content means document order.** Sections and structured constructs remain blocks/holders in the full graph for round-trip fidelity, but appear only through the tray's document projection.
-- **Selection has one visible home.** Revealing a folder or page opens its parent layer and selects it there. A content-row selection stays local to the tray and does not point the organization canvas at a hidden block.
-- **Structure before relations.** The organization canvas defaults to no content-link edges. An optional page-links display may use a derived edge only when both endpoints resolve to visible pages; section-level duplicates are collapsed by `(from page, to page, type)`, self-links are suppressed, and the Links tab remains the complete account.
-- **Shared chrome, project-owned meaning.** mndflow owns shell geometry, bars, icons, collapse/expand behavior, typography, and theme tokens. mndmap owns every word, tab, row type, suggestion, and document action inside that chrome.
+## Delivery: two tracks, then merge
 
+### Track A — mndmap coherence (current kit 0.6.0)
 
-## Implementation plan
+Do **not** wait for a new kit.
 
-1. **Create a real general shell seam in mndflow.** Extract composable, graph-agnostic `WorkspaceShell`, `WorkspaceHeader`, and `TrayFrame` primitives from [apps/web/src/App.tsx](C:/Users/clayt/Development/mndflow/apps/web/src/App.tsx), [packages/theme/base.css](C:/Users/clayt/Development/mndflow/packages/theme/base.css), and [packages/tray/src/Tray.tsx](C:/Users/clayt/Development/mndflow/packages/tray/src/Tray.tsx). Use prefixed/scoped classes and slot props for identity, actions, explorer, canvas, optional rail, notice, tray context, tabs, collapse, and full-height behavior. `TrayFrame` is presentational and must not accept `Graph`, `Act`, mndflow tabs, or other model-editor types. Refactor mndflow’s own web app and tray to consume these primitives first, then expose them and `Icon` through `@mnd/kit/shell`, with opt-in CSS at `@mnd/kit/shell.css`, via [packages/kit/package.json](C:/Users/clayt/Development/mndflow/packages/kit/package.json) and [packages/kit/tsup.config.ts](C:/Users/clayt/Development/mndflow/packages/kit/tsup.config.ts). Keep `react.css` suitable for embedded Viewer/Explorer usage; do not export the full editable Stage or model-specific Tray.
-2. **Make the Explorer/Viewer consumer contract safe and reducible.** In [packages/explorer/src/Explorer.tsx](C:/Users/clayt/Development/mndflow/packages/explorer/src/Explorer.tsx), add a general capability/slot API so consumers can omit create/delete/filter commands while retaining fold, resize, rename, and move. Replace or augment the untyped external `onAct(name, args)` seam with a discriminated structural intent:
-   ```ts
-   type ExplorerIntent =
-     | { type: "reveal"; id: Id }
-     | { type: "rename"; id: Id; name: string }
-     | { type: "move"; ids: Id[]; parent: Id; before?: Id };
-   ```
-   Keep mndflow's arbitrary action registry and context menu internal; default capabilities preserve the mndflow app, while mndmap enables only reveal, rename, move, fold, and resize. Reuse the Stage breadcrumb component in `Viewer` through an opt-in chrome prop so a read-only canvas can have the same navigation treatment without exporting the editable Stage. Cover these additions in mndflow's Explorer, Viewer, shell, and app tests, then release and stamp a new kit version from a clean commit; verify that rebuilding that SHA reproduces the shipped JS/CSS and integrity.
-3. **Project one full graph into two mndmap views.** Add a pure UI projection module beside [src/ui/App.tsx](C:/Users/clayt/Development/mndmap/src/ui/App.tsx):
-  - `organizationGraph(graph)` re-roots at the top collection set; retains `doc.set` and `doc.page` only; removes content holders; verifies every retained parent and edge endpoint; and optionally derives deduplicated page-level links without mutating source edges.
-  - `documentOutline(graph, pageId)` produces emitted-order rows for page prose, nested sections, tables/grids, lists/groups, tasks/records, and code without changing the stored graph. It consumes machine fields such as heading level, row key, and language to render the construct instead of dumping those fields into the primary UI.
-  - `pageOf(id)` maps any content block back to its owning page for links and tray context.
-   Both functions must be deterministic, cycle-safe, and tolerant of a valid empty page. Feed the same organization projection to both Explorer and Viewer; keep the full graph exclusively for edits, suggestions, tray derivation, validation, and emit.
-4. **Correct selection and organization gestures.** Update [src/ui/App.tsx](C:/Users/clayt/Development/mndmap/src/ui/App.tsx) to interpret reveal as “open the node’s parent layer and select it,” consume the typed rename/move payloads, and restrict Explorer gestures to folders/pages. Normalize `layer` and `picked` after each edit/undo so moved or removed nodes cannot leave either surface pointed at an invisible id. A folder may contain folders/pages; a page is a leaf in the organization projection. Page-content reorder, rename, and move actions originate in the tray and target the full graph. This removes hidden canvas selections, inert tree controls, and disagreement between the highlighted row and visible layer.
-5. **Rebuild the tray as a document reader inside shared chrome.** Replace the flat implementation in [src/ui/Tray.tsx](C:/Users/clayt/Development/mndmap/src/ui/Tray.tsx) with the shared tray frame and mndmap-owned tabs:
-  - **Content:** a linear, emitted-order outline with section depth shown by restrained indentation; markdown prose rendered in place; tables as compact tables; code as code; lists/tasks as lists—not pills or canvas blocks. Rows expand for detail without changing the canvas selection. Section controls permit rename and deterministic reorder among siblings; moving content to another page uses an explicit destination action rather than free-form nesting drag.
-  - **Metadata:** source, user-facing frontmatter fields, tags, and suggestion controls grouped into labeled rows. Machine-only fields stay hidden unless they are needed to explain a construct.
-  - **Links:** compact inbound/outbound page relations grouped by target and type, with counts and suggestion actions; expanding a group reveals the original content-level relations.
-   Folder selection gets a concise child folder/page summary instead of a document outline. Empty pages, missing relation targets, invalid markdown, and no-selection states each get a deliberate empty state. Keep all construct semantics and editing decisions in mndmap; do not add markdown-specific behavior to mndflow.
-6. **Adopt the shared visual shell and remove local imitation CSS.** Replace mndmap’s custom header/grid in [src/ui/base.css](C:/Users/clayt/Development/mndmap/src/ui/base.css) with the new shell components and icons, use the same compact icon actions/theme treatment as mndflow, opt into Viewer breadcrumbs, and reduce [src/ui/styles.css](C:/Users/clayt/Development/mndmap/src/ui/styles.css) to document-content styling only. The tray should collapse and open at mndflow’s proportions rather than permanently consuming 38% of the workspace.
-   Import only `@mnd/kit/react.css` for Explorer/Viewer paint and the new shell stylesheet for chrome; do not copy the ramp, card table, or React Flow CSS. Prefix mndmap content classes so generic names such as `.body`, `.content`, `.fields`, and `.tray` cannot collide with shared sheets. Preserve the project-specific blank drop target and use the shell's notice slot for reports/errors after loading.
-7. **Lock the design with tests and runtime evidence.** Add a `test` script and mndmap unit/component tests proving that organization rows and canvas nodes contain only folders/pages, projections preserve valid parents and document order, reveal synchronizes layer/selection, undo rebuilds both projections, and the tray renders each construct semantically. Test the full-docs sample plus the map and requirements fixtures so dense markdown and typed rows cannot regress independently. Update [vitest.config.ts](C:/Users/clayt/Development/mndmap/vitest.config.ts), the browser driver in [.claude/skills/run-mndmap/driver.mjs](C:/Users/clayt/Development/mndmap/.claude/skills/run-mndmap/driver.mjs), and stale product docs. The command gates are:
-   - mndflow: `npm test`, `npm run typecheck`, `npm run build -w @mnd/web`, kit build/release, and release integrity/reproducibility check.
-   - mndmap: `npm test`, `npm run typecheck`, `npm run build`, `npm run roundtrip`, and the real-browser smoke suite against all three fixtures.
-   Run browser checks at desktop and constrained widths across all themes; compare mndmap and mndflow screenshots for header height, Explorer bar/width, canvas chrome, tray behavior, spacing, borders, and typography. Include keyboard focus, tab semantics, long names, overflow, empty pages, and high-density documents.
+### Track B — mndflow general shell (real mndflow repo)
 
-## Cross-repository delivery order
+Ship kit ≥0.7.0 with shell + Explorer tools + Viewer crumbs.
 
-1. Capture before screenshots and turn the current integration failures into tests without changing behavior.
-2. Implement shared mndflow chrome and Explorer/Viewer contracts; migrate mndflow's own web app onto them and prove no visual or interaction regression there.
-3. Commit the mndflow changes, build the kit from that clean SHA, run the release integrity check, and record version/SHA/integrity together.
-4. Vendor that exact tarball into mndmap; update `package.json`, lockfile, and `mndflow-pin.json`; prove the installed artifact matches the release before changing mndmap UI code.
-5. Implement and test mndmap's pure projections, then correct interaction state, then build the tray, and only then remove the local shell imitation.
-6. Run the complete headless and browser verification matrix; update screenshots and documentation only from the verified final behavior.
+### Merge — vendor kit, swap local chrome, delete imitation CSS
 
-Each repository remains independently green at its handoff. Do not develop mndmap against an uncommitted sibling package or publish a kit whose source SHA cannot reproduce it.
+---
 
-## Acceptance criteria
+## Track A — mndmap (execute first / in parallel)
 
-- Explorer contains one collection root plus folders and pages; no row is a section, item, table cell, code fence, holder, or synthetic `ws` block.
-- Viewer receives the same organization projection and never draws a content block. Selecting any Explorer row makes that row visible and selected on the canvas.
-- Explorer exposes no inert create/delete/filter controls. Rename and multi-item move use the typed payloads and work through undo.
-- A selected page opens a tray whose Content tab reads in emitted order and visually distinguishes headings, prose, tables, lists/tasks, code, and typed records without raw ids or machine fields.
-- Metadata and Links are separate questions, not appended below the document body. Suggestions appear beside the value they would change.
-- Header, Explorer bar, canvas chrome, tray bar/tabs, controls, borders, spacing, typography, themes, collapse/full-height behavior, and responsive overflow are shared with or visually identical to mndflow.
-- `@mnd/kit/react.css` remains sufficient for embedded Viewer/Explorer users; shell adoption is opt-in and does not globally impose the full app layout.
-- Translate → dashboard edit → undo → emit and all existing round trips remain byte-stable where no edit was made. The full graph still opens directly in mndflow without conversion.
-- The new kit rebuilds reproducibly from its recorded clean commit, and mndmap's pin records the exact version, SHA, tarball, and integrity in use.
+### A0. Baseline evidence (no behavior change)
 
-## Ownership boundary
+**Files:** screenshots under `%TEMP%/mndmap-shots/before-*`; optional failing tests in `test/`.
 
-- **mndflow changes:** generic shell/header/tray-frame chrome, icons, optional Viewer breadcrumbs, and a typed/capability-aware Explorer seam.
-- **mndmap changes:** organization/content projections, which nodes are visible, page-link aggregation, document semantics, tray tabs/renderers, suggestions, and edit rules.
-- **No mndflow change needed:** Graph schema, projection/layout algorithms, card notation/theme ramp, or a markdown-aware tray. Those are already general or correctly project-specific.
+**Agent steps:**
 
+1. `npm run build` + smoke with [run-mndmap](.claude/skills/run-mndmap/SKILL.md): `rows`, `boxes`, `ss before-home`, click a page, `tray`, `ss before-page`.
+2. Record in the PR/notes: Explorer shows sections; Viewer shows content cards; rename from tree does nothing.
+
+**Done when:** before screenshots exist and known failures are listed.
+
+### A1. Fix Explorer intent adapter (one file)
+
+**File:** [src/ui/App.tsx](src/ui/App.tsx) `act` callback.
+
+**Replace handler semantics with:**
+
+```ts
+if (name === "reveal") {
+  const parent = graph.blocks[id]?.parent ?? TIER_ROOT;
+  setLayer(parent);      // open parent layer so the card is visible
+  setPicked([id]);
+  return;
+}
+if (name === "rename" && typeof args?.name === "string") {
+  edit({ do: "rename", id, name: String(args.name) });
+  return;
+}
+if (name === "move" && args?.parent && Array.isArray(args.ids)) {
+  for (const moveId of args.ids as Id[]) {
+    edit({ do: "move", id: moveId, parent: String(args.parent),
+      ...(args.before ? { /* resolve before → at via sibling index */} : {}) });
+  }
+}
+// ignore create / delete / filter / shelve
+```
+
+**Also:** map Explorer `before` id → `at` index using `children(graph, parent)` order (edits API uses `at?: number`).
+
+**Done when:** browser rename + drag-move update graph; undo restores; create/delete clicks are no-ops (still visible until Track B).
+
+### A2. `organizationGraph` + wire Explorer/Viewer
+
+**New file:** `src/ui/project.ts` (pure).
+
+**`organizationGraph(graph): Graph` algorithm:**
+
+1. Start from `TIER_ROOT` (`"doc"`). Include that block if type is `doc.set`.
+2. BFS/DFS children; keep only blocks whose type is `doc.set` or `doc.page`.
+3. For each kept block, set `parent` to nearest kept ancestor (skip removed section/item ancestors). Preserve relative sibling order among kept siblings (stable sort by original `order`).
+4. Copy defs/packages needed by retained types; drop all holders; drop all edges (v1).
+5. Drop notes and any block not reachable from root through kept parents.
+6. Cycle-safe; empty collection → root set only.
+
+**Wire:** both `<Explorer graph={org} …>` and `<Viewer graph={org} …>` use the same projection. Edits still `apply` against `loaded.graph` (full). After every edit/undo, rebuild `org` via `useMemo`.
+
+**Normalize selection:** if `picked`/`layer` not in `org.blocks`, reset `layer` to `TIER_ROOT` and clear or repair `picked`.
+
+**Done when:** `rows` shows only sets/pages; `boxes` all on panel; descending into a page shows **empty or only nested sets/pages**, never sections.
+
+**Tests:** `test/project.test.ts` with fixture graphs from `fixtures/map` and a tiny hand-built nest (set→page→section→item) asserting section/item absent and page.parent === set.
+
+### A3. `documentOutline` + page ownership
+
+**Same file:** `src/ui/project.ts`.
+
+**Types (lock):**
+
+```ts
+type OutlineRow =
+  | { kind: "section"; id: Id; depth: number; title: string; level?: number }
+  | { kind: "prose"; id: Id; depth: number; markdown: string }
+  | { kind: "table"; id: Id; depth: number; headers: string[]; rows: string[][] }
+  | { kind: "list"; id: Id; depth: number; items: { id: Id; text: string; done?: boolean }[] }
+  | { kind: "code"; id: Id; depth: number; language?: string; text: string }
+  | { kind: "record"; id: Id; depth: number; label: string; fields: { name: string; value: string }[] };
+```
+
+**`documentOutline(graph, pageId)`:** walk page children in **emit order** (reuse ordering rules from [src/emit.ts](src/emit.ts) child walk — extract shared helper or mirror). Sections increment depth; do not emit machine fields (`level`, `lang`, …) as UI rows — use them to choose `kind`. Holders `grid`/`group` become `table`/`list` rows.
+
+**`pageOf(graph, id)`:** walk parents until `doc.page` or null.
+
+**Done when:** unit tests cover empty page, nested sections, table, fence, list-as-group.
+
+### A4. Rebuild tray (document reader)
+
+**Rewrite:** [src/ui/Tray.tsx](src/ui/Tray.tsx), [src/ui/styles.css](src/ui/styles.css).
+
+**Structure (mirror mndflow tray chrome locally until Merge):**
+
+- Outer `section.tray.open` + `div.tray-bar` (context word/name) + collapse control + `div.tray-body` + tabs.
+- Tabs: **Content | Metadata | Links** (folder selection: Content = child folder/page list only).
+
+**Content tab:**
+
+- If page: render `documentOutline` as a vertical list; indent `depth * 12–16px`; section = heading row; prose = rendered markdown; table = `<table>`; code = `<pre>`; list = `<ul>`/`<ol>`.
+- Row click sets **tray-local** `focusId` only (expand details). **Do not** call `onLook` into content ids.
+- Empty page: deliberate empty state (“This page has no mapped content.”).
+- Reference UX: linear stack with indent for nesting (not a collapsible tree).
+
+**Metadata tab:** source path; user-facing fields only (hide `level`/`lang`/internal keys unless explaining a construct); tags + suggestion chips beside the value they change.
+
+**Links tab:** group relations by `(otherPageId, type)`; show count; expand for underlying content-level edges; missing targets show “gone”.
+
+**CSS:** prefix all mndmap content classes with `mm-` (e.g. `.mm-outline`, `.mm-prose`). Do not use bare `.body` / `.content` / `.tray` selectors that collide with future shell.css — local frame may use mndflow’s `.tray` / `.tray-bar` class names **only** when copying tray-frame CSS verbatim.
+
+**Edits in v1 tray:** rename (page/section title), tags, relation type pick, suggestion pick. **Sibling reorder** (`edit order`) in Content tab = A4b follow-on. **Cross-page content move** = later; not in this plan’s acceptance.
+
+**Done when:** selecting a dense page (docs or `fixtures/req`) reads as a document; no pill cloud of children; Suggestions sit next to values.
+
+### A5. Test bootstrap + driver/skill updates
+
+**Add:** `"test": "vitest run"` to [package.json](package.json); create `test/project.test.ts`, `test/tray.test.tsx` (rtl if needed — add `@testing-library/react` + jsdom only if component tests require it; prefer pure projection tests first).
+
+**Update:** [.claude/skills/run-mndmap/SKILL.md](.claude/skills/run-mndmap/SKILL.md) — `rows` must be sets/pages **only** (remove “sections”); tray dump should describe tabs.
+
+**Update driver** if tray selectors change.
+
+**Done when:** `npm test`, `npm run typecheck`, `npm run roundtrip`, browser smoke all green.
+
+---
+
+## Track B — mndflow (general components only)
+
+Work in the real [mndflow](https://github.com/kotulc/mndflow) repo (paths below are relative to that tree; pin SHA in [mndflow-pin.json](mndflow-pin.json)).
+
+### B1. Extract shell primitives
+
+**New package or kit entry** (prefer kit export to avoid new package churn):
+
+- `packages/theme/src/shell.tsx` (or `packages/kit/src/shell.tsx`):
+  - `WorkspaceHeader({ brand, where, children/tools })`
+  - `TrayFrame({ open, onOpen, big?, onBig?, word, name, note?, tabs, tab, onTab, tools?, children })`
+- CSS: assemble `shell.css` from relevant parts of `theme/base.css` (header, `--bar`, `.app` grid **as a documented optional layout**) + tray **frame** rules from `tray.css` (bar/body/tabs/open/shut/big) — **not** model tab bodies.
+- Refactor mndflow `App.tsx` + `Tray.tsx` to consume these primitives first (dogfood).
+- Export via `@mnd/kit/shell` + `@mnd/kit/shell.css`; export `Icon` from shell or react entry.
+- **Do not** put `Graph`/`Act` into `TrayFrame`.
+- Keep `@mnd/kit/react.css` for embedders; shell is opt-in.
+
+**Done when:** mndflow web app looks unchanged; `npm test` / typecheck / build green in mndflow.
+
+### B2. Explorer consumer tools API
+
+**File:** [`packages/explorer/src/Explorer.tsx`](https://github.com/kotulc/mndflow/blob/abea9d84a651ff5722145b4477e9b4f5d780f15c/packages/explorer/src/Explorer.tsx).
+
+Add prop, default preserves mndflow:
+
+```ts
+tools?: {
+  filter?: boolean; // default true (still stub)
+  create?: boolean; // default true
+  remove?: boolean; // default true
+  fold?: boolean;   // default true
+};
+```
+
+When false, omit those buttons. `menu={false}` remains context-menu only.
+
+**Tests:** explorer.test.tsx — with `tools={{ create:false, remove:false, filter:false }}` those buttons absent; fold still present; rename/move still fire with `name` / `ids`/`before`.
+
+**Document** Act payloads in explorer README (reveal/rename/move) so consumers cannot reintroduce `label`/`at` mistakes.
+
+### B3. Viewer breadcrumbs
+
+**File:** [`packages/kit/src/viewer.tsx`](https://github.com/kotulc/mndflow/blob/abea9d84a651ff5722145b4477e9b4f5d780f15c/packages/kit/src/viewer.tsx).
+
+Add `chrome?: { crumbs?: boolean }` (default false). When true, wrap `FlowView` like Stage: render `Crumbs` from `project(graph, layer).trail`; crumb click → `onLook` / equivalent.
+
+Extract shared `Crumbs` if needed so Stage and Viewer do not diverge (prefer move to `@mnd/theme` or small shared module — still general).
+
+### B4. Release kit cleanly
+
+1. Commit on a clean SHA.
+2. Build kit; pack tarball; compute integrity.
+3. Rebuild from that SHA in a clean tree; confirm bit-identical JS/CSS/integrity.
+4. Record version (e.g. 0.7.0), SHA, tarball name, integrity together.
+
+**Done when:** reproducibility check scripted and passing.
+
+---
+
+## Merge — mndmap adopts shell
+
+1. Copy tarball to `vendor/`; update [package.json](package.json), lockfile, [mndflow-pin.json](mndflow-pin.json).
+2. Verify installed package integrity matches pin **before** UI edits.
+3. [main.tsx](src/ui/main.tsx): `import "@mnd/kit/react.css"; import "@mnd/kit/shell.css";` then only `mm-` content CSS.
+4. Replace local header/grid/tray-frame with `WorkspaceHeader` + `TrayFrame`; pass `tools={{ create:false, remove:false, filter:false }}`; enable Viewer crumbs.
+5. Delete imitation layout from `base.css` (keep blank-drop + `mm-` overrides only).
+6. Tray open height must follow shell (≈25%, collapsible, optional big) — not fixed 38%.
+7. Screenshot matrix: desktop + narrow; themes retro/modern/light; compare header height, explorer bar, tray bar to mndflow.
+8. Update README / interactive-workspace docs that still say kit 0.2.0 or REST UI.
+
+**Done when:** acceptance criteria below all pass.
+
+---
+
+## Acceptance criteria (executable)
+
+- Explorer rows = collection root + `doc.set` + `doc.page` only (driver `rows`).
+- Viewer nodes = same set; no content cards (`boxes` all on panel; manual/ss check).
+- Reveal opens parent layer and selects the row; tree highlight matches canvas.
+- Tree rename uses `args.name`; multi-move uses `args.ids`; both undo.
+- No create/delete/filter buttons (after Merge); before Merge they may exist but must no-op.
+- Page tray Content tab is emitted-order outline with distinct section/prose/table/list/code rendering; no child pill cloud; no raw ids as primary UI.
+- Metadata and Links are separate tabs; suggestions adjacent to target values.
+- Visual chrome matches mndflow header/explorer/tray proportions after Merge.
+- `npm run roundtrip` byte-stable when no edits; full graph still valid for mndflow.
+- Pin records version + SHA + tarball + integrity; rebuild reproduces.
+
+---
+
+## Agent execution rules
+
+- **Do not** change [src/read.ts](src/read.ts) / [src/emit.ts](src/emit.ts) schema for this plan.
+- **Do not** add markdown-awareness to mndflow.
+- **Do not** develop mndmap against an uncommitted sibling `node_modules` link for the Merge pin; use the packed tarball.
+- Prefer Track A2+A4 for user-visible coherence even if Track B is delayed.
+- Every Track A PR: `npm run typecheck` + `npm run roundtrip` + browser smoke.
+- Every Track B PR: mndflow `npm test` + typecheck + web build + dogfood screenshot.
+
+---
+
+## Suggested PR sequence
+
+1. A0+A1 (adapter) — small, unblocks gestures
+2. A2+A3 (projections) — fixes nested canvas
+3. A4 (tray) — fixes intelligibility
+4. A5 (tests/skill)
+5. B1–B4 (mndflow release)
+6. Merge (vendor + shell swap + CSS delete + docs)

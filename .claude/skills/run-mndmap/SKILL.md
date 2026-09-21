@@ -73,10 +73,10 @@ printf 'click Metadata\ntray\nchips\nemit\nss check\nquit\n' \
 | Command | What it answers |
 |---|---|
 | `rows` | every explorer row: `mark` (folder/container/leaf), label, picked |
-| `click <text>` | click that explorer row, and say what the tray then holds |
-| `tray` | the picked block: name, kind, tags, fields, body, holds, relations |
-| `rename <text>` | rename through the tray, the way a double click does |
-| `tag <text>` | add a tag, and print what the block carries after |
+| `click <text>` | explorer row, or tray tab (Content / Metadata / Links) |
+| `tray` | active tab: name, outline/tag/link counts |
+| `rename <text>` | rename through the tray title |
+| `tag <text>` | add a tag on Metadata, print tags after |
 | `chips` | the sidecar's candidates here — empty without `?suggestions=` |
 | `pick [n]` | take candidate *n* |
 | `undo` | step the stack back one |
@@ -91,10 +91,10 @@ invisible in the DOM dump and obvious in the image.
 
 ### The four checks worth running every time
 
-- **`rows` must hold sets, pages and sections only.** A row reading `item` or
-  `table` means the tree is showing content. Cells, list items and fences are
-  the tray's; the explorer narrows the graph before handing it over, and a new
-  block type has to be added to that filter or it leaks into the tree.
+- **`rows` must hold sets and pages only.** A row reading `item`, `section`,
+  or `table` means the tree is showing content. Cells, list items, fences and
+  sections are the tray's outline; the explorer is handed
+  `organizationGraph` and nothing else.
 - **`boxes` must say all on panel.** See below.
 - **`undo` must walk all the way back.** Every gesture pushes the graph it was
   applied to. A gesture that edits in place instead of returning a new graph
@@ -159,14 +159,8 @@ taskkill //PID "$PID" //F
 - **The drop path cannot be driven headless.** `getAsFileSystemHandle` is not
   reachable from a synthesised drag event. Test the folder path by hand, or
   test `read()` directly with the round trip.
-- **The shell's left column is `.side`, and the kit's own nav inside it is
-  `.explorer`.** The kit sizes and scrolls that nav itself and puts a drag
-  grip on its edge, so the column is `auto` and the wrapper sets no width. A
-  selector written against `.explorer` will match the kit's element, not the
-  wrapper.
-- **`@mnd/kit/react.css` is the whole theme, and the only one to load.** It
-  carries the ramp, the card table and React Flow's own sheet, so a card here
-  is a card in mndflow with nothing to keep in sync. Loading a second copy of
-  any of them is how the two drift. Before kit 0.6.0 it shipped neither the
-  ramp nor the card table and every card drew transparent on transparent; if
-  that ever comes back, the fix is in the kit, not here.
+- **The shell's left column is the kit's `.explorer`.** It sizes and scrolls
+  itself and puts a drag grip on its edge. Tray chrome is `.tray` from
+  `@mnd/kit/shell.css`; mndmap content classes are `mm-*` only.
+- **`@mnd/kit/react.css` plus `@mnd/kit/shell.css`** are the theme and chrome.
+  Content meaning stays in `styles.css` under the `mm-` prefix.

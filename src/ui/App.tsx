@@ -1,18 +1,18 @@
 /** Three panels over one held graph.
  *
- *  The explorer on the left, the canvas top right, the content tray bottom
- *  right. Every gesture is a data edit on the graph this component holds,
- *  and the stack behind it is the whole of undo. There is no store, no
- *  session and no server. */
+ *  Explorer and Viewer share the organization projection (sets + pages).
+ *  The tray reads the full graph as a document outline. Edits always apply
+ *  to the full graph; undo is the stack of graphs behind it. */
 
-import { Explorer, Viewer } from "@mnd/kit/react";
-import { children, type Graph, type Id } from "@mnd/kit";
+import { Explorer, Viewer, WorkspaceHeader, TrayFrame } from "@mnd/kit/react";
+import { children, type Id } from "@mnd/kit";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { PAGE, SECTION, SET, TIER_ROOT } from "../doc.js";
+import { PAGE, SET, TIER_ROOT } from "../doc.js";
 import { apply, Stack, type Edit } from "../edits.js";
 import { suggest } from "../suggest.js";
 import { from_drop, from_query, save, to_zip, type Loaded } from "./load.js";
-import { Tray } from "./Tray.js";
+import { organizationGraph } from "./project.js";
+import { Tray, type TrayTab } from "./Tray.js";
 
 type ThemeName = "retro" | "modern" | "light";
 
@@ -25,24 +25,27 @@ export function App() {
   const [note, setNote] = useState("Drop a folder of markdown, or a workspace.json.");
   const [theme, setTheme] = useState<ThemeName>("retro");
   const [over, setOver] = useState(false);
+  const [trayOpen, setTrayOpen] = useState(true);
+  const [trayBig, setTrayBig] = useState(false);
+  const [tab, setTab] = useState<TrayTab>("Content");
   const stack = useRef(new Stack());
 
   useEffect(() => { document.documentElement.dataset.theme = theme; }, [theme]);
 
-  /** What the tree lists: sets, pages and sections. A cell, an item and a
-   *  fence are content, and content is the tray's. The drawing reads the
-   *  same graph whole, so the two never disagree about what is there. */
-  const tree = useMemo(() => {
-    const graph = loaded?.graph;
-    if (!graph) return null;
-    const keep = (id: string): boolean => {
-      const block = graph.blocks[id];
-      if (!block) return false;
-      if (block.parent === null) return true;
-      return [SET, PAGE, SECTION].includes(block.type ?? "") && keep(block.parent);
-    };
-    return { ...graph, blocks: Object.fromEntries(Object.entries(graph.blocks).filter(([id]) => keep(id))) };
-  }, [loaded?.graph]);
+  const org = useMemo(
+    () => (loaded?.graph ? organizationGraph(loaded.graph) : null),
+    [loaded?.graph],
+  );
+
+  /** Selection must name organization ids visible on the projection. */
+  useEffect(() => {
+    if (!org) return;
+    if (layer && !org.blocks[layer]) setLayer(TIER_ROOT);
+    setPicked((held) => {
+      const next = held.filter((id) => org.blocks[id]);
+      return next.length === held.length ? held : next;
+    });
+  }, [org, layer]);
 
   useEffect(() => {
     void from_query(window.location.search)
@@ -58,12 +61,6 @@ export function App() {
     setNote(next.report?.faults.length ? next.report.faults.join("\n") : summary(next));
   };
 
-  /** One gesture: the graph it makes, or the fault that stopped it.
-   *
-   *  The stack is pushed **outside** any state updater. React calls an
-   *  updater twice while developing to surface exactly this, and a push in
-   *  there lands the same graph on the stack twice — so every second undo
-   *  looks like it did nothing. */
   const edit = useCallback((change: Edit) => {
     if (!loaded) return;
     const result = apply(loaded.graph, change);
@@ -107,85 +104,113 @@ export function App() {
     } catch (error: unknown) { setNote(say(error)); }
   };
 
-  /** The tree's intent, meant as mndmap's own vocabulary: a click reveals,
-   *  a double click renames, a drag re-parents. */
+  /** Explorer intents: reveal / rename.name / move.ids+before. */
   const act = useCallback((name: string, args?: Record<string, unknown>) => {
+    const graph = loaded?.graph;
+    if (!graph || !org) return;
     const id = args?.id === undefined ? null : String(args.id);
-    if (!id) return;
-    if (name === "reveal") { setPicked([id]); return; }
-    if (name === "rename" && args?.label) { edit({ do: "rename", id, name: String(args.label) }); return; }
-    if (name === "move" && args?.parent) {
-      edit({ do: "move", id, parent: String(args.parent), ...(typeof args.at === "number" ? { at: args.at } : {}) });
-    }
-  }, [edit]);
 
-  if (!loaded) {
+    if (name === "reveal" && id) {
+      const parent = org.blocks[id]?.parent ?? TIER_ROOT;
+      setLayer(parent);
+      setPicked([id]);
+      return;
+    }
+    if (name === "rename" && id && typeof args?.name === "string") {
+      edit({ do: "rename", id, name: String(args.name) });
+      return;
+    }
+    if (name === "move" && args?.parent && Array.isArray(args.ids)) {
+      const parent = String(args.parent);
+      const before = typeof args.before === "string" ? String(args.before) : null;
+      const kin = children(graph, parent).map((block) => block.id);
+      for (const moveId of args.ids as Id[]) {
+        const siblings = kin.filter((each) => each !== moveId && !(args.ids as Id[]).includes(each));
+        const at = before ? siblings.indexOf(before) : undefined;
+        edit({
+          do: "move",
+          id: moveId,
+          parent,
+          ...(at !== undefined && at >= 0 ? { at } : {}),
+        });
+      }
+    }
+    // create / delete / filter / shelve — ignored
+  }, [edit, loaded?.graph, org]);
+
+  if (!loaded || !org) {
     return (
       <main className={`app blank${over ? " over" : ""}`}
         onDragOver={(event) => { event.preventDefault(); setOver(true); }}
         onDragLeave={() => setOver(false)} onDrop={drop}>
-        <p className="status">{note}</p>
+        <p className="mm-status">{note}</p>
       </main>
     );
   }
 
   const graph = loaded.graph;
+  const focus = picked[0] ?? null;
+  const focusBlock = focus ? graph.blocks[focus] : undefined;
+  const word = focusBlock?.type === PAGE ? "page"
+    : focusBlock?.type === SET ? "folder"
+    : "collection";
+  const trayName = focusBlock?.name ?? loaded.name;
+
   return (
-    <main className={`app${over ? " over" : ""}`}
+    <div className={`app${over ? " over" : ""}`}
       onDragOver={(event) => { event.preventDefault(); setOver(true); }}
       onDragLeave={() => setOver(false)} onDrop={drop}>
-      <header>
-        <span className="brand">mndmap</span>
-        <span className="where">{loaded.name}</span>
-        <div className="tools">
-          <button type="button" onClick={undo} disabled={stack.current.depth === 0}>Undo</button>
-          <button type="button" onClick={() => void chips()}>Suggest</button>
-          <button type="button" onClick={() => void zip()}>Emit</button>
-          <select value={theme} onChange={(event) => setTheme(event.target.value as ThemeName)} aria-label="Theme">
-            <option value="retro">Retro</option>
-            <option value="modern">Modern</option>
-            <option value="light">Light</option>
-          </select>
-        </div>
-      </header>
-      {note ? <p className="status">{note}</p> : null}
+      <WorkspaceHeader brand="mndmap"
+        where={<span className="where">{loaded.name}</span>}>
+        <button type="button" onClick={undo} disabled={stack.current.depth === 0}>Undo</button>
+        <button type="button" onClick={() => void chips()}>Suggest</button>
+        <button type="button" onClick={() => void zip()}>Emit</button>
+        <select value={theme} onChange={(event) => setTheme(event.target.value as ThemeName)}
+                aria-label="Theme">
+          <option value="retro">Retro</option>
+          <option value="modern">Modern</option>
+          <option value="light">Light</option>
+        </select>
+      </WorkspaceHeader>
 
-      <section className="side">
-        <Explorer
-          graph={tree ?? graph}
-          open={layer}
-          picked={picked}
-          folded={folded}
-          menu={false}
-          onAct={act}
-          onFold={(id, shut) => setFolded((held) =>
-            shut ? [...new Set([...held, id])] : held.filter((each) => each !== id))}
-          onPick={setPicked}
-        />
-      </section>
+      {note ? <p className="mm-status chat">{note}</p> : null}
 
-      <section className="canvas">
-        <Viewer graph={graph} layer={layer} picked={picked} onLook={setLayer} onPick={setPicked} />
-      </section>
+      <Explorer
+        graph={org}
+        open={layer}
+        picked={picked}
+        folded={folded}
+        menu={false}
+        tools={{ create: false, remove: false, filter: false }}
+        onAct={act}
+        onFold={(id, shut) => setFolded((held) =>
+          shut ? [...new Set([...held, id])] : held.filter((each) => each !== id))}
+        onPick={setPicked}
+      />
 
-      <section className="content">
-        <Tray graph={graph} picked={picked[0] ?? null} suggestions={loaded.suggestions}
-          onEdit={edit} onLook={(id) => walk_to(graph, id, setLayer, setPicked)} />
-      </section>
-    </main>
+      <main>
+        <Viewer graph={org} layer={layer} picked={picked} chrome={{ crumbs: true }}
+          onLook={setLayer} onPick={setPicked} />
+        <TrayFrame
+          open={trayOpen}
+          onOpen={setTrayOpen}
+          big={trayBig}
+          onBig={setTrayBig}
+          word={word}
+          name={trayName}
+          tabs={["Content", "Metadata", "Links"]}
+          tab={tab}
+          onTab={(next) => setTab(next as TrayTab)}
+        >
+          <Tray graph={graph} org={org} picked={focus} suggestions={loaded.suggestions}
+            tab={tab} onEdit={edit} />
+        </TrayFrame>
+      </main>
+    </div>
   );
 }
 
 
-/** Looking at a child means opening it where it holds something, and lighting
- *  it where it does not. */
-function walk_to(graph: Graph, id: Id, look: (layer: Id) => void, pick: (ids: Id[]) => void): void {
-  if (children(graph, id).length) look(id);
-  pick([id]);
-}
-
-/** What the zip is called: the workspace's own name, without the path it was
- *  fetched from or the extension it was written with. */
 function named(where: string): string {
   return where.split("/").pop()?.replace(/\.json$/i, "") || "collection";
 }
