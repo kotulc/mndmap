@@ -10,3 +10,6 @@ out/
 /suggestions.json
 fixtures/*/workspace.json
 .mndmap/
+
+# Local shallow clone of mndflow for side-by-side comparison — never commit.
+.compare-mndflow/

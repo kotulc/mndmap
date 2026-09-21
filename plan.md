@@ -1,152 +1,115 @@
-# Plan
+---
+name: Coherent dashboard design
+overview: Make mndmap a visually faithful, reduced mndflow workspace by sharing general shell chrome from mndflow while giving Explorer/canvas an organization-only projection and the tray a document-specific content projection. Preserve the full graph for round-trip and emit, as selected, so this is a presentation/interaction correction rather than a file-format rewrite.
+todos:
+  - id: mndflow-shell
+    content: Extract and adopt generic shell/header/tray-frame primitives in mndflow, add typed/capability-aware Explorer intents and optional Viewer breadcrumbs, test, and release a new kit.
+    status: pending
+  - id: mndmap-projections
+    content: Implement organization-only graph and ordered document-outline projections with page ownership and relation roll-up tests.
+    status: pending
+  - id: mndmap-interactions
+    content: Wire Explorer/Viewer to the organization projection and correct reveal, rename, move, selection, and toolbar behavior.
+    status: pending
+  - id: mndmap-tray
+    content: Build the project-specific Content/Metadata/Links tray inside shared mndflow chrome.
+    status: pending
+  - id: visual-verification
+    content: Remove imitation shell CSS, update docs/browser harness, and verify both repositories plus cross-theme responsive screenshots and round-trip emit.
+    status: pending
+isProject: false
+---
 
-**mndmap, rebuilt on the kit as it is now.** A browser dashboard for translated content, markdown first. This plan supersedes the enrichment pipeline plan; README.md, translator.md and archive.md describe the retired product until they are rewritten, and where they disagree with this file, this file is authoritative.
+# Coherent mndmap dashboard
 
+## Findings that drive the plan
 
-## What mndmap is
+- mndmap is not currently using the mndflow shell. [src/ui/main.tsx](C:/Users/clayt/Development/mndmap/src/ui/main.tsx) imports only `@mnd/kit/react.css`; the pinned kit exports only `Viewer` and `Explorer`, while mndmap recreates the header/grid in [src/ui/base.css](C:/Users/clayt/Development/mndmap/src/ui/base.css) and the entire tray in [src/ui/Tray.tsx](C:/Users/clayt/Development/mndmap/src/ui/Tray.tsx). The mndflow header, stage chrome, and tray frame remain private to [apps/web/src/App.tsx](C:/Users/clayt/Development/mndflow/apps/web/src/App.tsx), [packages/theme/base.css](C:/Users/clayt/Development/mndflow/packages/theme/base.css), and [packages/tray/src/Tray.tsx](C:/Users/clayt/Development/mndflow/packages/tray/src/Tray.tsx).
+- The deep structure is intentional in the current rewrite, not a renderer defect. [src/read.ts](C:/Users/clayt/Development/mndmap/src/read.ts) creates `doc.section`, `doc.item`, and `doc.code` blocks; [mndmap.yaml](C:/Users/clayt/Development/mndmap/mndmap.yaml) maps headings through depth 3; and [src/ui/App.tsx](C:/Users/clayt/Development/mndmap/src/ui/App.tsx) explicitly retains sections in the Explorer while passing the full graph to `Viewer`. This reverses the earlier organization/content split documented in [docs/workflow/organization-and-structure.md](C:/Users/clayt/Development/mndmap/docs/workflow/organization-and-structure.md).
+- Explorer integration is also behaviorally out of contract: mndmap treats `reveal` as selection-only and expects `rename.label` / singular `move.id`, while the pinned Explorer emits reveal-as-open-parent, `rename.name`, and plural move arguments. Its create/delete toolbar remains visible even though mndmap does not implement those commands. That makes the tree and canvas drift and leaves inert controls on screen.
+- The current tray is a flat dump of identity, tags, fields, rendered body, child pills, and relations. It has no stable context bar, tabs, document order, or construct-specific rendering, so a page reads as an undifferentiated chip cloud rather than a document.
+- The 0.6.0 tarball is integrity-pinned, but its bundled CSS matches later mndflow build output rather than what the recorded `abea9d8` source commit reproduces. The replacement release must come from a clean commit so version, source SHA, generated bundle, and integrity describe the same artifact.
 
-**A translator with a dashboard.** It reads a collection of markdown into a mndflow graph, shows that graph as three panels somebody can re-organize and tag, and emits a new collection — optionally published through mndsite. mndflow is the diagram editor and the foundation; mndmap is a simpler surface over the same graph, for looking at translated content and rearranging it. **It is not an editor.** Bodies are read, not written; relations are drawn, not made.
+## Target architecture
 
-```
-docs/*.md, folders ──translate──▶ workspace.json ──▶ explorer | viewer | content tray ──emit──▶ zip: collection + mdsite.yaml
-                                  suggestions.json        re-organize, tag, pick                          │ optional
-                                                                                                       mndsite ──▶ site
-```
-
-| | |
-|---|---|
-| **stateless** | one run: a folder in, a zip out. Nothing is kept between runs, and there is no store. What the dashboard changes lives in the graph it holds, for as long as the tab is open |
-| **the browser is the product** | translate, dashboard and emit all run there, from a folder dropped on the page. A minimal CLI wraps translate and emit for CI, and nothing else |
-| **the kit is used as it is** | `Explorer` and `Viewer` from `@mnd/kit/react`, the theme, `open`, `validate` and `write`. What the kit does not have, mndmap builds in the same style. **Nothing in mndflow is for mndmap**; a change mndmap needs there is a general one or it is mndmap's own job |
-| **the graph is edited as data** | a move sets `parent` and `order`; a tag sets `tags`; a group sets a holder. mndmap writes the fields, asks `validate`, and keeps a stack of graphs for undo. No session, no log, no actions |
-| **the file is the seam** | the same `workspace.json` opens in mndflow, with the look the `doc` package gives it |
-| **markdown first** | then requirements traceability, then a codebase. Each is a vocabulary package and a `map`, never a change to the dashboard |
-
-
-## The translator
-
-**Two pure functions, and the CLI wraps both.** `read(files, config)` returns a mndflow file and a sidecar of suggestions; `emit(graph, config)` returns the collection as files. Both run in the browser; `mndmap translate` and `mndmap emit` run them under node for CI.
-
-**What survives from today**: the remark parser, the link and asset rewriting, the mdsite config merge and `nav_order`, and the fill-only metadata. **What goes**: the working store, segments, placements, overrides, reconciliation, the REST service, the React dashboard, and the `selectors` config.
-
-### The `doc` vocabulary
-
-**Shipped by mndflow as a package**, so a translated file opens there with its look. mndmap reads it through the kit rather than carrying a copy.
-
-| Definition | Over | Carries |
-|---|---|---|
-| `doc.set` | `folder` | a directory |
-| `doc.page` | `block` | a file. `source.uri` is its path; front matter is its fields; prose before the first heading is its body |
-| `doc.section` | `block` | a heading. `source.at` is the heading path; the prose under it is its body |
-| `doc.item` | `block` | a list item made into a block, with a `done` flag where it was a task |
-| `doc.code` | `block` | a fence made into a block, with a `language` field and the code as its body |
-| `doc.link` | `line` | a link from one document or heading to another |
-
-**A table is a grid holder and a list is a group holder.** Neither is a block, so neither needs a definition: the holder's `of` names the section it sits in, header cells are header blocks, and members are blocks with a body.
-
-### The map
-
-**One `map` section says how markdown lands in the graph.** Each construct names its target from a closed set; the defaults give folders to folders, files to pages, headings to blocks to a depth, and everything else to prose. `overrides` applies a different map under a heading path.
-
-```yaml
-version: 2
-source:      { root: docs, include: ["**/*.{md,mdx}"], exclude: [] }
-destination: site
-publish:     { mdsite: mdsite.yaml }          # optional; the template mdsite.yaml merged into the zip
-suggest:     { taggly: null, count: 3 }       # null: no suggestions, and everything else still works
-
-map:
-  folder:      { as: doc.set }
-  page:        { as: doc.page, name: [title, heading, filename] }
-  section:     { as: doc.section, depth: 3, beyond: body }      # beyond: body | block
-  prose:       body
-  frontmatter: { as: fields, tags: tags, related: relation }
-  link:        { as: relation, type: doc.link, external: body } # relation | body
-  table:       { as: grid, header: row }                        # grid | body
-  list:        { as: body }                                     # body | group
-  task:        { as: body }                                     # body | block
-  fence:       { as: body }                                     # body | block
-  image:       body
-overrides: []   # [{ under: ["Heading", "Path"], map: { table: { as: body } } }]
+```mermaid
+flowchart LR
+  FullGraph["Full translation graph"] --> OrgProjection["Organization projection: folders and pages"]
+  FullGraph --> ContentProjection["Content projection: ordered document outline"]
+  OrgProjection --> Explorer["Shared Explorer"]
+  OrgProjection --> Viewer["Shared Viewer canvas"]
+  ContentProjection --> DocTray["mndmap document tray"]
+  SharedShell["mndflow shell primitives"] --> Explorer
+  SharedShell --> Viewer
+  SharedShell --> DocTray
+  FullGraph --> Emit["Existing emit and round-trip"]
 ```
 
-| Markdown | Reads in as | Emits as |
-|---|---|---|
-| directory | `doc.set` | a directory, with a landing page where the source has none |
-| file | `doc.page`, front matter to fields, `source.uri` | a file at the block's path, front matter from fields |
-| heading within `depth` | `doc.section` under the enclosing block, `order`, `source.at` | a heading at the depth of its nesting |
-| prose, and headings beyond `depth` | the enclosing block's `body`, opaque markdown | written as is |
-| front matter `tags` | block `tags` | front matter `tags` |
-| link to a document or heading | `doc.link` from the enclosing block to the target | the body link unchanged, and a front matter `related` entry, which mndsite reads |
-| table as `grid` | a grid holder with `of` the section; header row as header blocks; cells as blocks with a body | a table from cells and headers |
-| list as `group` | a group holder with `doc.item` members | a list from the members in order |
-| task as `block` | `doc.item` with a `done` flag | a checkbox item |
-| fence as `block` | `doc.code` with `language`, the code as body | a fence |
-| image | body; the asset copied at emit | body, asset under `_assets/` |
+### Design invariants
 
-- **A page is named by its document and filed by its filename**, as before: renaming a heading never moves a page.
-- **`source.at` is the heading path**, and it is how a section is found again after a move: the emitter writes what the graph says, and never looks at the source.
-- **Bodies are opaque.** Whether a list, a table or a fence becomes structure is the map's call, per construct and per path; the body is never parsed a second time except to tell a read relation from a drawn one.
-- **The round trip is the test.** A real README read in and emitted must diff clean under the default map. That is what says whether opaque bodies hold, and it runs before the dashboard is built on the answer.
-
-### Suggestions
-
-**A sidecar, never the graph.** Translation may produce `suggestions.json`, keyed by block or relation id, carrying up to `count` candidates each for a name, tags, a group and a relation type. Picking one writes the graph; the sidecar is read-only and is not emitted.
-
-```
-suggestions { [id]: { name?: string[]; tags?: string[]; group?: string[]; type?: Id[] } }
-```
-
-**Taggly makes them, and it is optional.** `suggest.taggly` names the endpoint; unset, the sidecar is absent and the dashboard shows no chips. Taggly never runs in CI and never decides anything: what somebody picked is ordinary graph data.
+- **One authoritative graph, two read-only UI projections.** An edit always targets the full graph; organization and content projections are rebuilt after every edit and undo. Neither projection is emitted or saved.
+- **Organization means folders and files.** The Explorer and canvas may show `doc.set` and `doc.page` only. The UI projection is re-rooted at the collection's top `doc.set`, so the synthetic `ws` block, sections, items, code blocks, cells, and holders never become organization rows or cards.
+- **Content means document order.** Sections and structured constructs remain blocks/holders in the full graph for round-trip fidelity, but appear only through the tray's document projection.
+- **Selection has one visible home.** Revealing a folder or page opens its parent layer and selects it there. A content-row selection stays local to the tray and does not point the organization canvas at a hidden block.
+- **Structure before relations.** The organization canvas defaults to no content-link edges. An optional page-links display may use a derived edge only when both endpoints resolve to visible pages; section-level duplicates are collapsed by `(from page, to page, type)`, self-links are suppressed, and the Links tab remains the complete account.
+- **Shared chrome, project-owned meaning.** mndflow owns shell geometry, bars, icons, collapse/expand behavior, typography, and theme tokens. mndmap owns every word, tab, row type, suggestion, and document action inside that chrome.
 
 
-## The dashboard
+## Implementation plan
 
-**Three panels, no rail, no editing tools.** The explorer on the left, the canvas top right, the content tray bottom right. It wears mndflow's theme and reads as the same family.
+1. **Create a real general shell seam in mndflow.** Extract composable, graph-agnostic `WorkspaceShell`, `WorkspaceHeader`, and `TrayFrame` primitives from [apps/web/src/App.tsx](C:/Users/clayt/Development/mndflow/apps/web/src/App.tsx), [packages/theme/base.css](C:/Users/clayt/Development/mndflow/packages/theme/base.css), and [packages/tray/src/Tray.tsx](C:/Users/clayt/Development/mndflow/packages/tray/src/Tray.tsx). Use prefixed/scoped classes and slot props for identity, actions, explorer, canvas, optional rail, notice, tray context, tabs, collapse, and full-height behavior. `TrayFrame` is presentational and must not accept `Graph`, `Act`, mndflow tabs, or other model-editor types. Refactor mndflow’s own web app and tray to consume these primitives first, then expose them and `Icon` through `@mnd/kit/shell`, with opt-in CSS at `@mnd/kit/shell.css`, via [packages/kit/package.json](C:/Users/clayt/Development/mndflow/packages/kit/package.json) and [packages/kit/tsup.config.ts](C:/Users/clayt/Development/mndflow/packages/kit/tsup.config.ts). Keep `react.css` suitable for embedded Viewer/Explorer usage; do not export the full editable Stage or model-specific Tray.
+2. **Make the Explorer/Viewer consumer contract safe and reducible.** In [packages/explorer/src/Explorer.tsx](C:/Users/clayt/Development/mndflow/packages/explorer/src/Explorer.tsx), add a general capability/slot API so consumers can omit create/delete/filter commands while retaining fold, resize, rename, and move. Replace or augment the untyped external `onAct(name, args)` seam with a discriminated structural intent:
+   ```ts
+   type ExplorerIntent =
+     | { type: "reveal"; id: Id }
+     | { type: "rename"; id: Id; name: string }
+     | { type: "move"; ids: Id[]; parent: Id; before?: Id };
+   ```
+   Keep mndflow's arbitrary action registry and context menu internal; default capabilities preserve the mndflow app, while mndmap enables only reveal, rename, move, fold, and resize. Reuse the Stage breadcrumb component in `Viewer` through an opt-in chrome prop so a read-only canvas can have the same navigation treatment without exporting the editable Stage. Cover these additions in mndflow's Explorer, Viewer, shell, and app tests, then release and stamp a new kit version from a clean commit; verify that rebuilding that SHA reproduces the shipped JS/CSS and integrity.
+3. **Project one full graph into two mndmap views.** Add a pure UI projection module beside [src/ui/App.tsx](C:/Users/clayt/Development/mndmap/src/ui/App.tsx):
+  - `organizationGraph(graph)` re-roots at the top collection set; retains `doc.set` and `doc.page` only; removes content holders; verifies every retained parent and edge endpoint; and optionally derives deduplicated page-level links without mutating source edges.
+  - `documentOutline(graph, pageId)` produces emitted-order rows for page prose, nested sections, tables/grids, lists/groups, tasks/records, and code without changing the stored graph. It consumes machine fields such as heading level, row key, and language to render the construct instead of dumping those fields into the primary UI.
+  - `pageOf(id)` maps any content block back to its owning page for links and tray context.
+   Both functions must be deterministic, cycle-safe, and tolerant of a valid empty page. Feed the same organization projection to both Explorer and Viewer; keep the full graph exclusively for edits, suggestions, tray derivation, validation, and emit.
+4. **Correct selection and organization gestures.** Update [src/ui/App.tsx](C:/Users/clayt/Development/mndmap/src/ui/App.tsx) to interpret reveal as “open the node’s parent layer and select it,” consume the typed rename/move payloads, and restrict Explorer gestures to folders/pages. Normalize `layer` and `picked` after each edit/undo so moved or removed nodes cannot leave either surface pointed at an invisible id. A folder may contain folders/pages; a page is a leaf in the organization projection. Page-content reorder, rename, and move actions originate in the tray and target the full graph. This removes hidden canvas selections, inert tree controls, and disagreement between the highlighted row and visible layer.
+5. **Rebuild the tray as a document reader inside shared chrome.** Replace the flat implementation in [src/ui/Tray.tsx](C:/Users/clayt/Development/mndmap/src/ui/Tray.tsx) with the shared tray frame and mndmap-owned tabs:
+  - **Content:** a linear, emitted-order outline with section depth shown by restrained indentation; markdown prose rendered in place; tables as compact tables; code as code; lists/tasks as lists—not pills or canvas blocks. Rows expand for detail without changing the canvas selection. Section controls permit rename and deterministic reorder among siblings; moving content to another page uses an explicit destination action rather than free-form nesting drag.
+  - **Metadata:** source, user-facing frontmatter fields, tags, and suggestion controls grouped into labeled rows. Machine-only fields stay hidden unless they are needed to explain a construct.
+  - **Links:** compact inbound/outbound page relations grouped by target and type, with counts and suggestion actions; expanding a group reveals the original content-level relations.
+   Folder selection gets a concise child folder/page summary instead of a document outline. Empty pages, missing relation targets, invalid markdown, and no-selection states each get a deliberate empty state. Keep all construct semantics and editing decisions in mndmap; do not add markdown-specific behavior to mndflow.
+6. **Adopt the shared visual shell and remove local imitation CSS.** Replace mndmap’s custom header/grid in [src/ui/base.css](C:/Users/clayt/Development/mndmap/src/ui/base.css) with the new shell components and icons, use the same compact icon actions/theme treatment as mndflow, opt into Viewer breadcrumbs, and reduce [src/ui/styles.css](C:/Users/clayt/Development/mndmap/src/ui/styles.css) to document-content styling only. The tray should collapse and open at mndflow’s proportions rather than permanently consuming 38% of the workspace.
+   Import only `@mnd/kit/react.css` for Explorer/Viewer paint and the new shell stylesheet for chrome; do not copy the ramp, card table, or React Flow CSS. Prefix mndmap content classes so generic names such as `.body`, `.content`, `.fields`, and `.tray` cannot collide with shared sheets. Preserve the project-specific blank drop target and use the shell's notice slot for reports/errors after loading.
+7. **Lock the design with tests and runtime evidence.** Add a `test` script and mndmap unit/component tests proving that organization rows and canvas nodes contain only folders/pages, projections preserve valid parents and document order, reveal synchronizes layer/selection, undo rebuilds both projections, and the tray renders each construct semantically. Test the full-docs sample plus the map and requirements fixtures so dense markdown and typed rows cannot regress independently. Update [vitest.config.ts](C:/Users/clayt/Development/mndmap/vitest.config.ts), the browser driver in [.claude/skills/run-mndmap/driver.mjs](C:/Users/clayt/Development/mndmap/.claude/skills/run-mndmap/driver.mjs), and stale product docs. The command gates are:
+   - mndflow: `npm test`, `npm run typecheck`, `npm run build -w @mnd/web`, kit build/release, and release integrity/reproducibility check.
+   - mndmap: `npm test`, `npm run typecheck`, `npm run build`, `npm run roundtrip`, and the real-browser smoke suite against all three fixtures.
+   Run browser checks at desktop and constrained widths across all themes; compare mndmap and mndflow screenshots for header height, Explorer bar/width, canvas chrome, tray behavior, spacing, borders, and typography. Include keyboard focus, tab semantics, long names, overflow, empty pages, and high-density documents.
 
-| Panel | Is | Does |
-|---|---|---|
-| **explorer** | the kit's `Explorer`, `menu={false}` | the tree of sets, pages and sections. Drag re-parents and reorders; a click reveals; a double click renames |
-| **canvas** | the kit's `Viewer` | the open layer, drawn. A click picks, a double click walks in or out. Nothing is dragged |
-| **content tray** | mndmap's own, in the tray's style | the picked block: its name, tags, fields, its body rendered as markdown, its relations, and the suggestion chips for each |
+## Cross-repository delivery order
 
-**What a gesture may do, and nothing else**: move, reorder, group, rename, tag, and pick a suggestion. A body is read. A relation is retyped from a suggestion and never drawn or deleted. **Every gesture is a data edit on the held graph** followed by `validate`; a graph that would not validate is refused with the fault, and the stack holds the one before it.
+1. Capture before screenshots and turn the current integration failures into tests without changing behavior.
+2. Implement shared mndflow chrome and Explorer/Viewer contracts; migrate mndflow's own web app onto them and prove no visual or interaction regression there.
+3. Commit the mndflow changes, build the kit from that clean SHA, run the release integrity check, and record version/SHA/integrity together.
+4. Vendor that exact tarball into mndmap; update `package.json`, lockfile, and `mndflow-pin.json`; prove the installed artifact matches the release before changing mndmap UI code.
+5. Implement and test mndmap's pure projections, then correct interaction state, then build the tray, and only then remove the local shell imitation.
+6. Run the complete headless and browser verification matrix; update screenshots and documentation only from the verified final behavior.
 
-**Loading**: a folder dropped on the page is translated there; a `workspace.json` dropped on the page is opened as is, with its sidecar if one sits beside it; `?file=` fetches one. **Emit** hands back a zip.
+Each repository remains independently green at its handoff. Do not develop mndmap against an uncommitted sibling package or publish a kit whose source SHA cannot reproduce it.
 
+## Acceptance criteria
 
-## Emit
+- Explorer contains one collection root plus folders and pages; no row is a section, item, table cell, code fence, holder, or synthetic `ws` block.
+- Viewer receives the same organization projection and never draws a content block. Selecting any Explorer row makes that row visible and selected on the canvas.
+- Explorer exposes no inert create/delete/filter controls. Rename and multi-item move use the typed payloads and work through undo.
+- A selected page opens a tray whose Content tab reads in emitted order and visually distinguishes headings, prose, tables, lists/tasks, code, and typed records without raw ids or machine fields.
+- Metadata and Links are separate questions, not appended below the document body. Suggestions appear beside the value they would change.
+- Header, Explorer bar, canvas chrome, tray bar/tabs, controls, borders, spacing, typography, themes, collapse/full-height behavior, and responsive overflow are shared with or visually identical to mndflow.
+- `@mnd/kit/react.css` remains sufficient for embedded Viewer/Explorer users; shell adoption is opt-in and does not globally impose the full app layout.
+- Translate → dashboard edit → undo → emit and all existing round trips remain byte-stable where no edit was made. The full graph still opens directly in mndflow without conversion.
+- The new kit rebuilds reproducibly from its recorded clean commit, and mndmap's pin records the exact version, SHA, tarball, and integrity in use.
 
-**A collection, and the mdsite handoff, as one zip.** The rules carried over from the export contract stand: internal links rewrite to emitted paths and anchors, local assets copy under `_assets/`, static MDX imports rewrite, duplicate paths and anchors block, and `mdsite.yaml` at the root carries `content: .` and a generated `nav_order`.
+## Ownership boundary
 
-- **A relation that the body already links is emitted nowhere else.** One the body does not link — retyped, or the target moved — goes to front matter `related`.
-- **A moved section takes its body with it** and its links follow, because the rewrite reads the graph's paths.
-- **Nothing is written to the source.** The zip is the second collection, and publishing it is mndsite's.
+- **mndflow changes:** generic shell/header/tray-frame chrome, icons, optional Viewer breadcrumbs, and a typed/capability-aware Explorer seam.
+- **mndmap changes:** organization/content projections, which nodes are visible, page-link aggregation, document semantics, tray tabs/renderers, suggestions, and edit rules.
+- **No mndflow change needed:** Graph schema, projection/layout algorithms, card notation/theme ramp, or a markdown-aware tray. Those are already general or correctly project-specific.
 
-
-## Order of work
-
-| | Step | Done when |
-|---|---|---|
-| **M0** | **Strip.** Keep `parser.ts`, the rewriting in `export/index.ts`, `mdsite-config.ts` and `metadata.ts`. Delete the working store, segments, service, REST, routes, the UI and `selectors`. Pin the kit at 0.4.0 | `tsc --noEmit` clean against the real types |
-| **M1** | **The reader**, default map. `mndmap translate <root>` writes `workspace.json` and a report of what became what | mndflow's CLI checks, folds and projects the file untouched, and the web app opens it |
-| **M2** | **The emitter.** `mndmap emit workspace.json` | translate then emit over mndflow's own `docs/` diffs clean |
-| **M3** | **The dashboard.** Three panels over a loaded file; the six gestures as data edits; undo | reorganize a section, the canvas and tray follow, undo returns it |
-| **M4** | **In the browser.** Folder drop in, zip out, `mdsite.yaml` inside | one run from a folder to a zip with no CLI |
-| **M5** | **Suggestions.** The Taggly adapter, the sidecar, chips in the tray | pick one, it lands in the graph, it emits |
-| **M6** | **The rest of the map.** `overrides`, table as grid, list as group, fence as block, task as block | each round-trips a fixture |
-| **M7** | **Requirements.** A second map: a table under a chosen heading reads as `req.requirement` rows, and links as `satisfies` and `verifies` | the first traceability corpus reads in and emits |
-
-**M2 before M3 on purpose.** The dashboard is the product, but the round trip proves the graph carries the content, and it is cheap to run headless.
-
-**Depends on**: `remark` as today; `jszip` for the zip; the File System Access API for the drop; Taggly by fetch. In mndflow, the kit re-packed at HEAD and the `doc` package shipped.
-
-
-## Open
-
-| | |
-|---|---|
-| **a renamed heading** | `source.at` changes with it. Fine while the graph is authoritative for the run; it matters only if a run is ever resumed |
-| **a section moved into a section it links** | the rewrite handles the path; whether the `related` entry should then be dropped is unanswered |
-| **MDX** | expressions are opaque today and stay opaque. Whether a component instance is a block is a map question for later |
-| **what `beyond: block` means for depth** | a heading past the depth as a block flattens under the last block in depth. Whether that is wanted, or the depth should simply be raised, is decided by use |
