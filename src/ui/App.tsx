@@ -1,9 +1,9 @@
 /** Three panels over one held graph.
  *
- *  Explorer draws the organization projection (sets + pages only). The Viewer
- *  draws {@link viewingGraph}: organization plus each page's document as
- *  nested, vertically stacked canvas blocks. The tray reads the full graph.
- *  Edits always apply to the full graph; undo is the stack of graphs behind it. */
+ *  Explorer and Viewer both draw {@link viewingGraph}: sets, pages, and each
+ *  page's document as a lattice of blocks. {@link organizationGraph} is only
+ *  for the workspace root check. The tray reads the full held graph. Edits
+ *  always apply there; undo is the stack of graphs behind it. */
 
 import { Explorer, Icon, Viewer, WorkspaceHeader, TrayFrame } from "@mnd/kit/react";
 import { children, project, write, type Id } from "@mnd/kit";
@@ -14,7 +14,7 @@ import { apply, Stack, type Edit } from "../edits.js";
 import {
   add_sources, from_drop, from_query, from_workspace, pick_sources, save, to_zip, type Loaded,
 } from "./load.js";
-import { organizationGraph, viewingGraph, pageOf } from "./project.js";
+import { heldId, isProjectionId, organizationGraph, viewingGraph } from "./project.js";
 import { Tray, type TrayTab } from "./Tray.js";
 import { file_name, WorkspacePanel, type Display } from "./Workspace.js";
 
@@ -62,28 +62,37 @@ export function App() {
     [loaded?.graph],
   );
 
-  /** Sets/pages for the tree; pages carry their content so the stage can descend. */
+  /** One projection for the tree and the stage. */
   const view = useMemo(
     () => (loaded?.graph ? viewingGraph(loaded.graph) : null),
     [loaded?.graph],
   );
 
-  /** Explorer stays on organization ids; the stage may be a section under a page. */
-  const explorerLayer = useMemo(() => {
-    if (!org || !loaded?.graph || !layer) return layer;
-    if (org.blocks[layer]) return layer;
-    return pageOf(loaded.graph, layer) ?? org.root;
-  }, [org, loaded?.graph, layer]);
-
-  /** Selection may name org ids or content ids visible on the stage. */
+  /** Selection and open layer must stay inside the viewing projection. */
   useEffect(() => {
-    if (!org || !view || !loaded?.graph) return;
+    if (!view || !loaded?.graph) return;
     if (layer && !view.blocks[layer]) setLayer(TIER_ROOT);
     setPicked((held) => {
       const next = held.filter((id) => view.blocks[id]);
       return next.length === held.length ? held : next;
     });
-  }, [org, view, layer, loaded?.graph]);
+  }, [view, layer, loaded?.graph]);
+
+  /** Keep the path to the open layer expanded in the explorer. */
+  useEffect(() => {
+    if (!view || !layer) return;
+    const ancestors: Id[] = [];
+    let at = view.blocks[layer]?.parent ?? null;
+    while (at) {
+      ancestors.push(at);
+      at = view.blocks[at]?.parent ?? null;
+    }
+    if (!ancestors.length) return;
+    setFolded((held) => {
+      const next = held.filter((id) => !ancestors.includes(id));
+      return next.length === held.length ? held : next;
+    });
+  }, [view, layer]);
 
   useEffect(() => {
     if (!org) return;
@@ -212,15 +221,22 @@ export function App() {
   /** Explorer intents: reveal / rename / move / create / delete. */
   const act = useCallback((name: string, args?: Record<string, unknown>) => {
     const graph = loaded?.graph;
-    if (!graph || !org) return;
-    const id = args?.id === undefined ? null : String(args.id);
+    if (!graph || !org || !view) return;
+    const id = args?.id === undefined ? null : String(args.id) as Id;
 
     if (name === "reveal" && id) {
-      const parent = org.blocks[id]?.parent ?? TIER_ROOT;
+      /** A row that holds children opens as the layer; a leaf is shown on its parent. */
+      if (children(view, id).length) {
+        setLayer(id);
+        setPicked([]);
+        return;
+      }
+      const parent = view.blocks[id]?.parent ?? TIER_ROOT;
       setLayer(parent);
       setPicked([id]);
       return;
     }
+    if (id && isProjectionId(id, graph)) return;
     if (name === "rename" && id && typeof args?.name === "string") {
       edit({ do: "rename", id, name: String(args.name) });
       return;
@@ -240,10 +256,13 @@ export function App() {
       return;
     }
     if (name === "move" && args?.parent && Array.isArray(args.ids)) {
-      const parent = String(args.parent);
+      const rawParent = String(args.parent) as Id;
+      const parent = heldId(rawParent, graph) ?? (graph.blocks[rawParent] ? rawParent : null);
+      if (!parent) return;
       const before = typeof args.before === "string" ? String(args.before) : null;
       const kin = children(graph, parent).map((block) => block.id);
       for (const moveId of args.ids as Id[]) {
+        if (isProjectionId(moveId, graph)) continue;
         const siblings = kin.filter((each) => each !== moveId && !(args.ids as Id[]).includes(each));
         const at = before ? siblings.indexOf(before) : undefined;
         edit({
@@ -254,7 +273,7 @@ export function App() {
         });
       }
     }
-  }, [edit, loaded?.graph, org]);
+  }, [edit, loaded?.graph, org, view]);
 
   const snapshot = () => {
     if (!loaded) return;
@@ -306,8 +325,11 @@ export function App() {
   const graph = loaded.graph;
   const atRoot = focus === org.root || (focus === null && layer === org.root);
   const focusId = focus
-    ?? (atRoot ? org.root : (layer && graph.blocks[layer] ? layer : null));
-  const focusBlock = focusId ? graph.blocks[focusId] : undefined;
+    ?? (atRoot ? org.root : (layer && view.blocks[layer] ? layer : null));
+  const trayFocus = focusId ? (heldId(focusId, graph) ?? (graph.blocks[focusId] ? focusId : null)) : null;
+  const focusBlock = trayFocus && graph.blocks[trayFocus]
+    ? graph.blocks[trayFocus]
+    : (focusId ? view.blocks[focusId] : undefined);
   const word = atRoot ? "workspace"
     : focusBlock?.type === PAGE ? "page"
     : focusBlock?.type === SET ? "folder"
@@ -357,9 +379,9 @@ export function App() {
       {note ? <p className="mm-status chat">{note}</p> : null}
 
       <Explorer
-        graph={org}
-        open={explorerLayer}
-        picked={picked.filter((id) => org.blocks[id])}
+        graph={view}
+        open={layer}
+        picked={picked.filter((id) => view.blocks[id])}
         folded={folded}
         menu={false}
         tools={{ filter: false, fold: false }}
@@ -408,7 +430,8 @@ export function App() {
             <WorkspacePanel graph={graph} root={org.root} display={display}
               onEdit={edit} onDisplay={setDisplay} />
           ) : (
-            <Tray graph={graph} org={org} picked={focusId} suggestions={loaded.suggestions}
+            <Tray graph={graph} org={org} picked={trayFocus && graph.blocks[trayFocus] ? trayFocus : null}
+              suggestions={loaded.suggestions}
               tab={tab === "Workspace" ? "Content" : tab} onEdit={edit} />
           )}
         </TrayFrame>

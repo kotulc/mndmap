@@ -1,31 +1,36 @@
 /** UI projections over the full translated graph.
  *
- *  Organization (Explorer) shows only sets and pages. The Viewer uses
- *  {@link viewingGraph}: pages keep their set parents, and each page carries
- *  its document as nested canvas blocks — `#`…`###` sections, list/task/code
- *  cards, and table grids — stacked in source order. A sole H1 is hoisted so
- *  opening a page lands on its real sections; free list-groups are exploded
- *  into cards (the kit draws those groups empty). The tray still reads the
- *  full held graph. Neither projection mutates it. */
+ *  {@link viewingGraph} is the one tree both Explorer and Viewer read: sets,
+ *  pages, and each page's document as a lattice of blocks. Free and grid stay
+ *  the only arrangements — a row or column is `x`/`y` on a free layer; a
+ *  markdown table stays a grid holder. Body, prose, and stand-in blocks exist
+ *  only in the projection. {@link organizationGraph} stays sets and pages for
+ *  the workspace root check. Neither projection mutates the held graph. */
 
 import { at_cell, children, is_holder, type Block, type Graph, type Id } from "@mnd/kit";
 import {
-  CODE, DONE, ITEM, LANG, LEVEL, PAGE, SECTION, SET, TIER_ROOT,
+  CODE, DONE, ITEM, LANG, LEVEL, LINK, PAGE, SECTION, SET, TIER_ROOT,
   field, type Holder,
 } from "../doc.js";
 import { KEY } from "../read.js";
 
+type Edge = Graph["edges"][string];
+
 /** Fields that choose a construct, not something the tray lists as metadata. */
 const MACHINE = new Set([LEVEL, LANG, DONE, KEY, "title"]);
 
-/** Lattice step used to stack a page's blocks down the canvas. */
+/** Lattice step used to seat a page's blocks on the canvas. */
 const UNIT = 24;
 const CARD = { w: 5 * UNIT, h: 2 * UNIT };
 const GAP = UNIT;
 const CELL = { w: CARD.w + GAP * 2, h: CARD.h + GAP * 2 };
+const STRIDE_X = CARD.w + GAP;
+const STRIDE_Y = CARD.h + GAP;
 
 /** Heading depths drawn as their own section blocks (`#` … `###`). */
 export const SECTION_DEPTH = 3;
+
+const REQUIREMENT = "req.requirement";
 
 export type OutlineRow =
   | { kind: "section"; id: Id; depth: number; title: string; level?: number }
@@ -94,37 +99,37 @@ export function organizationGraph(graph: Graph): Graph {
     });
   }
 
-  const types = new Set(Object.values(blocks).map((block) => block.type).filter(Boolean) as Id[]);
-  const defs: Graph["defs"] = {};
-  const packages: Graph["packages"] = {};
-  for (const type of types) {
-    let at: Id | undefined = type;
-    while (at && graph.defs[at] && !defs[at]) {
-      const def = graph.defs[at] as NonNullable<(typeof graph.defs)[string]>;
-      defs[at] = def;
-      if (def.from && graph.packages[def.from]) packages[def.from] = graph.packages[def.from]!;
-      at = def.extends;
-    }
-  }
-  for (const [id, pack] of Object.entries(graph.packages)) {
-    if (packages[id]) continue;
-    if (Object.keys(defs).some((type) => graph.defs[type]?.from === id)) packages[id] = pack;
-  }
-
   return {
     root: TIER_ROOT,
     blocks,
     edges: {},
     holders: {},
-    defs: Object.keys(defs).length ? defs : { ...graph.defs },
-    packages: Object.keys(packages).length ? packages : { ...graph.packages },
+    ...vocab(graph, blocks),
   };
 }
 
 /** A page's document as canvas blocks: sections (#…###), prose/code, and
- *  table grids — nested by heading membership, stacked top-to-bottom in
- *  source order. Opening a section shows its children the same way. */
+ *  table grids — nested by heading membership, seated on a free lattice. */
 export function contentGraph(graph: Graph, pageId: Id, maxLevel = SECTION_DEPTH): Graph | null {
+  const prepared = prepareContent(graph, pageId, maxLevel);
+  if (!prepared) return null;
+  introduceBodies(prepared.blocks, prepared.holders, pageId);
+  placeLattice(prepared.blocks, prepared.holders, {}, pageId);
+  return {
+    root: pageId,
+    blocks: prepared.blocks,
+    edges: {},
+    holders: prepared.holders,
+    ...vocab(graph, prepared.blocks),
+  };
+}
+
+/** Collect, hoist, explode, and label a page's content — no coordinates yet. */
+function prepareContent(
+  graph: Graph,
+  pageId: Id,
+  maxLevel: number,
+): { blocks: Record<Id, Block>; holders: Record<Id, Holder> } | null {
   const page = graph.blocks[pageId];
   if (!page || page.type !== PAGE) return null;
 
@@ -189,24 +194,11 @@ export function contentGraph(graph: Graph, pageId: Id, maxLevel = SECTION_DEPTH)
     holders[id] = copy;
   }
 
-  /** A lone H1 that mirrors the page is an extra click with no new meaning —
-   *  hoist its children onto the page so opening the page shows ##…### and
-   *  the content blocks directly. */
   hoist_sole_title(blocks, holders, pageId);
-  /** Free list-groups draw empty in the kit; explode them into stacked cards.
-   *  Table grids stay as holders. Name each body-only block from its prose. */
   explode_list_groups(blocks, holders);
   label_bodies(blocks);
 
-  stack_layers(blocks, holders, pageId);
-
-  return {
-    root: pageId,
-    blocks,
-    edges: {},
-    holders,
-    ...vocab(graph, blocks),
-  };
+  return { blocks, holders };
 }
 
 /** When the page's only loose child is a level-1 section, reparent that
@@ -273,9 +265,10 @@ function label_bodies(blocks: Record<Id, Block>): void {
   }
 }
 
-/** Organization plus every page's content tree — what the Viewer draws.
- *  Pages keep their set parents so a double-click can descend into them;
- *  Explorer still uses {@link organizationGraph} alone. */
+/** Organization plus every page's content tree — Explorer and Viewer both
+ *  read this. Parents in the projection are the tree; coordinates seat the
+ *  lattice; edges include `contains:` body links and stand-ins for off-layer
+ *  requirement ends. */
 export function viewingGraph(graph: Graph, maxLevel = SECTION_DEPTH): Graph {
   const org = organizationGraph(graph);
   const blocks: Record<Id, Block> = { ...org.blocks };
@@ -283,11 +276,10 @@ export function viewingGraph(graph: Graph, maxLevel = SECTION_DEPTH): Graph {
 
   for (const block of Object.values(org.blocks)) {
     if (block.type !== PAGE) continue;
-    const content = contentGraph(graph, block.id, maxLevel);
-    if (!content) continue;
-    for (const [id, held] of Object.entries(content.blocks)) {
+    const prepared = prepareContent(graph, block.id, maxLevel);
+    if (!prepared) continue;
+    for (const [id, held] of Object.entries(prepared.blocks)) {
       if (id === block.id) {
-        /** Keep the org parent so the page still sits in its set. */
         const prior = org.blocks[id]!;
         blocks[id] = {
           ...held,
@@ -300,54 +292,377 @@ export function viewingGraph(graph: Graph, maxLevel = SECTION_DEPTH): Graph {
       }
       blocks[id] = held;
     }
-    Object.assign(holders, content.holders);
+    Object.assign(holders, prepared.holders);
+  }
+
+  for (const block of Object.values(org.blocks)) {
+    if (block.type === PAGE) introduceBodies(blocks, holders, block.id);
+  }
+
+  const edges: Record<Id, Edge> = {};
+  add_contains_edges(blocks, edges);
+  add_requirement_stands(graph, blocks, edges);
+  copy_edges(graph, blocks, edges);
+
+  for (const block of Object.values(org.blocks)) {
+    if (block.type === PAGE) placeLattice(blocks, holders, edges, block.id);
+  }
+
+  /** Sets and pages stay without coordinates — free lays them in a row. */
+  for (const block of Object.values(blocks)) {
+    if (block.type === SET || block.type === PAGE) {
+      delete block.x;
+      delete block.y;
+    }
   }
 
   return {
     root: org.root,
     blocks,
-    edges: {},
+    edges,
     holders,
     ...vocab(graph, blocks),
   };
 }
 
-/** Stack each layer's loose units (non-celled blocks + holders) vertically. */
-function stack_layers(
+/** Projection-only body and prose blocks. Children of a section move onto its
+ *  body; the section and body stay siblings under the same parent. */
+function introduceBodies(
   blocks: Record<Id, Block>,
   holders: Record<Id, Holder>,
   pageId: Id,
 ): void {
-  for (const parent of Object.keys(blocks)) {
-    const loose: { id: Id; order: number; kind: "block" | "holder" }[] = [];
+  const page = blocks[pageId];
+  if (page?.type === PAGE && page.body?.trim()) {
+    const proseId = `prose:${pageId}` as Id;
+    if (!blocks[proseId]) {
+      blocks[proseId] = {
+        id: proseId,
+        parent: pageId,
+        type: ITEM,
+        name: first_line(page.body) || "Prose",
+        body: page.body,
+        /** Ahead of every section so placeLattice seats it at row 0. */
+        order: 0,
+      };
+    }
+  }
+
+  let guard = 0;
+  while (guard++ < 64) {
+    const section = Object.values(blocks).find((block) => {
+      if (block.type !== SECTION) return false;
+      return section_has_kept_children(blocks, holders, block.id);
+    });
+    if (!section) break;
+
+    const bodyId = `body:${section.id}` as Id;
+    if (blocks[bodyId]) break;
+
+    const parent = section.parent;
+    const order = (section.order ?? 0) + 0.5;
+    blocks[bodyId] = {
+      id: bodyId,
+      parent,
+      type: ITEM,
+      name: section.name ?? "Body",
+      order,
+    };
+
     for (const block of Object.values(blocks)) {
-      if (block.id === pageId || block.parent !== parent || block.group) continue;
-      /** A page that still sits under a set is laid out by the set, not here. */
-      if (block.type === PAGE || block.type === SET) continue;
-      loose.push({ id: block.id, order: block.order ?? 0, kind: "block" });
+      if (block.parent === section.id && !block.group) block.parent = bodyId;
     }
     for (const holder of Object.values(holders)) {
-      if (holder.parent !== parent || holder.group) continue;
-      loose.push({ id: holder.id, order: holder.order ?? 0, kind: "holder" });
-    }
-    if (!loose.length) continue;
-    loose.sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
-    let y = 0;
-    loose.forEach((row, index) => {
-      if (row.kind === "block") {
-        const block = blocks[row.id]!;
-        block.order = index + 1;
-        block.x = 0;
-        block.y = y;
-        y += CARD.h + GAP;
-        return;
+      if (holder.parent === section.id) {
+        holder.parent = bodyId;
+        if (holder.of === section.id) holder.of = bodyId;
       }
+    }
+  }
+
+  renumber_orders(blocks, holders);
+}
+
+function section_has_kept_children(
+  blocks: Record<Id, Block>,
+  holders: Record<Id, Holder>,
+  sectionId: Id,
+): boolean {
+  for (const block of Object.values(blocks)) {
+    if (block.parent === sectionId && !block.group) return true;
+  }
+  for (const holder of Object.values(holders)) {
+    if (holder.parent === sectionId && !holder.group) return true;
+  }
+  return false;
+}
+
+function add_contains_edges(blocks: Record<Id, Block>, edges: Record<Id, Edge>): void {
+  for (const block of Object.values(blocks)) {
+    if (!block.id.startsWith("body:")) continue;
+    const sectionId = block.id.slice("body:".length) as Id;
+    if (!blocks[sectionId]) continue;
+    const id = `contains:${sectionId}` as Id;
+    edges[id] = {
+      id,
+      from: sectionId,
+      to: block.id,
+      type: LINK,
+      dir: "forward",
+      name: "contains",
+    };
+  }
+}
+
+/** Stand-ins for requirement edges whose other end is off the body layer. */
+function add_requirement_stands(
+  graph: Graph,
+  blocks: Record<Id, Block>,
+  edges: Record<Id, Edge>,
+): void {
+  for (const edge of Object.values(graph.edges)) {
+    const reqId = requirement_end(blocks, edge.from, edge.to);
+    if (!reqId) continue;
+    const otherId = edge.from === reqId ? edge.to : edge.from;
+    const req = blocks[reqId]!;
+    const bodyParent = req.parent;
+    if (!bodyParent || !String(bodyParent).startsWith("body:")) continue;
+
+    const other = blocks[otherId];
+    if (other && other.parent === bodyParent && !other.group) continue;
+
+    const standId = `stand:${edge.id}` as Id;
+    if (blocks[standId]) continue;
+    const source = graph.blocks[otherId];
+    const name = source?.name ?? edge.name ?? otherId;
+    blocks[standId] = {
+      id: standId,
+      parent: bodyParent,
+      type: ITEM,
+      name,
+      order: (req.order ?? 0) + 0.1,
+    };
+
+    const from = edge.from === reqId ? reqId : standId;
+    const to = edge.to === reqId ? reqId : standId;
+    edges[edge.id] = { ...edge, from, to };
+  }
+}
+
+function requirement_end(blocks: Record<Id, Block>, from: Id, to: Id): Id | null {
+  if (blocks[from]?.type === REQUIREMENT) return from;
+  if (blocks[to]?.type === REQUIREMENT) return to;
+  return null;
+}
+
+function copy_edges(graph: Graph, blocks: Record<Id, Block>, edges: Record<Id, Edge>): void {
+  for (const edge of Object.values(graph.edges)) {
+    if (edges[edge.id]) continue;
+    if (!blocks[edge.from] || !blocks[edge.to]) continue;
+    edges[edge.id] = { ...edge };
+  }
+}
+
+/** Seat every loose content block on the free lattice. Runs stack downward;
+ *  inside a run, slots are row-major. */
+function placeLattice(
+  blocks: Record<Id, Block>,
+  holders: Record<Id, Holder>,
+  edges: Record<Id, Edge>,
+  pageId: Id,
+): void {
+  const parents = new Set<Id>();
+  for (const block of Object.values(blocks)) {
+    if (block.parent) parents.add(block.parent);
+  }
+  for (const holder of Object.values(holders)) {
+    if (holder.parent) parents.add(holder.parent);
+  }
+  parents.add(pageId);
+
+  for (const parent of parents) {
+    if (!blocks[parent] && parent !== pageId) continue;
+    place_layer(blocks, holders, edges, parent, pageId);
+  }
+}
+
+function place_layer(
+  blocks: Record<Id, Block>,
+  holders: Record<Id, Holder>,
+  edges: Record<Id, Edge>,
+  parent: Id,
+  pageId: Id,
+): void {
+  type Unit = { id: Id; order: number; kind: "block" | "holder" };
+  const loose: Unit[] = [];
+  for (const block of Object.values(blocks)) {
+    if (block.id === pageId || block.parent !== parent || block.group) continue;
+    if (block.type === PAGE || block.type === SET) continue;
+    loose.push({ id: block.id, order: block.order ?? 0, kind: "block" });
+  }
+  for (const holder of Object.values(holders)) {
+    if (holder.parent !== parent || holder.group) continue;
+    loose.push({ id: holder.id, order: holder.order ?? 0, kind: "holder" });
+  }
+  if (!loose.length) return;
+  loose.sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
+
+  const placed = new Set<Id>();
+  let y = 0;
+  let index = 0;
+
+  const seat_block = (id: Id, col: number, rowY: number, order: number) => {
+    const block = blocks[id]!;
+    block.x = col * STRIDE_X;
+    block.y = rowY;
+    block.order = order;
+    placed.add(id);
+  };
+
+  while (index < loose.length) {
+    const row = loose[index]!;
+    if (placed.has(row.id)) {
+      index += 1;
+      continue;
+    }
+
+    if (row.kind === "holder") {
       const holder = holders[row.id]!;
-      holder.order = index + 1;
       holder.x = 0;
       holder.y = y;
+      holder.order = ++index;
+      placed.add(row.id);
       const rows = holder.arrangement === "grid" ? Math.max(1, holder.rows ?? 1) : 1;
       y += Math.max(CARD.h, rows * CELL.h) + GAP;
+      continue;
+    }
+
+    const block = blocks[row.id]!;
+
+    if (block.type === SECTION) {
+      const order = ++index;
+      seat_block(block.id, 0, y, order);
+      const bodyId = `body:${block.id}` as Id;
+      if (blocks[bodyId] && blocks[bodyId]!.parent === parent) {
+        seat_block(bodyId, 1, y, order + 1);
+      }
+      y += STRIDE_Y;
+      continue;
+    }
+
+    if (block.id.startsWith("body:")) {
+      /** Placed with its section; orphan bodies take column 0. */
+      if (!placed.has(block.id)) {
+        seat_block(block.id, 0, y, ++index);
+        y += STRIDE_Y;
+      } else {
+        index += 1;
+      }
+      continue;
+    }
+
+    if (block.type === REQUIREMENT) {
+      const order = ++index;
+      seat_block(block.id, 0, y, order);
+      let col = 1;
+      for (const stand of stand_ins_for(blocks, edges, block.id, parent)) {
+        seat_block(stand.id, col, y, order + col);
+        col += 1;
+      }
+      y += STRIDE_Y;
+      continue;
+    }
+
+    if (block.id.startsWith("stand:")) {
+      if (!placed.has(block.id)) {
+        seat_block(block.id, 0, y, ++index);
+        y += STRIDE_Y;
+      } else {
+        index += 1;
+      }
+      continue;
+    }
+
+    /** Consecutive peer leaves (items, tasks, fences, prose) share a run. */
+    const peers: Id[] = [];
+    while (index < loose.length) {
+      const next = loose[index]!;
+      if (next.kind !== "block" || placed.has(next.id)) break;
+      const peer = blocks[next.id]!;
+      if (!is_peer_leaf(peer)) break;
+      peers.push(next.id);
+      index += 1;
+    }
+    if (!peers.length) {
+      seat_block(block.id, 0, y, ++index);
+      y += STRIDE_Y;
+      continue;
+    }
+
+    const cols = peer_columns(peers.length);
+    peers.forEach((id, at) => {
+      const col = at % cols;
+      const rowAt = Math.floor(at / cols);
+      seat_block(id, col, y + rowAt * STRIDE_Y, at + 1);
+    });
+    const rowsUsed = Math.ceil(peers.length / cols);
+    y += rowsUsed * STRIDE_Y;
+  }
+}
+
+function is_peer_leaf(block: Block): boolean {
+  if (block.type === SECTION || block.type === REQUIREMENT) return false;
+  if (block.id.startsWith("body:") || block.id.startsWith("stand:")) return false;
+  return true;
+}
+
+function peer_columns(n: number): number {
+  if (n <= 3) return 1;
+  return Math.min(4, Math.ceil(Math.sqrt(n)));
+}
+
+/** Stand-ins on this layer that belong beside a requirement. */
+function stand_ins_for(
+  blocks: Record<Id, Block>,
+  edges: Record<Id, Edge>,
+  reqId: Id,
+  parent: Id,
+): Block[] {
+  const out: Block[] = [];
+  for (const edge of Object.values(edges)) {
+    if (edge.from !== reqId && edge.to !== reqId) continue;
+    const standId = `stand:${edge.id}` as Id;
+    const stand = blocks[standId];
+    if (!stand || stand.parent !== parent) continue;
+    out.push(stand);
+  }
+  return out.sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.id.localeCompare(b.id));
+}
+
+function first_line(text: string): string {
+  const line = text.trim().split(/\r?\n/)[0]?.trim() ?? "";
+  return line.length > 48 ? `${line.slice(0, 45)}…` : line;
+}
+
+function renumber_orders(blocks: Record<Id, Block>, holders: Record<Id, Holder>): void {
+  const parents = new Set<Id | null>();
+  for (const block of Object.values(blocks)) parents.add(block.parent);
+  for (const holder of Object.values(holders)) parents.add(holder.parent ?? null);
+
+  for (const parent of parents) {
+    const units: { id: Id; order: number; kind: "block" | "holder" }[] = [];
+    for (const block of Object.values(blocks)) {
+      if (block.parent !== parent || block.group) continue;
+      units.push({ id: block.id, order: block.order ?? 0, kind: "block" });
+    }
+    for (const holder of Object.values(holders)) {
+      if ((holder.parent ?? null) !== parent || holder.group) continue;
+      units.push({ id: holder.id, order: holder.order ?? 0, kind: "holder" });
+    }
+    units.sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
+    units.forEach((unit, index) => {
+      if (unit.kind === "block") blocks[unit.id]!.order = index + 1;
+      else holders[unit.id]!.order = index + 1;
     });
   }
 }
@@ -386,6 +701,26 @@ export function pageOf(graph: Graph, id: Id | null | undefined): Id | null {
     if (block.type === PAGE) return at;
     at = block.parent;
   }
+  return null;
+}
+
+/** Whether an id exists only in a projection (missing from the held graph). */
+export function isProjectionId(id: Id, held: Graph): boolean {
+  return !held.blocks[id] && !held.holders[id];
+}
+
+/** Held-graph id to edit when a projection row is selected, if any. */
+export function heldId(id: Id, held: Graph): Id | null {
+  if (held.blocks[id]) return id;
+  if (id.startsWith("body:")) {
+    const sectionId = id.slice("body:".length) as Id;
+    return held.blocks[sectionId] ? sectionId : null;
+  }
+  if (id.startsWith("prose:")) {
+    const pageId = id.slice("prose:".length) as Id;
+    return held.blocks[pageId] ? pageId : null;
+  }
+  if (id.startsWith("stand:")) return null;
   return null;
 }
 
@@ -576,3 +911,4 @@ function group_list(graph: Graph, holder: Holder, depth: number): OutlineRow | n
 /** Re-export for tests. */
 export const ORG_TYPES = [SET, PAGE] as const;
 export const CONTENT_TYPES = [SECTION, ITEM, CODE] as const;
+export const LATTICE = { CARD, GAP, CELL, STRIDE_X, STRIDE_Y } as const;

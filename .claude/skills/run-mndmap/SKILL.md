@@ -91,10 +91,10 @@ invisible in the DOM dump and obvious in the image.
 
 ### The four checks worth running every time
 
-- **`rows` must hold sets and pages only.** A row reading `item`, `section`,
-  or `table` means the tree is showing content. Cells, list items, fences and
-  sections are the tray's outline; the explorer is handed
-  `organizationGraph` and nothing else.
+- **`rows` lists sets, pages, and the content blocks under the open page.** A
+  row for a section, body, item, or stand-in is expected once that page is
+  expanded. Cells remain tray outline, not explorer rows for a folded root —
+  but opening a page walks its lattice in the tree.
 - **`boxes` must say all on panel.** See below.
 - **`undo` must walk all the way back.** Every gesture pushes the graph it was
   applied to. A gesture that edits in place instead of returning a new graph
