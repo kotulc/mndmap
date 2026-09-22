@@ -2,10 +2,10 @@
 
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { open, type Graph } from "@mnd/kit";
+import { open, children, type Graph } from "@mnd/kit";
 import { CODE, ITEM, PAGE, SECTION, SET, TIER_ROOT } from "../src/doc.js";
 import { KEY } from "../src/read.js";
-import { documentOutline, organizationGraph, pageOf } from "../src/ui/project.js";
+import { documentOutline, organizationGraph, contentGraph, viewingGraph, pageOf } from "../src/ui/project.js";
 
 function tiny(): Graph {
   return {
@@ -96,6 +96,49 @@ describe("documentOutline", () => {
       expect(rows[1].headers).toEqual(["Name"]);
       expect(rows[1].rows).toEqual([["Alpha"], ["Beta"]]);
     }
+  });
+});
+
+describe("contentGraph", () => {
+  it("puts sections and content on the page, with grids kept as holders", () => {
+    const graph = open(readFileSync("fixtures/map/workspace.json", "utf8")).graph;
+    const pageId = "page:index.md";
+    const view = contentGraph(graph, pageId);
+    expect(view).not.toBeNull();
+    expect(view!.root).toBe(pageId);
+    expect(view!.blocks[pageId]?.parent).toBeNull();
+    const sections = Object.values(view!.blocks).filter((b) => b.type === SECTION);
+    expect(sections.length).toBeGreaterThan(0);
+    expect(Object.values(view!.holders).some((h) => h.arrangement === "grid")).toBe(true);
+    expect(Object.values(view!.holders).some((h) => h.arrangement === "free")).toBe(false);
+    const top = children(view!, pageId);
+    expect(top.every((b) => b.type === SECTION || b.type === ITEM || b.type === CODE)).toBe(true);
+    /** Sole H1 is hoisted — page opens onto ## sections, not a redundant title. */
+    expect(top.map((b) => b.name)).toEqual([
+      "Lists", "Tasks", "Fences", "Tables", "Reference",
+    ]);
+    const lists = children(view!, "sec:index.md#map-fixture/lists");
+    expect(lists.map((b) => b.name)).toEqual([
+      "first member with a [link](guide/detail.md)",
+      "second member",
+      "third member",
+    ]);
+    const tasks = children(view!, "sec:index.md#map-fixture/tasks");
+    expect(tasks.map((b) => b.name)).toEqual(["done already", "still to do"]);
+    // stacked: each top-level unit has an explicit y
+    for (const child of top) {
+      expect(child.x).toBe(0);
+      expect(typeof child.y).toBe("number");
+    }
+  });
+
+  it("lets a page descend because it holds sections in the viewing graph", () => {
+    const graph = open(readFileSync("fixtures/map/workspace.json", "utf8")).graph;
+    const view = viewingGraph(graph);
+    const pageId = "page:index.md";
+    expect(view.blocks[pageId]?.parent).toBe(TIER_ROOT);
+    expect(children(view, pageId).some((b) => b.type === SECTION)).toBe(true);
+    expect(organizationGraph(graph).blocks[children(view, pageId)[0]!.id]).toBeUndefined();
   });
 });
 

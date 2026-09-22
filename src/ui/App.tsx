@@ -1,19 +1,20 @@
 /** Three panels over one held graph.
  *
- *  Explorer and Viewer share the organization projection (sets + pages).
- *  The tray reads the full graph as a document outline. Edits always apply
- *  to the full graph; undo is the stack of graphs behind it. */
+ *  Explorer draws the organization projection (sets + pages only). The Viewer
+ *  draws {@link viewingGraph}: organization plus each page's document as
+ *  nested, vertically stacked canvas blocks. The tray reads the full graph.
+ *  Edits always apply to the full graph; undo is the stack of graphs behind it. */
 
 import { Explorer, Icon, Viewer, WorkspaceHeader, TrayFrame } from "@mnd/kit/react";
 import { children, project, write, type Id } from "@mnd/kit";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { createPortal } from "react-dom";
-import { PAGE, SET, TIER_ROOT } from "../doc.js";
+import { PAGE, SECTION, SET, TIER_ROOT } from "../doc.js";
 import { apply, Stack, type Edit } from "../edits.js";
 import {
   add_sources, from_drop, from_query, from_workspace, pick_sources, save, to_zip, type Loaded,
 } from "./load.js";
-import { organizationGraph } from "./project.js";
+import { organizationGraph, viewingGraph, pageOf } from "./project.js";
 import { Tray, type TrayTab } from "./Tray.js";
 import { file_name, WorkspacePanel, type Display } from "./Workspace.js";
 
@@ -61,15 +62,28 @@ export function App() {
     [loaded?.graph],
   );
 
-  /** Selection must name organization ids visible on the projection. */
+  /** Sets/pages for the tree; pages carry their content so the stage can descend. */
+  const view = useMemo(
+    () => (loaded?.graph ? viewingGraph(loaded.graph) : null),
+    [loaded?.graph],
+  );
+
+  /** Explorer stays on organization ids; the stage may be a section under a page. */
+  const explorerLayer = useMemo(() => {
+    if (!org || !loaded?.graph || !layer) return layer;
+    if (org.blocks[layer]) return layer;
+    return pageOf(loaded.graph, layer) ?? org.root;
+  }, [org, loaded?.graph, layer]);
+
+  /** Selection may name org ids or content ids visible on the stage. */
   useEffect(() => {
-    if (!org) return;
-    if (layer && !org.blocks[layer]) setLayer(TIER_ROOT);
+    if (!org || !view || !loaded?.graph) return;
+    if (layer && !view.blocks[layer]) setLayer(TIER_ROOT);
     setPicked((held) => {
-      const next = held.filter((id) => org.blocks[id]);
+      const next = held.filter((id) => view.blocks[id]);
       return next.length === held.length ? held : next;
     });
-  }, [org, layer]);
+  }, [org, view, layer, loaded?.graph]);
 
   useEffect(() => {
     if (!org) return;
@@ -183,6 +197,18 @@ export function App() {
     } catch (error: unknown) { setNote(say(error)); }
   };
 
+  /** Kit only descends on gesture kind "box", but a card's face is entirely
+   *  label or brim — so capture here and open any node that still has kids. */
+  const enter_card = useCallback((event: MouseEvent) => {
+    if (!view) return;
+    const node = (event.target as Element | null)?.closest?.(".react-flow__node");
+    const id = node?.getAttribute("data-id") as Id | null;
+    if (!id || id.startsWith("__")) return;
+    if (!children(view, id).length) return;
+    setLayer(id);
+    setPicked([]);
+  }, [view]);
+
   /** Explorer intents: reveal / rename / move / create / delete. */
   const act = useCallback((name: string, args?: Record<string, unknown>) => {
     const graph = loaded?.graph;
@@ -267,7 +293,7 @@ export function App() {
     setNote("Drop a folder of markdown, or a workspace.json.");
   };
 
-  if (!loaded || !org) {
+  if (!loaded || !org || !view) {
     return (
       <main className={`app blank${over ? " over" : ""}`}
         onDragOver={(event) => { event.preventDefault(); setOver(true); }}
@@ -279,11 +305,13 @@ export function App() {
 
   const graph = loaded.graph;
   const atRoot = focus === org.root || (focus === null && layer === org.root);
-  const focusId = focus ?? (atRoot ? org.root : null);
+  const focusId = focus
+    ?? (atRoot ? org.root : (layer && graph.blocks[layer] ? layer : null));
   const focusBlock = focusId ? graph.blocks[focusId] : undefined;
   const word = atRoot ? "workspace"
     : focusBlock?.type === PAGE ? "page"
     : focusBlock?.type === SET ? "folder"
+    : focusBlock?.type === SECTION ? "section"
     : "collection";
   const trayName = focusBlock?.name ?? loaded.name;
   const tabs: TrayTab[] = atRoot
@@ -330,8 +358,8 @@ export function App() {
 
       <Explorer
         graph={org}
-        open={layer}
-        picked={picked}
+        open={explorerLayer}
+        picked={picked.filter((id) => org.blocks[id])}
         folded={folded}
         menu={false}
         tools={{ filter: false, fold: false }}
@@ -360,10 +388,10 @@ export function App() {
       ) : null}
 
       <main>
-        <div className="mm-canvas">
-          <Viewer graph={org} layer={layer} picked={picked} chrome={{ crumbs: true }}
+        <div className="mm-canvas" onDoubleClickCapture={enter_card}>
+          <Viewer graph={view} layer={layer} picked={picked} chrome={{ crumbs: true }}
             onLook={setLayer} onPick={setPicked} />
-          {display.legend ? <Legend graph={org} layer={layer} at={display.corner} /> : null}
+          {display.legend ? <Legend graph={view} layer={layer} at={display.corner} /> : null}
         </div>
         <TrayFrame
           open={trayOpen}
@@ -400,7 +428,7 @@ function stored_theme(): ThemeName {
 
 /** The key to the open layer: one row per kind the drawing actually shows. */
 function Legend({ graph, layer, at }: {
-  graph: NonNullable<ReturnType<typeof organizationGraph>>;
+  graph: import("@mnd/kit").Graph;
   layer: Id | null;
   at: Display["corner"];
 }) {
