@@ -64,13 +64,47 @@ export function is_markdown(source: string | undefined): boolean {
 }
 
 
-/** The folder the dev server reads for us, so a run opens on something.
+/** Hand the browser a file to save. */
+export function save(blob: Blob, name: string): void {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = name;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+/** The document the dev server reads for us, so a run opens on something.
  *  Dev only — the built page starts empty and waits for a real folder. */
 export async function dev_sample(): Promise<{ name: string; files: SourceFile[] } | null> {
   if (!import.meta.env.DEV) return null;
   const response = await fetch("/sample.json");
   if (!response.ok) return null;
   return response.json() as Promise<{ name: string; files: SourceFile[] }>;
+}
+
+/** Ask for one markdown file. The single-document case, which is the one
+ *  being designed against: its content becomes the blocks, not the file. */
+export async function pick_file(): Promise<{ name: string; files: SourceFile[] } | null> {
+  const picker = window as Window & {
+    showOpenFilePicker?: (options?: {
+      multiple?: boolean;
+      types?: { description?: string; accept: Record<string, string[]> }[];
+    }) => Promise<FileSystemFileHandle[]>;
+  };
+  if (typeof picker.showOpenFilePicker !== "function") return pick_via_input(false);
+  try {
+    const [handle] = await picker.showOpenFilePicker({
+      multiple: false,
+      types: [{ description: "Markdown", accept: { "text/markdown": [".md", ".mdx"] } }],
+    });
+    if (!handle) return null;
+    const file = await handle.getFile();
+    return { name: handle.name, files: [{ path: handle.name, text: await file.text() }] };
+  } catch (error: unknown) {
+    if (error instanceof DOMException && error.name === "AbortError") return null;
+    throw error;
+  }
 }
 
 /** Ask for a folder, and read everything under it. */
@@ -121,16 +155,17 @@ async function gather(handle: FileSystemDirectoryHandle, prefix: string): Promis
 }
 
 /** Last resort where the File System Access API is missing. */
-function pick_via_input(): Promise<{ name: string; files: SourceFile[] } | null> {
+function pick_via_input(folder = true): Promise<{ name: string; files: SourceFile[] } | null> {
   return new Promise((resolve) => {
     const input = document.createElement("input");
     input.type = "file";
-    input.multiple = true;
-    input.setAttribute("webkitdirectory", "");
+    input.multiple = folder;
+    if (folder) input.setAttribute("webkitdirectory", "");
+    else input.accept = ".md,.mdx,text/markdown";
     input.addEventListener("change", async () => {
       const list = [...(input.files ?? [])];
       const files: SourceFile[] = [];
-      let name = "folder";
+      let name = folder ? "folder" : list[0]?.name ?? "file";
       for (const file of list) {
         const full = file.webkitRelativePath || file.name;
         const parts = full.split("/");

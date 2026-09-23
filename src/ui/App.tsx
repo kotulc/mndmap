@@ -1,15 +1,17 @@
 /** The shell over one held graph.
  *
- *  A folder picked or dropped on the page is read into a graph of file and
- *  folder blocks. The explorer and the canvas both draw it; the tray shows
- *  the picked file's text. Edits apply to the held graph, and undo is the
- *  stack of graphs behind it. */
+ *  One markdown document is read into a graph of content blocks — a block per
+ *  heading, paragraph, list, fence, quote, image, rule and table row. A folder
+ *  is filed by path instead, one block per file. The explorer and the canvas
+ *  both draw the graph; the tray shows what is picked. Edits apply to the held
+ *  graph, and undo is the stack of graphs behind it. */
 
 import { Explorer, Icon, TrayFrame, Viewer, WorkspaceHeader } from "@mnd/kit/react";
-import { children, type Graph, type Id } from "@mnd/kit";
+import { children, open, write, type Block, type Graph, type Id } from "@mnd/kit";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apply, Stack, type Edit } from "../edits.js";
-import { dev_sample, drop_folder, pick_folder, scan } from "../scan.js";
+import { read } from "../read.js";
+import { dev_sample, drop_folder, pick_file, pick_folder, save, scan, type SourceFile } from "../scan.js";
 import { Tray } from "./Tray.js";
 
 type ThemeName = "retro" | "modern" | "light";
@@ -21,7 +23,7 @@ const THEMES = [
   { name: "light", icon: "theme_light" },
 ] as const;
 
-const BLANK = "Drop a folder, or use the bar to pick one.";
+const BLANK = "Drop a markdown document or a folder, or pick one below.";
 
 
 export function App() {
@@ -34,7 +36,9 @@ export function App() {
   const [over, setOver] = useState(false);
   const [trayOpen, setTrayOpen] = useState(true);
   const [trayBig, setTrayBig] = useState(false);
+  const [lattice, setLattice] = useState(true);
   const stack = useRef(new Stack());
+  const file = useRef<HTMLInputElement>(null);
   const look = THEMES.find((item) => item.name === theme) ?? THEMES[0]!;
   const nextLook = THEMES[(THEMES.indexOf(look) + 1) % THEMES.length]!;
 
@@ -43,13 +47,13 @@ export function App() {
     try { localStorage.setItem("mnd.theme", theme); } catch { /* a private window */ }
   }, [theme]);
 
-  const settle = (next: Graph, name: string, files: number) => {
+  const settle = (next: Graph, name: string, said: string) => {
     stack.current = new Stack();
     setGraph(next);
     setLayer(next.root);
     setPicked([]);
     setFolded([]);
-    setNote(`${name}: ${files} files.`);
+    setNote(`${name}: ${said}.`);
   };
 
   const edit = useCallback((change: Edit) => {
@@ -73,10 +77,18 @@ export function App() {
     });
   }, []);
 
-  const open_folder = async (found: { name: string; files: { path: string; text: string }[] } | null) => {
+  /** One markdown file is read into content blocks — the case being designed
+   *  against. Anything else is filed by path, one block per file and folder. */
+  const open_source = (found: { name: string; files: SourceFile[] } | null) => {
     if (!found) return;
-    if (!found.files.length) { setNote("That folder holds nothing."); return; }
-    settle(scan(found.name, found.files), found.name, found.files.length);
+    const [only] = found.files;
+    if (!only) { setNote("Nothing to read there."); return; }
+    if (found.files.length === 1 && /\.(md|mdx)$/i.test(only.path)) {
+      const graph = read(found.name, only.text);
+      settle(graph, found.name, `${Object.keys(graph.blocks).length - 1} blocks`);
+      return;
+    }
+    settle(scan(found.name, found.files), found.name, `${found.files.length} files`);
   };
 
   /** A notification, not a status line: it says its piece and goes. The blank
@@ -91,7 +103,7 @@ export function App() {
   /** Open on the dev server's sample folder, where it serves one. */
   useEffect(() => {
     void dev_sample()
-      .then((found) => { if (found) void open_folder(found); })
+      .then((found) => { if (found) open_source(found); })
       .catch(() => setNote(BLANK));
   }, []);
 
@@ -101,15 +113,34 @@ export function App() {
     setNote("Reading…");
     try {
       const found = await drop_folder(event.dataTransfer);
-      if (!found) { setNote("Drop a folder."); return; }
-      await open_folder(found);
+      if (!found) { setNote("Drop a folder, or a markdown file."); return; }
+      open_source(found);
     } catch (error: unknown) { setNote(say(error)); }
   };
 
-  const add = async () => {
+  /** A document by default; a folder when the shift key is down. */
+  const add = async (folder: boolean) => {
     setNote("Reading…");
-    try { await open_folder(await pick_folder()); }
+    try { open_source(await (folder ? pick_folder() : pick_file())); }
     catch (error: unknown) { setNote(say(error)); }
+  };
+
+  /** The graph as a file, and back. Import replaces the session. */
+  const to_file = () => {
+    if (!graph) return;
+    const name = (graph.blocks[graph.root]?.name ?? "workspace").replace(/\.[^.]+$/, "");
+    try {
+      save(new Blob([write(graph, name)], { type: "application/json" }), `${name}.json`);
+      setNote("Exported.");
+    } catch (error: unknown) { setNote(say(error)); }
+  };
+
+  const from_file = async (file: File) => {
+    try {
+      const opened = open(await file.text());
+      if (opened.faults.length) { setNote(opened.faults.map((f) => f.what).join("\n")); return; }
+      settle(opened.graph, file.name, `${Object.keys(opened.graph.blocks).length - 1} blocks`);
+    } catch (error: unknown) { setNote(say(error)); }
   };
 
   /** Explorer intents: reveal / rename / move / create / delete. */
@@ -161,7 +192,14 @@ export function App() {
         onDragOver={(event) => { event.preventDefault(); setOver(true); }}
         onDragLeave={() => setOver(false)} onDrop={drop}>
         <p className="mm-status">{note}</p>
-        <button type="button" className="mm-pick" onClick={() => void add()}>Pick a folder</button>
+        <span className="mm-picks">
+          <button type="button" className="mm-pick" onClick={() => void add(false)}>
+            Pick a document
+          </button>
+          <button type="button" className="mm-pick" onClick={() => void add(true)}>
+            Pick a folder
+          </button>
+        </span>
       </main>
     );
   }
@@ -179,12 +217,26 @@ export function App() {
           disabled={stack.current.depth === 0}><Icon name="undo" /></button>
         <button type="button" title="redo" aria-label="Redo" onClick={() => step(false)}
           disabled={stack.current.forward === 0}><Icon name="redo" /></button>
-        <button type="button" title="open a folder" aria-label="Open a folder"
-          onClick={() => void add()}><Icon name="add_folder" /></button>
+        <button type="button" aria-label="Open a document"
+          title="open a markdown document — shift+click for a folder"
+          onClick={(event) => void add(event.shiftKey)}><Icon name="add_folder" /></button>
+        <button type="button" title="export this workspace" aria-label="Export"
+          onClick={to_file}><Icon name="export_workspace" /></button>
+        <button type="button" title="import a workspace" aria-label="Import"
+          onClick={() => file.current?.click()}><Icon name="import_file" /></button>
+        <button type="button" aria-pressed={lattice}
+          title={lattice ? "hide the lattice" : "show the lattice"} aria-label="Lattice"
+          onClick={() => setLattice((on) => !on)}><Icon name="role_table" /></button>
         <button type="button" title={`theme: ${theme} — click for ${nextLook.name}`}
           aria-label={`theme: ${theme}`} onClick={() => setTheme(nextLook.name)}>
           <Icon name={look.icon} />
         </button>
+        <input ref={file} type="file" accept="application/json,.json" hidden
+          onChange={(event) => {
+            const chosen = event.target.files?.[0];
+            event.target.value = "";
+            if (chosen) void from_file(chosen);
+          }} />
       </WorkspaceHeader>
 
       <Explorer graph={graph} open={layer} picked={picked} folded={folded} menu
@@ -195,14 +247,15 @@ export function App() {
 
       <main>
         <div className="mm-canvas">
-          <Viewer graph={graph} layer={layer} picked={picked} chrome={{ crumbs: true }}
+          <Viewer graph={graph} layer={layer} picked={picked}
+            chrome={{ crumbs: true, lattice }}
             onLook={setLayer} onPick={setPicked} />
           {note ? (
             <p className="strip mm-strip" onClick={() => setNote("")}>{note}</p>
           ) : null}
         </div>
         <TrayFrame open={trayOpen} onOpen={setTrayOpen} big={trayBig} onBig={setTrayBig}
-          word={block?.type === "folder" ? "folder" : "file"}
+          word={word_for(graph, block)}
           name={block?.name ?? "nothing picked"}
           tabs={["Content"]} tab="Content" onTab={() => undefined}>
           <Tray graph={graph} picked={focus} />
@@ -212,6 +265,13 @@ export function App() {
   );
 }
 
+
+/** What the tray calls what is picked: the definition's own word. */
+function word_for(graph: Graph, block: Block | undefined): string {
+  if (!block) return "nothing";
+  if (!block.type) return "block";
+  return graph.defs[block.type]?.name ?? block.type;
+}
 
 function stored_theme(): ThemeName {
   try {
