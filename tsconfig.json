@@ -10,18 +10,14 @@
     "moduleResolution": "NodeNext",
     "jsx": "react-jsx",
     "strict": true,
-    "declaration": true,
-    "outDir": "dist",
-    "rootDir": ".",
+    "noEmit": true,
     "skipLibCheck": true,
     "noUncheckedIndexedAccess": true,
-    "exactOptionalPropertyTypes": true,
-    "resolveJsonModule": true
+    "exactOptionalPropertyTypes": true
   },
   "include": [
     "src/**/*.ts",
     "src/**/*.tsx",
-    "scripts/**/*.ts",
     "vite.config.ts"
   ]
 }

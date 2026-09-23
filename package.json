@@ -1,65 +1,35 @@
 {
   "name": "mndmap",
-  "version": "1.0.0",
-  "description": "A browser dashboard for translated content, markdown first.",
+  "version": "0.1.0",
+  "description": "A browser shell over a folder of markdown, one block per file.",
+  "private": true,
   "type": "module",
-  "files": [
-    "dist/src"
-  ],
   "engines": {
     "node": ">=20"
   },
-  "exports": "./dist/src/index.js",
-  "types": "./dist/src/index.d.ts",
-  "bin": {
-    "mndmap": "./dist/src/cli.js"
-  },
   "scripts": {
-    "build": "npm run build:core && npm run build:ui",
-    "build:core": "tsc -p tsconfig.json",
-    "build:ui": "vite build",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run",
-    "sample": "tsx scripts/sample.ts",
-    "predev": "npm run sample",
     "dev": "vite --port 7342 --open",
+    "build": "vite build",
     "preview": "vite preview --outDir dist/ui --port 7342",
-    "cli": "tsx src/cli.ts",
-    "roundtrip": "tsx scripts/roundtrip.ts . && tsx scripts/roundtrip.ts fixtures/map && tsx scripts/roundtrip.ts fixtures/req"
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/kotulc/mndmap.git"
   },
-  "keywords": [],
-  "author": "",
   "license": "MIT",
-  "bugs": {
-    "url": "https://github.com/kotulc/mndmap/issues"
-  },
-  "homepage": "https://github.com/kotulc/mndmap#readme",
   "dependencies": {
     "@mnd/kit": "file:vendor/mnd-kit-0.7.0.tgz",
     "@xyflow/react": "^12.11.6",
-    "jszip": "^3.10.2",
-    "marked": "^18.0.13",
+    "marked": "^18.0.14",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8",
-    "remark-frontmatter": "^5.0.0",
-    "remark-gfm": "^4.0.1",
-    "remark-mdx": "^3.1.1",
-    "remark-parse": "^11.0.0",
-    "unified": "^11.0.5",
-    "yaml": "^2.9.0"
+    "react-dom": "^19.2.8"
   },
   "devDependencies": {
-    "@types/node": "^26.2.0",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^6.1.0",
-    "tsx": "^4.23.12",
     "typescript": "^7.0.2",
-    "vite": "^8.2.2",
-    "vitest": "^3.2.4"
+    "vite": "^8.2.2"
   }
 }

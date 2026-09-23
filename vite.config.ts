@@ -1,28 +1,25 @@
-import { readFile } from "node:fs/promises";
-import { resolve, sep } from "node:path";
+import { readdir, readFile } from "node:fs/promises";
+import { join, relative, resolve } from "node:path";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
 
-/** The sample workspaces, served in dev only.
+/** The sample folder, served in dev only.
  *
- *  They sit in `samples/` rather than `public/` so the built bundle never
- *  carries them: what ships is the page, and a real run drops a folder on
- *  it. `npm run sample` regenerates them from this repo's own corpora. */
-function samples(): Plugin {
-  const dir = resolve("samples");
+ *  `samples/docs` is markdown on disk like any other folder — this just reads
+ *  it so the dev server opens on something. The built page serves nothing:
+ *  there, an empty tab is the truth, and a run starts with a folder. */
+function sample(): Plugin {
+  const root = resolve("samples/docs");
   return {
-    name: "mndmap-samples",
+    name: "mndmap-sample",
     apply: "serve",
     configureServer(server) {
       server.middlewares.use((request, response, next) => {
-        const at = (request.url ?? "").split("?")[0] ?? "";
-        if (!at.startsWith("/samples/")) return next();
-        const file = resolve(at.slice(1));
-        if (!file.startsWith(dir + sep)) return next();
-        readFile(file)
-          .then((text) => {
+        if ((request.url ?? "").split("?")[0] !== "/sample.json") return next();
+        walk(root)
+          .then((files) => {
             response.setHeader("content-type", "application/json");
-            response.end(text);
+            response.end(JSON.stringify({ name: "docs", files }));
           })
           .catch(() => next());
       });
@@ -30,10 +27,21 @@ function samples(): Plugin {
   };
 }
 
-/** The browser is the product: one page, no server, and no proxy — translate
- *  and emit both run here, from a folder dropped on it. */
+/** Every file under the sample folder, by its path from the root. */
+async function walk(dir: string): Promise<{ path: string; text: string }[]> {
+  const out: { path: string; text: string }[] = [];
+  for (const entry of await readdir(dir, { withFileTypes: true })) {
+    const at = join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...await walk(at));
+    else out.push({ path: relative(resolve("samples/docs"), at).split(/[\\/]/).join("/"), text: await readFile(at, "utf8") });
+  }
+  return out;
+}
+
+/** The browser is the product: one page, no server. A run starts with a
+ *  folder picked or dropped on the page, read where it is. */
 export default defineConfig({
-  plugins: [react(), samples()],
+  plugins: [react(), sample()],
   resolve: {
     // The kit is vendored and carries its own React. One instance, so hooks
     // resolve against this app's copy.

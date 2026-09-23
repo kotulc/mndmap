@@ -1,15 +1,3 @@
 node_modules/
 dist/
-site/
-out/
 *.tsbuildinfo
-
-# The translator's own output. `samples/` is committed on purpose — it is what
-# the dev server opens on, and `npm run sample` regenerates it.
-/workspace.json
-/suggestions.json
-fixtures/*/workspace.json
-.mndmap/
-
-# Local shallow clone of mndflow for side-by-side comparison — never commit.
-.compare-mndflow/
