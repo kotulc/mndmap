@@ -14,6 +14,7 @@ Nothing is uploaded and nothing is kept between runs. The page is the whole of i
 | Layer | What it holds |
 |---|---|
 | **parser** | markdown → blocks. General, minimal, one document at a time. |
+| **nesting** | content sits under its heading; thin layers dissolve back into the one above |
 | **markdown package** | what a heading, table, list, fence or link *is*, as definitions |
 | **definitions** | vocabulary over the content — keywords, tags, concepts |
 | **shell** | explorer, canvas, tray, navbar — all from `@mnd/kit` |
@@ -73,3 +74,13 @@ Then re-pin with a real release when the kit change is settled: run
 | `samples/sample.md` | the document being designed against |
 | `samples/docs/` | a folder corpus, for later |
 | `vendor/` | the pinned `@mnd/kit` release |
+
+## How a document is shaped
+
+1. Each heading holds what follows it, until a heading of the same level or higher.
+2. A layer holding fewer than **5** blocks gives its heading containers up: their
+   content comes up beside them, and the layer is measured again.
+3. Blocks are stacked down the page, not rowed across it.
+
+Rule 2 is why `# Title` sits *with* its sections instead of being a box you
+must open to see anything. The threshold is `read(name, text, least)`.

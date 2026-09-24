@@ -18,12 +18,28 @@ import {
 /** How much of a block's text a card shows before it is cut. */
 const LABEL = 48;
 
+/** How few blocks a layer may hold before its headings dissolve into it.
+ *  A layer under this is not worth descending into. */
+const LEAST = 5;
 
-/** A document as a graph: the file as the root, one block per element. */
-export function read(name: string, text: string): Graph {
+/** How far apart stacked blocks sit, in the kit's own units: a card is two
+ *  high, and one unit of air reads as a gap without losing the run. */
+const STEP = 72;
+
+
+/** A document as a graph: the file as the root, one block per element.
+ *
+ *  `least` is how few blocks a layer may hold before it stops being worth
+ *  descending into — see {@link fold}. */
+export function read(name: string, text: string, least = LEAST): Graph {
   const graph = with_markdown(base_graph());
   const root = graph.root;
   graph.blocks[root] = { ...graph.blocks[root]!, name, source: name };
+
+  /** The headings still open, outermost first. A heading holds what follows
+   *  it until one of the same level or higher closes it. */
+  const open: { id: Id; depth: number }[] = [];
+  const under = (): Id => open[open.length - 1]?.id ?? root;
 
   const seen = new Map<string, number>();
   const mint = (kind: string): Id => {
@@ -44,18 +60,23 @@ export function read(name: string, text: string): Graph {
     put({ id: mint("front"), parent: root, type: FRONT, name: "front matter", body: front });
   }
 
-  for (const token of marked.lexer(body)) walk(token, root);
+  for (const token of marked.lexer(body)) walk(token);
+  fold(graph, root, least);
+  seat(graph, root);
   return graph;
 
-  /** One token, filed under `parent`. */
-  function walk(token: Token, parent: Id): void {
+  /** One token, filed under whichever heading is open. */
+  function walk(token: Token): void {
+    const parent = under();
     switch (token.type) {
       case "heading": {
         const heading = token as Tokens.Heading;
-        put({
-          id: mint("heading"), parent, type: HEADING, name: heading.text,
+        while (open.length && open[open.length - 1]!.depth >= heading.depth) open.pop();
+        const held = put({
+          id: mint("heading"), parent: under(), type: HEADING, name: heading.text,
           fields: [field(LEVEL, "number", String(heading.depth))],
         });
+        open.push({ id: held.id, depth: heading.depth });
         return;
       }
       case "paragraph": {
@@ -136,6 +157,55 @@ export function read(name: string, text: string): Graph {
   }
 }
 
+
+/** Dissolve headings on any layer too thin to be worth descending into.
+ *
+ *  Nesting every heading leaves a root holding one box. So a layer under
+ *  `least` gives up its heading containers: their children come up beside
+ *  them, in the order they were written, and the layer is measured again.
+ *  A heading that has been dissolved is a plain block — the writing that
+ *  introduces the content beside it, which is how the page itself reads.
+ *
+ *  Only headings dissolve. A list owns its items and a table its rows,
+ *  whatever else is on the layer. */
+function fold(graph: Graph, layer: Id, least: number): void {
+  for (;;) {
+    const held = kids(graph, layer);
+    if (held.length >= least) break;
+    const holding = held.filter(
+      (block) => block.type === HEADING && kids(graph, block.id).length > 0,
+    );
+    if (!holding.length) break;
+    for (const heading of holding) {
+      for (const child of kids(graph, heading.id)) graph.blocks[child.id]!.parent = layer;
+    }
+  }
+
+  // Whatever still holds something is a layer of its own, measured the same way.
+  for (const block of kids(graph, layer)) {
+    if (kids(graph, block.id).length) fold(graph, block.id, least);
+  }
+}
+
+/** Stack a layer's blocks down the page, the way the document reads.
+ *
+ *  The kit rows blocks left to right when none says where it sits. A document
+ *  is read downwards, so each block is seated under the one before it. */
+function seat(graph: Graph, layer: Id): void {
+  let at = 0;
+  for (const block of kids(graph, layer)) {
+    graph.blocks[block.id] = { ...block, x: 0, y: at * STEP };
+    at += 1;
+    if (kids(graph, block.id).length) seat(graph, block.id);
+  }
+}
+
+/** A layer's blocks, in the order they were written. */
+function kids(graph: Graph, parent: Id): Block[] {
+  return Object.values(graph.blocks)
+    .filter((block) => block.parent === parent)
+    .sort((left, right) => (left.order ?? 0) - (right.order ?? 0));
+}
 
 /** The front matter, and the document without it. */
 function split_front(text: string): { front: string; body: string } {

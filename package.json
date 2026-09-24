@@ -11,6 +11,7 @@
     "dev": "node scripts/dev.mjs --open",
     "build": "vite build",
     "kit:types": "node scripts/kit-types.mjs",
+    "meta": "node scripts/meta.mjs",
     "preview": "vite preview --outDir dist/ui --port 7342",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
