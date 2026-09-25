@@ -2,17 +2,20 @@
  *
  *  One markdown document is read into a graph of content blocks — a block per
  *  heading, paragraph, list, fence, quote, image, rule and table row. A folder
- *  is filed by path instead, one block per file. The explorer and the canvas
- *  both draw the graph; the tray shows what is picked. Edits apply to the held
- *  graph, and undo is the stack of graphs behind it. */
+ *  is filed by path instead, one block per file. The explorer, the canvas and
+ *  the tray are the kit's, and so is what they share: the tray's state and how
+ *  the drawing looks. What is mndmap's is reading, the document stacked as it
+ *  reads, the preview tab, and reorganizing — edits apply to the held graph,
+ *  and undo is the stack of graphs behind it. */
 
-import { Explorer, Icon, TrayFrame, Viewer, WorkspaceHeader } from "@mnd/kit/react";
-import { children, open, write, type Block, type Graph, type Id } from "@mnd/kit";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Explorer, Icon, Tray, Viewer, WorkspaceHeader, useDisplay,
+         useTray } from "@mnd/kit/react";
+import { CARD, UNITS, children, open, write, type Graph, type Id } from "@mnd/kit";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apply, Stack, type Edit } from "../edits.js";
-import { read } from "../read.js";
+import { read, stacked } from "../read.js";
 import { dev_sample, drop_folder, pick_file, pick_folder, save, scan, type SourceFile } from "../scan.js";
-import { Tray } from "./Tray.js";
+import { Preview } from "./Preview.js";
 
 type ThemeName = "retro" | "modern" | "light";
 
@@ -23,20 +26,29 @@ const THEMES = [
   { name: "light", icon: "theme_light" },
 ] as const;
 
+/** Content is the point of a block here, so a card is wide enough to read a line of it and tall
+ *  enough for two. */
+const CONTENT_CARD = { w: 10, h: 3 };
+
 const BLANK = "Drop a markdown document or a folder, or pick one below.";
 
 
 export function App() {
   const [graph, setGraph] = useState<Graph | null>(null);
+  /** The open layer; `null` is the root, as the kit names it. */
   const [layer, setLayer] = useState<Id | null>(null);
   const [picked, setPicked] = useState<Id[]>([]);
+  /** Whose fields the canvas draws as a diagram, in place of the layer. */
+  const [fields, setFields] = useState<Id | null>(null);
   const [folded, setFolded] = useState<Id[]>([]);
   const [note, setNote] = useState(BLANK);
   const [theme, setTheme] = useState<ThemeName>(() => stored_theme());
   const [over, setOver] = useState(false);
-  const [trayOpen, setTrayOpen] = useState(true);
-  const [trayBig, setTrayBig] = useState(false);
-  const [lattice, setLattice] = useState(true);
+  const tray = useTray();
+  const { display, onDisplay } = useDisplay({ card: CONTENT_CARD, range: CARD });
+  /** The document stacked down the page at the card's height, the way it reads. */
+  const view = useMemo(() => graph && stacked(graph, (display.card.h + 1) * UNITS.unit),
+    [graph, display.card.h]);
   const stack = useRef(new Stack());
   const file = useRef<HTMLInputElement>(null);
   const look = THEMES.find((item) => item.name === theme) ?? THEMES[0]!;
@@ -50,8 +62,10 @@ export function App() {
   const settle = (next: Graph, name: string, said: string) => {
     stack.current = new Stack();
     setGraph(next);
-    setLayer(next.root);
+    setLayer(null);
     setPicked([]);
+    setFields(null);
+    tray.release();
     setFolded([]);
     setNote(`${name}: ${said}.`);
   };
@@ -143,15 +157,20 @@ export function App() {
     } catch (error: unknown) { setNote(say(error)); }
   };
 
+  /** A pick anywhere but the tray gives the tray back to the canvas. */
+  const pick = (ids: Id[]) => { setPicked(ids); tray.release(); };
+
   /** Explorer intents: reveal / rename / move / create / delete. */
   const act = useCallback((name: string, args?: Record<string, unknown>) => {
     if (!graph) return;
     const id = args?.id === undefined ? null : String(args.id) as Id;
+    /** The root layer is `null`, whatever id the graph gives it. */
+    const layer_of = (at: Id | null | undefined) => (!at || at === graph.root ? null : at);
 
     if (name === "reveal" && id) {
       /** A row that holds children opens as the layer; a leaf lights on its parent. */
-      if (children(graph, id).length) { setLayer(id); setPicked([]); return; }
-      setLayer(graph.blocks[id]?.parent ?? graph.root);
+      if (children(graph, id).length) { setLayer(layer_of(id)); setPicked([]); return; }
+      setLayer(layer_of(graph.blocks[id]?.parent));
       setPicked([id]);
       return;
     }
@@ -204,8 +223,14 @@ export function App() {
     );
   }
 
-  const focus = picked[0] ?? null;
-  const block = focus ? graph.blocks[focus] : undefined;
+  /** A pick on the canvas: a definition — a diagram's class card — is held by the tray, and a
+   *  diagram letting go of everything leaves the tray on what it was drawn for. */
+  const choose = (ids: Id[]) => {
+    const [first] = ids;
+    if (first && graph.defs[first]) { tray.onHold({ of: "id", id: first }); return; }
+    if (fields && !first) return;
+    pick(ids);
+  };
   const blocks = Math.max(0, Object.keys(graph.blocks).length - 1);
 
   return (
@@ -217,16 +242,10 @@ export function App() {
           disabled={stack.current.depth === 0}><Icon name="undo" /></button>
         <button type="button" title="redo" aria-label="Redo" onClick={() => step(false)}
           disabled={stack.current.forward === 0}><Icon name="redo" /></button>
-        <button type="button" aria-label="Open a document"
-          title="open a markdown document — shift+click for a folder"
-          onClick={(event) => void add(event.shiftKey)}><Icon name="add_folder" /></button>
         <button type="button" title="export this workspace" aria-label="Export"
           onClick={to_file}><Icon name="export_workspace" /></button>
         <button type="button" title="import a workspace" aria-label="Import"
           onClick={() => file.current?.click()}><Icon name="import_file" /></button>
-        <button type="button" aria-pressed={lattice}
-          title={lattice ? "hide the lattice" : "show the lattice"} aria-label="Lattice"
-          onClick={() => setLattice((on) => !on)}><Icon name="role_table" /></button>
         <button type="button" title={`theme: ${theme} — click for ${nextLook.name}`}
           aria-label={`theme: ${theme}`} onClick={() => setTheme(nextLook.name)}>
           <Icon name={look.icon} />
@@ -240,38 +259,42 @@ export function App() {
       </WorkspaceHeader>
 
       <Explorer graph={graph} open={layer} picked={picked} folded={folded} menu
+        tools={{ block: false }}
+        extra={
+          <button type="button" aria-label="Open a document"
+            title="open a markdown document — shift+click for a folder"
+            onClick={(event) => void add(event.shiftKey)}><Icon name="add_document" /></button>
+        }
+        section={tray.section(graph.root)}
+        onSection={(at) => { setPicked([]); tray.onSection(at); }}
         onAct={act}
         onFold={(id, shut) => setFolded((held) =>
           shut ? [...new Set([...held, id])] : held.filter((each) => each !== id))}
-        onPick={setPicked} />
+        onPick={pick} />
 
       <main>
         <div className="mm-canvas">
-          <Viewer graph={graph} layer={layer} picked={picked}
-            chrome={{ crumbs: true, lattice }}
-            onLook={setLayer} onPick={setPicked} />
+          <Viewer graph={view ?? graph} layer={layer} picked={picked} card={display.card}
+            chrome={{ crumbs: true, lattice: display.lattice ?? true, legend: display.legend,
+                      corner: display.corner }}
+            fields={fields} onFields={setFields}
+            onLook={setLayer} onPick={choose} />
           {note ? (
             <p className="strip mm-strip" onClick={() => setNote("")}>{note}</p>
           ) : null}
         </div>
-        <TrayFrame open={trayOpen} onOpen={setTrayOpen} big={trayBig} onBig={setTrayBig}
-          word={word_for(graph, block)}
-          name={block?.name ?? "nothing picked"}
-          tabs={["Content"]} tab="Content" onTab={() => undefined}>
-          <Tray graph={graph} picked={focus} />
-        </TrayFrame>
+        <Tray graph={graph} layer={layer} picked={picked}
+          open={tray.open} onOpen={tray.onOpen}
+          {...(tray.tab ? { tab: tray.tab } : {})} onTab={tray.onTab}
+          hold={tray.hold} onHold={tray.onHold}
+          onView={(home, id) => { setLayer(home); setFields(null); pick([id]); }}
+          display={display} onDisplay={onDisplay} onFields={setFields}
+          extras={[{ name: "preview", draw: (id) => <Preview graph={graph} picked={id} /> }]} />
       </main>
     </div>
   );
 }
 
-
-/** What the tray calls what is picked: the definition's own word. */
-function word_for(graph: Graph, block: Block | undefined): string {
-  if (!block) return "nothing";
-  if (!block.type) return "block";
-  return graph.defs[block.type]?.name ?? block.type;
-}
 
 function stored_theme(): ThemeName {
   try {

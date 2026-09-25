@@ -16,8 +16,9 @@ Nothing is uploaded and nothing is kept between runs. The page is the whole of i
 | **parser** | markdown → blocks. General, minimal, one document at a time. |
 | **nesting** | content sits under its heading; thin layers dissolve back into the one above |
 | **markdown package** | what a heading, table, list, fence or link *is*, as definitions |
+| **tables** | each distinct header row is a workspace definition — a schema, a field per column; each row is a usage carrying its values |
 | **definitions** | vocabulary over the content — keywords, tags, concepts |
-| **shell** | explorer, canvas, tray, navbar — all from `@mnd/kit` |
+| **shell** | explorer, canvas, tray, workspace display, fields diagram — all from `@mnd/kit`. mndmap adds only the `preview` tab and reorganizing |
 
 The parser and the package both live here. mndmap is the markdown-specific
 translator; mndflow is the general shell it draws with.
@@ -66,10 +67,13 @@ Then re-pin with a real release when the kit change is settled: run
 
 | Path | What |
 |---|---|
+| `src/read.ts` | one markdown document → blocks: nesting, tables as schemas, and the stack the canvas draws |
+| `src/packages/markdown.ts` | the markdown package: what each element is, as definitions |
 | `src/scan.ts` | a folder or file on disk → a graph of blocks |
 | `src/edits.ts` | move / order / rename / create / delete, and the undo stack |
-| `src/ui/App.tsx` | the shell: navbar, explorer, canvas, tray |
-| `src/ui/Tray.tsx` | the Content tab — the picked file, rendered |
+| `src/ui/App.tsx` | the shell, assembled from the kit: navbar, explorer, canvas, tray |
+| `src/ui/Preview.tsx` | the tray's `preview` tab — the picked block's markdown, rendered |
+| `docs/fields-plan.md` | the fields work: vision, steps and decisions |
 | `scripts/dev.mjs` | runs the app and the kit watcher together |
 | `samples/sample.md` | the document being designed against |
 | `samples/docs/` | a folder corpus, for later |
@@ -80,7 +84,13 @@ Then re-pin with a real release when the kit change is settled: run
 1. Each heading holds what follows it, until a heading of the same level or higher.
 2. A layer holding fewer than **5** blocks gives its heading containers up: their
    content comes up beside them, and the layer is measured again.
-3. Blocks are stacked down the page, not rowed across it.
+3. Blocks are stacked down the page, not rowed across it, one card height and
+   a unit of air apart — so they follow the card size the workspace tab sets.
+4. A block's body is its element as written: `## Title`, a fence with its
+   language, `- [x] item`. The package declares one field, a table's `key` —
+   the column that names its rows, the first unless set.
+5. A table's header is a schema. Tables sharing one share their definition, and
+   a column of numbers, yes/no or links reads as that form.
 
 Rule 2 is why `# Title` sits *with* its sections instead of being a box you
 must open to see anything. The threshold is `read(name, text, least)`.

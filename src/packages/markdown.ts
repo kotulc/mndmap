@@ -5,7 +5,7 @@
  *  branch in the reader. Every definition extends one of the kit's bases, so
  *  a document opens in mndflow with its look already on it. */
 
-import type { Definition, Id } from "@mnd/kit";
+import { isa, type Definition, type Graph, type Id } from "@mnd/kit";
 
 /** The package every definition below belongs to. */
 export const MD = "md";
@@ -22,25 +22,17 @@ export const IMAGE = "md.image";
 export const RULE = "md.rule";
 export const FRONT = "md.front";
 
-/** Fields a block carries, by the definition that declares them. */
-export const LEVEL = "level";
-export const LANG = "lang";
-export const ORDERED = "ordered";
-export const DONE = "done";
-export const SRC = "src";
-export const ALT = "alt";
-
-/** A heading's level, a fence's language — machine fields the tray does not
- *  list as metadata, because the definition already says what they are. */
-export const MACHINE = new Set([LEVEL, LANG, ORDERED, DONE, SRC, ALT]);
+/** The one field the package declares: which column of a table names its rows.
+ *  Everything else markdown says — a heading's level, a fence's language, a
+ *  task's tick — is written in the block's body, as the page writes it. */
+export const KEY = "key";
 
 
 /** Every definition in the package, in reading order. */
 export const DEFS: Definition[] = [
   {
     id: HEADING, from: MD, group: "block", extends: "block", name: "heading",
-    about: "A section heading. Its level is a field, not a nesting.",
-    fields: [{ name: LEVEL, form: "number", value: "1" }],
+    about: "A section heading. Its level is in its body, as the page writes it.",
   },
   {
     id: TEXT, from: MD, group: "block", extends: "block", name: "text",
@@ -49,35 +41,31 @@ export const DEFS: Definition[] = [
   {
     id: LIST, from: MD, group: "block", extends: "folder", name: "list",
     about: "An ordered, unordered or task list. Holds its items.",
-    fields: [{ name: ORDERED, form: "flag", value: "false" }],
   },
   {
     id: ITEM, from: MD, group: "block", extends: "block", name: "item",
-    about: "One entry in a list. A task item also carries whether it is done.",
-    fields: [{ name: DONE, form: "flag" }],
+    about: "One entry in a list. A task's tick is in its body.",
   },
   {
     id: CODE, from: MD, group: "block", extends: "block", name: "code",
-    about: "A fenced block. The fence's word is its language.",
-    fields: [{ name: LANG, form: "text" }],
+    about: "A fenced block, fence and all. Its language names it."
   },
   {
     id: QUOTE, from: MD, group: "block", extends: "block", name: "quote",
     about: "A block quote, however deeply nested.",
-    fields: [{ name: LEVEL, form: "number", value: "1" }],
   },
   {
     id: TABLE, from: MD, group: "block", extends: "folder", name: "table",
-    about: "A table. Holds one row block per record, and names its columns.",
+    about: "A table. Holds one row per record; its key column names each row.",
+    fields: [{ name: KEY, form: "text" }],
   },
   {
     id: ROW, from: MD, group: "block", extends: "block", name: "row",
-    about: "One record: a field per column, named by the table's header.",
+    about: "One record. Each table's header extends this with a field per column.",
   },
   {
     id: IMAGE, from: MD, group: "block", extends: "reference", name: "image",
-    about: "An image. It stands for something outside the document.",
-    fields: [{ name: SRC, form: "link" }, { name: ALT, form: "text" }],
+    about: "An image. Its source is where it lives; its alt text names it.",
   },
   {
     id: RULE, from: MD, group: "block", extends: "note", name: "rule",
@@ -88,6 +76,11 @@ export const DEFS: Definition[] = [
     about: "The document's own metadata, as it was written.",
   },
 ];
+
+/** Whether a block's type is a row — `md.row`, or a table's own schema over it. */
+export function is_row(graph: Graph, type: Id | undefined): boolean {
+  return isa(graph, type).some((d) => d.id === ROW);
+}
 
 /** The package as the graph files it. */
 export const PACKAGE = { id: MD, name: "markdown" };

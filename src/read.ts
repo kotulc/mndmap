@@ -5,14 +5,14 @@
  *  package's business, not this reader's — so a new element is a definition
  *  there plus one line here, and nothing else moves.
  *
- *  Every element is its own block. A heading does not hold what follows it;
- *  only a list holds its items and a table its rows. */
+ *  Every element is its own block, its body the element as written. A heading
+ *  holds what follows it until thin layers dissolve (see `fold`); a list holds
+ *  its items, and a table its rows — each row a usage of the table's schema. */
 
 import { marked, type Token, type Tokens } from "marked";
-import { base_graph, type Block, type Field, type Graph, type Id } from "@mnd/kit";
+import { base_graph, new_id, type Block, type Field, type Graph, type Id } from "@mnd/kit";
 import {
-  ALT, CODE, DONE, FRONT, HEADING, IMAGE, ITEM, LANG, LEVEL, LIST, ORDERED,
-  QUOTE, ROW, RULE, SRC, TABLE, TEXT, with_markdown,
+  CODE, FRONT, HEADING, IMAGE, ITEM, KEY, LIST, QUOTE, ROW, RULE, TABLE, TEXT, with_markdown,
 } from "./packages/markdown.js";
 
 /** How much of a block's text a card shows before it is cut. */
@@ -22,9 +22,11 @@ const LABEL = 48;
  *  A layer under this is not worth descending into. */
 const LEAST = 5;
 
-/** How far apart stacked blocks sit, in the kit's own units: a card is two
- *  high, and one unit of air reads as a gap without losing the run. */
-const STEP = 72;
+/** What a whole cell must be to read as a number, a flag or a link. */
+const NUMBER = /^-?(\d{1,3}(,\d{3})+|\d+)(\.\d+)?%?$/;
+const FLAG = /^(yes|no|true|false|y|n|x|✓)$/i;
+const LINK = /^\[([^\]]*)\]\(([^)\s]+)\)$/;
+const URL_ONLY = /^https?:\/\/\S+$/;
 
 
 /** A document as a graph: the file as the root, one block per element.
@@ -55,6 +57,22 @@ export function read(name: string, text: string, least = LEAST): Graph {
     return held;
   };
 
+  /** Each unique header row is one workspace definition: a row schema, a field per column.
+   *  Tables sharing a header and its forms share it, so their rows are usages of one thing. */
+  const schemas = new Map<string, Id>();
+  const schema_for = (headers: string[], forms: Field["form"][]): Id => {
+    const sign = headers.map((name, n) => `${name}:${forms[n]}`).join("\u0000");
+    const known = schemas.get(sign);
+    if (known) return known;
+    const id = new_id("def");
+    graph.defs[id] = {
+      id, group: "block", extends: ROW, name: clip(headers.join(" · ")),
+      fields: headers.map((name, n) => ({ name, form: forms[n] ?? "text" })),
+    };
+    schemas.set(sign, id);
+    return id;
+  };
+
   const { front, body } = split_front(text);
   if (front) {
     put({ id: mint("front"), parent: root, type: FRONT, name: "front matter", body: front });
@@ -62,7 +80,6 @@ export function read(name: string, text: string, least = LEAST): Graph {
 
   for (const token of marked.lexer(body)) walk(token);
   fold(graph, root, least);
-  seat(graph, root);
   return graph;
 
   /** One token, filed under whichever heading is open. */
@@ -74,7 +91,7 @@ export function read(name: string, text: string, least = LEAST): Graph {
         while (open.length && open[open.length - 1]!.depth >= heading.depth) open.pop();
         const held = put({
           id: mint("heading"), parent: under(), type: HEADING, name: heading.text,
-          fields: [field(LEVEL, "number", String(heading.depth))],
+          body: heading.raw.trim(),
         });
         open.push({ id: held.id, depth: heading.depth });
         return;
@@ -85,8 +102,7 @@ export function read(name: string, text: string, least = LEAST): Graph {
         if (lone) {
           put({
             id: mint("image"), parent, type: IMAGE, name: lone.text || "image",
-            source: lone.href,
-            fields: [field(SRC, "link", lone.href), field(ALT, "text", lone.text ?? "")],
+            source: lone.href, body: paragraph.raw.trim(),
           });
           return;
         }
@@ -100,8 +116,7 @@ export function read(name: string, text: string, least = LEAST): Graph {
         const code = token as Tokens.Code;
         put({
           id: mint("code"), parent, type: CODE, name: code.lang || "code",
-          body: code.text,
-          ...(code.lang ? { fields: [field(LANG, "text", code.lang)] } : {}),
+          body: code.raw.trim(),
         });
         return;
       }
@@ -109,8 +124,7 @@ export function read(name: string, text: string, least = LEAST): Graph {
         const quote = token as Tokens.Blockquote;
         put({
           id: mint("quote"), parent, type: QUOTE, name: clip(quote.text),
-          body: quote.text,
-          fields: [field(LEVEL, "number", String(depth_of(quote)))],
+          body: quote.raw.trim(),
         });
         return;
       }
@@ -119,30 +133,36 @@ export function read(name: string, text: string, least = LEAST): Graph {
         const held = put({
           id: mint("list"), parent, type: LIST,
           name: list.ordered ? "ordered list" : tasks(list) ? "tasks" : "list",
-          fields: [field(ORDERED, "flag", String(Boolean(list.ordered)))],
+          body: list.raw.trim(),
         });
         let at = 0;
         for (const item of list.items) {
           graph.blocks[mint("item")] = {
             id: `item:${seen.get("item")}`, parent: held.id, type: ITEM,
-            name: clip(item.text), body: item.text, order: ++at,
-            ...(item.task ? { fields: [field(DONE, "flag", String(Boolean(item.checked)))] } : {}),
+            name: clip(item.text), body: item.raw.trim(), order: ++at,
           };
         }
         return;
       }
       case "table": {
         const table = token as Tokens.Table;
-        const headers = table.header.map((cell) => cell.text);
+        const headers = table.header.map((cell, n) => cell.text || `col ${n + 1}`);
+        const key = headers[0] ?? "";
         const held = put({
           id: mint("table"), parent, type: TABLE, name: headers.join(" · ") || "table",
+          fields: [field(KEY, "text", key)],
         });
+        const forms = headers.map((_, n) => form_of(table.rows.map((row) => row[n]?.text ?? "")));
+        const schema = schema_for(headers, forms);
         let at = 0;
         for (const row of table.rows) {
           graph.blocks[mint("row")] = {
-            id: `row:${seen.get("row")}`, parent: held.id, type: ROW,
-            name: clip(row[0]?.text ?? ""), order: ++at,
-            fields: row.map((cell, n) => field(headers[n] ?? `col ${n + 1}`, "text", cell.text)),
+            id: `row:${seen.get("row")}`, parent: held.id, type: schema,
+            name: clip(row[headers.indexOf(key)]?.text ?? ""), order: ++at,
+            fields: row.map((cell, n) => {
+              const form = forms[n] ?? "text";
+              return field(headers[n] ?? `col ${n + 1}`, form, value_of(form, cell.text));
+            }),
           };
         }
         return;
@@ -187,17 +207,22 @@ function fold(graph: Graph, layer: Id, least: number): void {
   }
 }
 
-/** Stack a layer's blocks down the page, the way the document reads.
+/** The graph with every layer stacked down the page, the way the document reads.
  *
  *  The kit rows blocks left to right when none says where it sits. A document
- *  is read downwards, so each block is seated under the one before it. */
-function seat(graph: Graph, layer: Id): void {
-  let at = 0;
-  for (const block of kids(graph, layer)) {
-    graph.blocks[block.id] = { ...block, x: 0, y: at * STEP };
-    at += 1;
-    if (kids(graph, block.id).length) seat(graph, block.id);
-  }
+ *  is read downwards, so each block is seated `step` under the one before it —
+ *  a card's height and one unit of air, so it follows the card size. Drawn,
+ *  never stored: the held graph keeps no positions to fall out of step. */
+export function stacked(graph: Graph, step: number): Graph {
+  const blocks = { ...graph.blocks };
+  const seat = (layer: Id) => {
+    kids(graph, layer).forEach((block, at) => {
+      blocks[block.id] = { ...block, x: 0, y: at * step };
+      seat(block.id);
+    });
+  };
+  seat(graph.root);
+  return { ...graph, blocks };
 }
 
 /** A layer's blocks, in the order they were written. */
@@ -214,17 +239,31 @@ function split_front(text: string): { front: string; body: string } {
   return { front: match[1]!.trim(), body: text.slice(match[0].length) };
 }
 
+/** A column's form, from its filled cells: numbers, links or yes/no where every one agrees,
+ *  and text otherwise. */
+function form_of(cells: string[]): Field["form"] {
+  const filled = cells.map((cell) => cell.trim()).filter(Boolean);
+  if (!filled.length) return "text";
+  if (filled.every((cell) => NUMBER.test(cell))) return "number";
+  if (filled.every((cell) => FLAG.test(cell))) return "flag";
+  if (filled.every((cell) => LINK.test(cell) || URL_ONLY.test(cell))) return "link";
+  return "text";
+}
+
+/** A cell's value in its column's form: a link keeps its target, a flag reads true or false. */
+function value_of(form: Field["form"], text: string): string {
+  const cell = text.trim();
+  if (form === "link") return LINK.exec(cell)?.[2] ?? cell;
+  if (form === "flag") return String(/^(yes|true|y|x|✓)$/i.test(cell));
+  if (form === "number") return cell.replace(/,/g, "");
+  return text;
+}
+
 /** A paragraph that is one image and nothing else. */
 function only_image(paragraph: Tokens.Paragraph): Tokens.Image | null {
   const held = (paragraph.tokens ?? []).filter((token) => token.type !== "space");
   const first = held[0];
   return held.length === 1 && first?.type === "image" ? first as Tokens.Image : null;
-}
-
-/** How deeply a quote is nested, counting itself. */
-function depth_of(quote: Tokens.Blockquote): number {
-  const inner = (quote.tokens ?? []).find((token) => token.type === "blockquote");
-  return inner ? 1 + depth_of(inner as Tokens.Blockquote) : 1;
 }
 
 function tasks(list: Tokens.List): boolean {
