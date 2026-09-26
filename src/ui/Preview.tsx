@@ -1,26 +1,25 @@
-/** The tray's preview tab: a block's own text, rendered as the page renders it.
+/** The tray's markdown tab: a block's own text in full, rendered as its card previews it.
  *
  *  What a block is, carries and holds are the kit tray's own tabs; this is the one thing they do
- *  not show — the markdown read as markdown. mndmap hands it to the tray as an extra tab. */
+ *  not show — the markdown read as markdown. mndmap hands it to the tray as its first tab. */
 
-import { marked } from "marked";
 import { useMemo } from "react";
+import { Markdown } from "@mnd/kit/react";
 import { children, type Block, type Graph, type Id } from "@mnd/kit";
-import { FRONT, KEY, TABLE, is_row } from "../packages/markdown.js";
+import { FRONT, KEY, TABLE } from "../packages/markdown.js";
 import { is_markdown } from "../scan.js";
 
 export function Preview({ graph, picked }: { graph: Graph; picked: Id | null }) {
   const block = picked ? graph.blocks[picked] : undefined;
-  const row = is_row(graph, block?.type);
-  const html = useMemo(() => markdown_of(block, row), [block, row]);
+  const text = useMemo(() => markdown_of(block), [block]);
 
   if (!block) return <p className="mm-empty">Pick a block in the tree or the drawing.</p>;
 
   return (
     <div className="mm-content">
       <p className="mm-path">{about(graph, block)}</p>
-      {html ? (
-        <div className="mm-prose" dangerouslySetInnerHTML={{ __html: html }} />
+      {text ? (
+        <Markdown className="mm-prose" text={text} />
       ) : (
         <p className="mm-empty">Nothing to preview; its fields and contents are in their tabs.</p>
       )}
@@ -41,18 +40,18 @@ function about(graph: Graph, block: Block): string {
   return parts.join(" · ");
 }
 
-/** The block's own text as HTML, where it has text worth rendering. */
-function markdown_of(block: Block | undefined, row: boolean): string {
+/** The block's own text as markdown, where it has text worth rendering. */
+function markdown_of(block: Block | undefined): string {
   if (!block) return "";
   // A file block carries the whole file; a content block carries its element, as written.
   const text = block.type === undefined || block.type === "block" || block.type === "folder"
     ? (is_markdown(block.source) ? without_front(block.body ?? "") : "")
-    : block.type === TABLE || row
+    : block.type === TABLE
       ? ""
       : block.type === FRONT
         ? "```yaml\n" + (block.body ?? "") + "\n```"
         : block.body ?? "";
-  return text.trim() ? marked.parse(text, { async: false }) as string : "";
+  return text.trim();
 }
 
 /** The body without its front matter, which is metadata rather than content. */

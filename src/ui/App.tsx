@@ -1,16 +1,16 @@
 /** The shell over one held graph.
  *
  *  One markdown document is read into a graph of content blocks — a block per
- *  heading, paragraph, list, fence, quote, image, rule and table row. A folder
+ *  heading, paragraph, list, fence, quote, image and table row. A folder
  *  is filed by path instead, one block per file. The explorer, the canvas and
  *  the tray are the kit's, and so is what they share: the tray's state and how
  *  the drawing looks. What is mndmap's is reading, the document laid out as it
- *  reads, the preview tab, and reorganizing — edits apply to the held graph,
+ *  reads, the markdown tab, and reorganizing — edits apply to the held graph,
  *  and undo is the stack of graphs behind it. */
 
 import { Explorer, Icon, Tray, Viewer, WorkspaceHeader, useDisplay,
          useTray } from "@mnd/kit/react";
-import { CARD, children, open, write, type Graph, type Id } from "@mnd/kit";
+import { CARD, children, is_container, open, write, type Graph, type Id } from "@mnd/kit";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apply, Stack, type Edit } from "../edits.js";
 import { laid, read } from "../read.js";
@@ -45,9 +45,11 @@ export function App() {
   const [theme, setTheme] = useState<ThemeName>(() => stored_theme());
   const [over, setOver] = useState(false);
   const tray = useTray();
-  const { display, onDisplay } = useDisplay({ card: CONTENT_CARD, range: CARD });
+  const { display, onDisplay } = useDisplay({ card: CONTENT_CARD, range: CARD, full: false });
   /** The document laid out as it reads: a backbone down the page, content across. */
-  const view = useMemo(() => graph && laid(graph, display.card), [graph, display.card]);
+  const full = display.full ?? false;
+  const view = useMemo(() => graph && laid(graph, display.card, full),
+    [graph, display.card, full]);
   const stack = useRef(new Stack());
   const file = useRef<HTMLInputElement>(null);
   const look = THEMES.find((item) => item.name === theme) ?? THEMES[0]!;
@@ -167,8 +169,8 @@ export function App() {
     const layer_of = (at: Id | null | undefined) => (!at || at === graph.root ? null : at);
 
     if (name === "reveal" && id) {
-      /** A row that holds children opens as the layer; a leaf lights on its parent. */
-      if (children(graph, id).length) { setLayer(layer_of(id)); setPicked([]); return; }
+      /** A row that holds anything opens as the layer; a leaf lights on its parent. */
+      if (is_container(graph, id)) { setLayer(layer_of(id)); setPicked([]); return; }
       setLayer(layer_of(graph.blocks[id]?.parent));
       setPicked([id]);
       return;
@@ -222,12 +224,12 @@ export function App() {
     );
   }
 
-  /** A pick on the canvas: a definition — a diagram's class card — is held by the tray, and a
-   *  diagram letting go of everything leaves the tray on what it was drawn for. */
+  /** A pick on the canvas: a definition, or a card standing for one — a diagram's class card, a
+   *  table's header — is held by the tray. */
   const choose = (ids: Id[]) => {
     const [first] = ids;
-    if (first && graph.defs[first]) { tray.onHold({ of: "id", id: first }); return; }
-    if (fields && !first) return;
+    const def = first && (graph.defs[first] ? first : view?.blocks[first]?.of);
+    if (def && graph.defs[def]) { tray.onHold({ of: "id", id: def }); return; }
     pick(ids);
   };
   const blocks = Math.max(0, Object.keys(graph.blocks).length - 1);
@@ -274,6 +276,7 @@ export function App() {
       <main>
         <div className="mm-canvas">
           <Viewer graph={view ?? graph} layer={layer} picked={picked} card={display.card}
+            full={full}
             chrome={{ crumbs: true, lattice: display.lattice ?? true, legend: display.legend,
                       corner: display.corner }}
             fields={fields} onFields={setFields}
@@ -287,8 +290,8 @@ export function App() {
           {...(tray.tab ? { tab: tray.tab } : {})} onTab={tray.onTab}
           hold={tray.hold} onHold={tray.onHold}
           onView={(home, id) => { setLayer(home); setFields(null); pick([id]); }}
-          display={display} onDisplay={onDisplay} onFields={setFields}
-          extras={[{ name: "preview", draw: (id) => <Preview graph={graph} picked={id} /> }]} />
+          display={display} onDisplay={onDisplay}
+          extras={[{ name: "markdown", draw: (id) => <Preview graph={graph} picked={id} /> }]} />
       </main>
     </div>
   );
