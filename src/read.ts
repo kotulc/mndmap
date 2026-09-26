@@ -66,15 +66,20 @@ export function read(name: string, text: string): Graph {
 
   /** Each unique header row is one workspace definition: a row schema, a field per column.
    *  Tables sharing a header and its forms share it, so their rows are usages of one thing. It is
-   *  named for the section its first table sits in, or for its key column outside of one. */
+   *  named for the section its first table sits in, or for its key column outside of one — and
+   *  numbered where that is taken, since two workspace definitions may not share a name. */
   const schemas = new Map<string, Id>();
+  const named = new Set<string>();
   const schema_for = (headers: string[], forms: Field["form"][], name: string): Id => {
     const sign = headers.map((name, n) => `${name}:${forms[n]}`).join("\u0000");
     const known = schemas.get(sign);
     if (known) return known;
+    let unique = clip(name);
+    for (let n = 2; named.has(unique); n++) unique = `${clip(name)} ${n}`;
+    named.add(unique);
     const id = new_id("def");
     graph.defs[id] = {
-      id, group: "block", extends: ROW, name: clip(name),
+      id, group: "block", extends: ROW, name: unique,
       fields: headers.map((name, n) => ({ name, form: forms[n] ?? "text" })),
     };
     schemas.set(sign, id);
@@ -151,18 +156,21 @@ export function read(name: string, text: string): Graph {
         const headers = table.header.map((cell, n) => cell.text || `col ${n + 1}`);
         const key = headers[0] ?? "";
         const name = clip(open.length ? graph.blocks[parent]!.name! : key || "table");
+        // Named for what it is: its section already says what it is about.
         const held = put({
-          id: mint("table"), parent, type: TABLE, name, fields: [field(KEY, "text", key)],
+          id: mint("table"), parent, type: TABLE, name: "table", fields: [field(KEY, "text", key)],
         });
         const forms = headers.map((_, n) => form_of(table.rows.map((row) => row[n]?.text ?? "")));
-        // Its rows are values, not parts: one grid in its layer, headed by the schema's fields.
+        // Its rows are values, not parts: one grid block in its layer, headed by the schema.
         const id = `grid:${held.id}`;
-        graph.holders[id] = {
-          id, parent: held.id, name: `${table.rows.length} rows`, arrangement: "grid",
-          x: 0, y: 0, order: 1, size: CELL,
-          rows: table.rows.length + 1, cols: headers.length,
-          schema: schema_for(headers, forms, name),
-          values: [[], ...table.rows.map((row) => row.map((cell) => cell.text.trim()))],
+        graph.blocks[id] = {
+          id, parent: held.id, type: "grid", name: `${table.rows.length} rows`,
+          x: 0, y: 0, order: 1,
+          grid: {
+            rows: table.rows.length + 1, cols: headers.length, size: CELL,
+            schema: schema_for(headers, forms, name),
+            values: [[], ...table.rows.map((row) => row.map((cell) => cell.text.trim()))],
+          },
         };
         return;
       }
@@ -176,16 +184,30 @@ export function read(name: string, text: string): Graph {
 
 /** Shape each layer into a backbone of headings, each with a row of its content.
  *
- *  A heading holding no subheading gives its content up to the layer, where it
- *  sits beside the heading as a row; so does a layer's lone heading, the page's
- *  title. A heading holding subheadings stays a layer of its own, shaped the
- *  same way. Only headings dissolve: a list owns its items and a table its rows. */
+ *  Every heading reads the same way: a card on the backbone, its content beside it. A heading
+ *  holding no subheading gives its content up to the layer, where it sits beside the heading as
+ *  a row; so does a layer's lone heading, the page's title. A heading holding subheadings hands
+ *  its whole section to one container beside it, shaped the same way. Only headings dissolve: a
+ *  list owns its items and a table its rows. */
 function shape(graph: Graph, layer: Id): void {
   dissolve(graph, layer);
+  const sections = kids(graph, layer)
+    .filter((block) => block.type === HEADING && kids(graph, block.id).length)
+    .map((heading) => section(graph, layer, heading.id));
   gather(graph, layer);
-  for (const block of kids(graph, layer)) {
-    if (block.type === HEADING && kids(graph, block.id).length) shape(graph, block.id);
-  }
+  for (const id of sections) shape(graph, id);
+}
+
+/** A heading's section, moved into one container beside it. */
+function section(graph: Graph, layer: Id, heading: Id): Id {
+  const held = kids(graph, heading);
+  const id = `more:${heading}`;
+  graph.blocks[id] = {
+    id, parent: layer, type: MORE, name: `${held.length} blocks`, order: held[0]!.order!,
+    body: listed(held),
+  };
+  for (const block of held) graph.blocks[block.id]!.parent = id;
+  return id;
 }
 
 /** Bring up the content of every heading on the layer that needs no layer of its own. */
@@ -230,11 +252,16 @@ function gather(graph: Graph, layer: Id): void {
     const id = `more:${first.id}`;
     graph.blocks[id] = {
       id, parent: layer, type: MORE, name: `${members.length} blocks`, order: first.order!,
-      body: members.map((member) => `- ${clip(member.name ?? "", LISTED).replace(MARKUP, "\\$1")}`)
-        .join("\n"),
+      body: listed(members),
     };
     for (const member of members) graph.blocks[member.id]!.parent = id;
   }
+}
+
+/** A container's body: the names of what it holds, as a list. */
+function listed(blocks: Block[]): string {
+  return blocks.map((block) => `- ${clip(block.name ?? "", LISTED).replace(MARKUP, "\\$1")}`)
+    .join("\n");
 }
 
 /** Whether a block sits in the backbone column rather than in a row. */
@@ -257,15 +284,22 @@ export function laid(graph: Graph, card: { w: number; h: number }, full = false)
   const blocks = { ...graph.blocks };
   const edges = { ...graph.edges };
   const air = UNITS.unit;
+
+  // A table keeps the one card size and cuts its columns there, rather than growing to list them.
+  for (const block of Object.values(graph.blocks)) {
+    if (block.type !== TABLE) continue;
+    blocks[block.id] = { ...block, w: UNITS.block.w * air, h: UNITS.block.h * air };
+  }
+  const measured = { ...graph, blocks: { ...blocks } };
   const line = (from: Id, to: Id, type: Id) => {
     const id = `${type}:${to}`;
     edges[id] = { id, from, to, type, ...(type === FLOW ? { dir: "forward" as const } : {}) };
   };
 
   const seat = (layer: Id) => {
-    const held = kids(graph, layer);
+    const held = kids(measured, layer);
     const spined = held.some(is_spine);
-    const sized = held.map((block) => ({ block, size: size_of(graph, block.id) }));
+    const sized = held.map((block) => ({ block, size: size_of(measured, block.id) }));
     const across = Math.max(0, ...sized.map(({ size }) => size.w)) + air * 2;
 
     // Rows first: a backbone block starts one, and its content joins it.

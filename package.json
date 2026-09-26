@@ -21,7 +21,7 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@mnd/kit": "file:vendor/mnd-kit-0.8.0.tgz",
+    "@mnd/kit": "file:vendor/mnd-kit-0.9.0.tgz",
     "@xyflow/react": "^12.11.6",
     "marked": "^18.0.14",
     "react": "^19.2.8",

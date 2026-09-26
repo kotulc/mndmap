@@ -51,9 +51,12 @@ async function walk(dir: string, root = dir): Promise<{ path: string; text: stri
  *  A build there writes `dist/`, this points at it, and the page reloads —
  *  so a kit change costs a save rather than a release. Dev only, and only
  *  where mndflow is actually there: `package.json` still names the tarball,
- *  so a build and a fresh clone are unaffected. `MNDMAP_KIT=pin` opts out. */
-const KIT = resolve("..", "mndflow", "packages", "kit");
-const linked = process.env.MNDMAP_KIT !== "pin" && existsSync(join(KIT, "dist", "index.js"));
+ *  so a build and a fresh clone are unaffected. `MNDMAP_KIT=pin` opts out;
+ *  `MNDMAP_KIT=<dir>` reads a built kit from there instead, for when
+ *  mndflow's working tree does not build. */
+const MODE = process.env.MNDMAP_KIT;
+const KIT = MODE && MODE !== "pin" ? resolve(MODE) : resolve("..", "mndflow", "packages", "kit");
+const linked = MODE !== "pin" && existsSync(join(KIT, "dist", "index.js"));
 
 const kit_alias = linked ? [
   { find: /^@mnd\/kit$/, replacement: join(KIT, "dist/index.js") },

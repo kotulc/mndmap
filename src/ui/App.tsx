@@ -5,17 +5,20 @@
  *  is filed by path instead, one block per file. The explorer, the canvas and
  *  the tray are the kit's, and so is what they share: the tray's state and how
  *  the drawing looks. What is mndmap's is reading, the document laid out as it
- *  reads, the markdown tab, and reorganizing — edits apply to the held graph,
- *  and undo is the stack of graphs behind it. */
+ *  reads, read row by row down a scrolled canvas, the markdown tab, and
+ *  reorganizing — edits apply to the held graph, and undo is the stack of graphs
+ *  behind it. */
 
-import { Explorer, Icon, Tray, Viewer, WorkspaceHeader, useDisplay,
+import { Explorer, Icon, TrayFrame, Viewer, WorkspaceHeader, useDisplay,
          useTray } from "@mnd/kit/react";
 import { CARD, children, is_container, open, write, type Graph, type Id } from "@mnd/kit";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apply, Stack, type Edit } from "../edits.js";
 import { laid, read } from "../read.js";
 import { dev_sample, drop_folder, pick_file, pick_folder, save, scan, type SourceFile } from "../scan.js";
-import { Preview } from "./Preview.js";
+import { MD } from "../packages/markdown.js";
+import { rows } from "../series.js";
+import { Document, Preview } from "./Preview.js";
 
 type ThemeName = "retro" | "modern" | "light";
 
@@ -32,6 +35,21 @@ const CONTENT_CARD = { w: 10, h: 3 };
 
 const BLANK = "Drop a markdown document or a folder, or pick one below.";
 
+/** The explorer's library sections, by the ids it folds them under. The kit keeps these to
+ *  itself, so they are named again here. */
+const LIBRARY = ["@packs", "@defs"];
+
+/** The tray's one tab. */
+const TABS = ["markdown"] as const;
+
+/** Keys that read like a tree: down and up the rows, across a row and back, in and out. */
+const FORWARD = "ArrowDown";
+const BACK = "ArrowUp";
+const ACROSS = "ArrowRight";
+const OUT = "ArrowLeft";
+const ENTER = "Enter";
+const LEAVE = ["Escape", "Backspace"];
+
 
 export function App() {
   const [graph, setGraph] = useState<Graph | null>(null);
@@ -44,12 +62,18 @@ export function App() {
   const [note, setNote] = useState(BLANK);
   const [theme, setTheme] = useState<ThemeName>(() => stored_theme());
   const [over, setOver] = useState(false);
+  /** The card the reading is centred on; moved by the keys, not by a click. */
+  const [focus, setFocus] = useState<Id | null>(null);
   const tray = useTray();
-  const { display, onDisplay } = useDisplay({ card: CONTENT_CARD, range: CARD, full: false });
+  const [big, setBig] = useState(false);
+  const { display } = useDisplay({ card: CONTENT_CARD, range: CARD, full: false });
   /** The document laid out as it reads: a backbone down the page, content across. */
   const full = display.full ?? false;
   const view = useMemo(() => graph && laid(graph, display.card, full),
     [graph, display.card, full]);
+  /** The open layer's rows, and the one the pick sits in. */
+  const series = useMemo(() => (graph ? rows(graph, layer ?? graph.root) : []), [graph, layer]);
+  const row = series.find((each) => picked.some((id) => each.covers.has(id))) ?? null;
   const stack = useRef(new Stack());
   const file = useRef<HTMLInputElement>(null);
   const look = THEMES.find((item) => item.name === theme) ?? THEMES[0]!;
@@ -65,9 +89,11 @@ export function App() {
     setGraph(next);
     setLayer(null);
     setPicked([]);
+    setFocus(null);
     setFields(null);
     tray.release();
-    setFolded([]);
+    // The library shut, and the document open one level: every block below its root folded.
+    setFolded([...LIBRARY, ...Object.keys(next.blocks).filter((id) => id !== next.root)]);
     setNote(`${name}: ${said}.`);
   };
 
@@ -161,6 +187,81 @@ export function App() {
   /** A pick anywhere but the tray gives the tray back to the canvas. */
   const pick = (ids: Id[]) => { setPicked(ids); tray.release(); };
 
+  /** Read the row `by` rows on from the one being read, staying on the open layer. */
+  const turn = (by: number) => {
+    const at = row ? series.indexOf(row) + by : 0;
+    const next = series[Math.max(0, Math.min(series.length - 1, at))];
+    if (!next) return;
+    land(next.anchor);
+  };
+
+  /** Pick a card by key: centre it, and open the explorer's branches down to it. */
+  const land = (id: Id) => {
+    pick([id]);
+    setFocus(id);
+    if (!graph) return;
+    const up = new Set<Id>();
+    for (let at = graph.blocks[id]?.parent; at; at = graph.blocks[at]?.parent) up.add(at);
+    setFolded((held) => held.filter((each) => !up.has(each)));
+  };
+
+  /** Across the row: the next card, opened in the explorer. */
+  const across = () => {
+    const at = row && picked[0] ? row.cards.indexOf(picked[0]) : -1;
+    const next = row?.cards[at + 1];
+    if (!row || at < 0 || !next) return;
+    land(next);
+    setFolded((held) => held.filter((each) => each !== next));
+  };
+
+  /** Back along the row: the card before, the one left shut; from the heading, out of the layer. */
+  const back = () => {
+    const at = row && picked[0] ? row.cards.indexOf(picked[0]) : -1;
+    if (!row || at <= 0) { leave(); return; }
+    const left = picked[0]!;
+    land(row.cards[at - 1]!);
+    setFolded((held) => [...new Set([...held, left])]);
+  };
+
+  /** Open the row being read, where it holds anything, and read its first row. */
+  const enter = () => {
+    const [id] = picked;
+    if (!graph || !id || picked.length > 1 || !is_container(graph, id)) return;
+    const first = rows(graph, id)[0]?.anchor ?? null;
+    setLayer(id);
+    setFields(null);
+    if (first) land(first);
+    else { pick([]); setFocus(null); }
+  };
+
+  /** Leave the open layer, reading on from the row that opened it, its branch shut again. */
+  const leave = () => {
+    if (!graph || !layer) return;
+    const up = graph.blocks[layer]?.parent ?? graph.root;
+    setLayer(up === graph.root ? null : up);
+    setFields(null);
+    land(layer);
+    setFolded((held) => [...new Set([...held, layer])]);
+  };
+
+  /** The arrows read the page, enter opens a card and escape leaves — unless something is typed. */
+  useEffect(() => {
+    const key = (event: KeyboardEvent) => {
+      const typing = event.target instanceof HTMLElement
+        && event.target.closest("input, textarea, select, button, [contenteditable='true']");
+      const does: Record<string, () => void> = {
+        [FORWARD]: () => turn(1), [BACK]: () => turn(-1), [ACROSS]: across, [OUT]: back,
+        [ENTER]: enter, ...Object.fromEntries(LEAVE.map((name) => [name, leave])),
+      };
+      const act = does[event.key];
+      if (typing || event.defaultPrevented || !act) return;
+      event.preventDefault();
+      act();
+    };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  });
+
   /** Explorer intents: reveal / rename / move / create / delete. */
   const act = useCallback((name: string, args?: Record<string, unknown>) => {
     if (!graph) return;
@@ -224,15 +325,10 @@ export function App() {
     );
   }
 
-  /** A pick on the canvas: a definition, or a card standing for one — a diagram's class card, a
-   *  table's header — is held by the tray. */
-  const choose = (ids: Id[]) => {
-    const [first] = ids;
-    const def = first && (graph.defs[first] ? first : view?.blocks[first]?.of);
-    if (def && graph.defs[def]) { tray.onHold({ of: "id", id: def }); return; }
-    pick(ids);
-  };
   const blocks = Math.max(0, Object.keys(graph.blocks).length - 1);
+  /** What the tray is about: the pick, or else the open layer. */
+  const about = graph.blocks[picked[0] ?? layer ?? graph.root];
+  const kind = about?.type ? graph.defs[about.type]?.name ?? about.type : "block";
 
   return (
     <div className={`app${over ? " over" : ""}`}
@@ -276,22 +372,21 @@ export function App() {
       <main>
         <div className="mm-canvas">
           <Viewer graph={view ?? graph} layer={layer} picked={picked} card={display.card}
-            full={full}
+            full={full} scroll focus={focus}
             chrome={{ crumbs: true, lattice: display.lattice ?? true, legend: display.legend,
                       corner: display.corner }}
             fields={fields} onFields={setFields}
-            onLook={setLayer} onPick={choose} />
+            onLook={(at) => { setLayer(at); setFocus(null); }} onPick={pick} />
           {note ? (
             <p className="strip mm-strip" onClick={() => setNote("")}>{note}</p>
           ) : null}
         </div>
-        <Tray graph={graph} layer={layer} picked={picked}
-          open={tray.open} onOpen={tray.onOpen}
-          {...(tray.tab ? { tab: tray.tab } : {})} onTab={tray.onTab}
-          hold={tray.hold} onHold={tray.onHold}
-          onView={(home, id) => { setLayer(home); setFields(null); pick([id]); }}
-          display={display} onDisplay={onDisplay}
-          extras={[{ name: "markdown", draw: (id) => <Preview graph={graph} picked={id} /> }]} />
+        <TrayFrame open={tray.open} onOpen={tray.onOpen} big={big} onBig={setBig}
+          word={kind} name={about?.name ?? ""} tabs={TABS} tab="markdown" onTab={() => {}}>
+          {graph.packages[MD]
+            ? <Document graph={graph} row={row} />
+            : <Preview graph={graph} picked={about?.id ?? null} />}
+        </TrayFrame>
       </main>
     </div>
   );

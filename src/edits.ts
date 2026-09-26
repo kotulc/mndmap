@@ -1,10 +1,10 @@
 /** Tree gestures, as edits on a held graph.
  *
- *  Every gesture is a field written and nothing else. An edit that would not
- *  validate is refused with the fault and the graph it was applied to is kept,
- *  so the stack never holds a broken one. */
+ *  Every gesture is a field written and nothing else. Reorganizing is meant to
+ *  be free, so only what cannot be done is refused — a block that is not there,
+ *  or one moved inside itself — and the graph it was applied to is kept. */
 
-import { children, validate, type Block, type Graph, type Id } from "@mnd/kit";
+import { children, type Block, type Graph, type Id } from "@mnd/kit";
 
 export type Edit =
   /** Re-parent, and land at a place among the new siblings. */
@@ -28,9 +28,7 @@ export interface Applied {
 export function apply(graph: Graph, edit: Edit): Applied {
   const next = clone(graph);
   const fault = run(next, edit);
-  if (fault) return { graph, faults: [fault] };
-  const faults = validate(next).map((entry) => entry.what);
-  return faults.length ? { graph, faults } : { graph: next, faults: [] };
+  return fault ? { graph, faults: [fault] } : { graph: next, faults: [] };
 }
 
 function run(graph: Graph, edit: Edit): string | null {
@@ -130,7 +128,6 @@ function clone(graph: Graph): Graph {
     root: graph.root,
     blocks: copied(graph.blocks),
     edges: copied(graph.edges),
-    holders: copied(graph.holders),
     defs: graph.defs,
     packages: graph.packages,
   };

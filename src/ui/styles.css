@@ -110,3 +110,14 @@
 .mm-holds { margin: 8px 0 0; padding-left: 18px; color: var(--muted); font-size: 12px; }
 
 .mm-picks { display: flex; gap: 8px; }
+
+/* Reading: the whole document, the row being read lit. */
+.mm-document { display: flex; flex-direction: column; gap: 0.6em; }
+.mm-document > .mm-prose { padding: 2px 8px; border-left: 2px solid transparent; opacity: 0.55; }
+.mm-document > .mm-lit { border-left-color: var(--accent); opacity: 1; scroll-margin-top: 48px; }
+
+/* The tray reads the document beside the drawing, so it takes the bottom third of the screen. */
+.app .tray.open:not(.big) { height: 33.333vh; }
+
+/* A table card keeps the one card height, so it lists only the columns that fit whole in it. */
+.react-flow__node[data-id^="table:"] .mnd-fields > li:nth-child(n + 3) { display: none; }

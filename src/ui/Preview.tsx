@@ -1,13 +1,15 @@
 /** The tray's markdown tab: a block's own text in full, rendered as its card previews it.
  *
  *  What a block is, carries and holds are the kit tray's own tabs; this is the one thing they do
- *  not show — the markdown read as markdown. mndmap hands it to the tray as its first tab. */
+ *  not show — the markdown read as markdown. mndmap hands it to the tray as its first tab. While
+ *  reading, it is the whole document instead, with the row being read lit. */
 
-import { useMemo } from "react";
-import { Markdown } from "@mnd/kit/react";
+import { useEffect, useMemo, useRef } from "react";
+import { Inline, Markdown } from "@mnd/kit/react";
 import { children, type Block, type Graph, type Id } from "@mnd/kit";
 import { FRONT, KEY, TABLE } from "../packages/markdown.js";
 import { is_markdown } from "../scan.js";
+import { segments, type Row } from "../series.js";
 
 export function Preview({ graph, picked }: { graph: Graph; picked: Id | null }) {
   const block = picked ? graph.blocks[picked] : undefined;
@@ -23,6 +25,46 @@ export function Preview({ graph, picked }: { graph: Graph; picked: Id | null }) 
       ) : (
         <p className="mm-empty">Nothing to preview; its fields and contents are in their tabs.</p>
       )}
+    </div>
+  );
+}
+
+
+/** The whole document, as the graph now orders it, with the row being read lit and kept in view. */
+export function Document({ graph, row }: { graph: Graph; row: Row | null }) {
+  const parts = useMemo(() => segments(graph), [graph]);
+  const held = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const lit = held.current?.querySelector(".mm-lit");
+    lit?.scrollIntoView({ block: "start", behavior: "smooth" });
+  }, [row]);
+
+  return (
+    <div className="mm-content mm-document" ref={held}>
+      {parts.map(({ id, text, cells }) => {
+        const lit = `mm-prose${row?.covers.has(id) ? " mm-lit" : ""}`;
+        return cells
+          ? <Table key={id} className={lit} cells={cells} />
+          : <Markdown key={id} className={lit} text={text} />;
+      })}
+    </div>
+  );
+}
+
+/** A table, which a card draws as a grid and the kit's markdown leaves as written. */
+function Table({ className, cells }: { className: string; cells: string[][] }) {
+  const [head = [], ...body] = cells;
+  return (
+    <div className={className}>
+      <table>
+        <thead><tr>{head.map((cell, n) => <th key={n}><Inline text={cell} /></th>)}</tr></thead>
+        <tbody>
+          {body.map((line, r) => (
+            <tr key={r}>{line.map((cell, n) => <td key={n}><Inline text={cell} /></td>)}</tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

@@ -4,15 +4,17 @@
  *  you edit it and the page reloads — no pack, no copy, no install. Where it
  *  is not, this is just `vite`, and the app draws with the vendored tarball.
  *
- *  Usage: npm run dev            (both)
- *         MNDMAP_KIT=pin npm run dev   (vendored tarball only) */
+ *  Usage: npm run dev                 (both)
+ *         MNDMAP_KIT=pin npm run dev    (vendored tarball only)
+ *         MNDMAP_KIT=.kit npm run dev   (a kit built elsewhere, unwatched) */
 
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 
 const KIT = resolve("..", "mndflow", "packages", "kit");
-const linked = process.env.MNDMAP_KIT !== "pin" && existsSync(resolve(KIT, "package.json"));
+// Only the neighbouring checkout is watched: a pinned or pointed kit is taken as built.
+const linked = !process.env.MNDMAP_KIT && existsSync(resolve(KIT, "package.json"));
 const held = [];
 
 // The kit's own build also writes types, which the browser never reads. Watch

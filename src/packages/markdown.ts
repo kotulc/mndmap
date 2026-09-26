@@ -35,7 +35,7 @@ export const KEY = "key";
 const ICON = (icon: string) => ({ card: { icon } });
 const PROSE = (icon: string) => ({ card: { icon, name: "hide", body: "show", height: "fit" } });
 const NAMED = (icon: string) => ({ card: { icon, body: "show", height: "fit" } });
-const LISTED = (icon: string) => ({ card: { icon, fields: "show" } });
+const LISTED = (icon: string) => ({ card: { icon, fields: "show", height: "free" } });
 
 
 /** Every definition in the package, in reading order. */
