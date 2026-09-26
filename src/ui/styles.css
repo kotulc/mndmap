@@ -112,9 +112,19 @@
 .mm-picks { display: flex; gap: 8px; }
 
 /* Reading: the whole document, the row being read lit. */
-.mm-document { display: flex; flex-direction: column; gap: 0.6em; }
-.mm-document > .mm-prose { padding: 2px 8px; border-left: 2px solid transparent; opacity: 0.55; }
-.mm-document > .mm-lit { border-left-color: var(--accent); opacity: 1; scroll-margin-top: 48px; }
+.mm-document, .mm-picked { display: flex; flex-direction: column; gap: 0.6em; }
+.mm-document .mm-prose { padding: 2px 8px; border-left: 2px solid transparent; opacity: 0.55; }
+.mm-document .mm-heading { margin: 0.4em 0 0; font-weight: 700; color: var(--accent); }
+.mm-document .mm-lit { border-left-color: var(--accent); opacity: 1; scroll-margin-top: 48px; }
+
+/* What the canvas picked, outlined as one group. */
+.mm-picked {
+  margin: -4px -6px;
+  padding: 4px 6px;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  border-radius: 4px;
+  scroll-margin-top: 48px;
+}
 
 /* The tray reads the document beside the drawing, so it takes the bottom third of the screen. */
 .app .tray.open:not(.big) { height: 33.333vh; }

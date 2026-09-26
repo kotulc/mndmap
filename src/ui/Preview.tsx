@@ -9,7 +9,7 @@ import { Inline, Markdown } from "@mnd/kit/react";
 import { children, type Block, type Graph, type Id } from "@mnd/kit";
 import { FRONT, KEY, TABLE } from "../packages/markdown.js";
 import { is_markdown } from "../scan.js";
-import { segments, type Row } from "../series.js";
+import { covered, segments, type Row, type Segment } from "../series.js";
 
 export function Preview({ graph, picked }: { graph: Graph; picked: Id | null }) {
   const block = picked ? graph.blocks[picked] : undefined;
@@ -30,24 +30,42 @@ export function Preview({ graph, picked }: { graph: Graph; picked: Id | null }) 
 }
 
 
-/** The whole document, as the graph now orders it, with the row being read lit and kept in view. */
-export function Document({ graph, row }: { graph: Graph; row: Row | null }) {
+/** The whole document, as the graph now orders it: the row being read lit, what the canvas picked
+ *  outlined as one group, and both kept in view. What a pick covers is read as it is drawn. */
+export function Document({ graph, view, row, picked }: {
+  graph: Graph; view: Graph; row: Row | null; picked: readonly Id[];
+}) {
   const parts = useMemo(() => segments(graph), [graph]);
+  const chosen = useMemo(() => covered(view, picked), [view, picked]);
   const held = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const lit = held.current?.querySelector(".mm-lit");
-    lit?.scrollIntoView({ block: "start", behavior: "smooth" });
-  }, [row]);
+    const seen = held.current?.querySelector(".mm-picked") ?? held.current?.querySelector(".mm-lit");
+    seen?.scrollIntoView({ block: "start", behavior: "smooth" });
+  }, [row, chosen]);
+
+  // Consecutive picked segments share one outline; the rest stand alone.
+  const runs: { picked: boolean; parts: Segment[] }[] = [];
+  for (const part of parts) {
+    const on = chosen.has(part.id);
+    const last = runs[runs.length - 1];
+    if (last && on && last.picked) last.parts.push(part);
+    else runs.push({ picked: on, parts: [part] });
+  }
+
+  // A heading shows its markdown as written, so it reads apart from the content under it.
+  const draw = ({ id, text, cells, level }: Segment) => {
+    const lit = `mm-prose${row?.covers.has(id) ? " mm-lit" : ""}`;
+    if (cells) return <Table key={id} className={lit} cells={cells} />;
+    if (level) return <p key={id} className={`${lit} mm-heading`}><Inline text={text} /></p>;
+    return <Markdown key={id} className={lit} text={text} />;
+  };
 
   return (
     <div className="mm-content mm-document" ref={held}>
-      {parts.map(({ id, text, cells }) => {
-        const lit = `mm-prose${row?.covers.has(id) ? " mm-lit" : ""}`;
-        return cells
-          ? <Table key={id} className={lit} cells={cells} />
-          : <Markdown key={id} className={lit} text={text} />;
-      })}
+      {runs.map((run) => run.picked
+        ? <div key={run.parts[0]!.id} className="mm-picked">{run.parts.map(draw)}</div>
+        : run.parts.map(draw))}
     </div>
   );
 }

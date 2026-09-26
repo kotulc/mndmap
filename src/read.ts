@@ -6,29 +6,27 @@
  *  there plus one line here, and nothing else moves.
  *
  *  Every element is its own block, its body the element as written. A heading
- *  holds what follows it until the layers are shaped (see `shape`). What is
- *  content rather than a part is no block: a list's items stay in its body, and
- *  a table holds one grid of values, headed by its schema. */
+ *  holds what follows it, so the graph is the document's outline; how it reads
+ *  as rows is drawn, not stored (see `laid`). What is content rather than a part is no block: a list's items stay in its body, and
+ *  a table is one grid of values, headed by its schema. */
 
 import { marked, type Token, type Tokens } from "marked";
 import { UNITS, base_graph, new_id, set_card, set_full, size_of, type Block, type Field,
          type Graph, type Id } from "@mnd/kit";
 import {
-  CODE, FLOW, FRONT, HEADING, IMAGE, KEY, LEAD, LIST, MEMBER, MORE, QUOTE, ROW, TABLE,
+  CODE, FLOW, FRONT, HEADING, IMAGE, KEY, LIST, MEMBER, QUOTE, ROW, TABLE,
   TEXT, with_markdown,
 } from "./packages/markdown.js";
+import { breaks, is_spine } from "./series.js";
 
 /** How much of a block's text a card shows before it is cut. */
 const LABEL = 48;
 
-/** How much of a name a container lists: one line of the default card, its bullet besides. */
-const LISTED = 26;
+/** The fewest headings a page reads as; with fewer, their subheadings come up beside them. */
+const ROWS = 3;
 
 /** A table's cells, in units: room for a short phrase over two lines. */
 const CELL = { w: 6, h: 2 };
-
-/** What markdown reads as its own syntax, escaped where a name is listed as text. */
-const MARKUP = /([\\`*_{}[\]()#+\-.!>|~])/g;
 
 /** What a whole cell must be to read as a number, a flag or a link. */
 const NUMBER = /^-?(\d{1,3}(,\d{3})+|\d+)(\.\d+)?%?$/;
@@ -37,9 +35,7 @@ const LINK = /^\[([^\]]*)\]\(([^)\s]+)\)$/;
 const URL_ONLY = /^https?:\/\/\S+$/;
 
 
-/** A document as a graph: the file as the root, one block per element.
- *
- *  See {@link shape} for how each layer is arranged. */
+/** A document as a graph: the file as the root, one block per element, each under its heading. */
 export function read(name: string, text: string): Graph {
   const graph = with_markdown(base_graph());
   const root = graph.root;
@@ -92,7 +88,6 @@ export function read(name: string, text: string): Graph {
   }
 
   for (const token of marked.lexer(body)) walk(token);
-  shape(graph, root);
   return graph;
 
   /** One token, filed under whichever heading is open. */
@@ -156,22 +151,17 @@ export function read(name: string, text: string): Graph {
         const headers = table.header.map((cell, n) => cell.text || `col ${n + 1}`);
         const key = headers[0] ?? "";
         const name = clip(open.length ? graph.blocks[parent]!.name! : key || "table");
-        // Named for what it is: its section already says what it is about.
-        const held = put({
-          id: mint("table"), parent, type: TABLE, name: "table", fields: [field(KEY, "text", key)],
-        });
         const forms = headers.map((_, n) => form_of(table.rows.map((row) => row[n]?.text ?? "")));
-        // Its rows are values, not parts: one grid block in its layer, headed by the schema.
-        const id = `grid:${held.id}`;
-        graph.blocks[id] = {
-          id, parent: held.id, type: "grid", name: `${table.rows.length} rows`,
-          x: 0, y: 0, order: 1,
+        // Named for what it is: its section already says what it is about. Its rows are values,
+        // not parts: it is one grid, headed by the schema.
+        put({
+          id: mint("table"), parent, type: TABLE, name: "table", fields: [field(KEY, "text", key)],
           grid: {
             rows: table.rows.length + 1, cols: headers.length, size: CELL,
             schema: schema_for(headers, forms, name),
             values: [[], ...table.rows.map((row) => row.map((cell) => cell.text.trim()))],
           },
-        };
+        });
         return;
       }
       default:
@@ -182,115 +172,31 @@ export function read(name: string, text: string): Graph {
 }
 
 
-/** Shape each layer into a backbone of headings, each with a row of its content.
+/** The graph laid out as the page reads: a backbone down, each heading's content beside it.
  *
- *  Every heading reads the same way: a card on the backbone, its content beside it. A heading
- *  holding no subheading gives its content up to the layer, where it sits beside the heading as
- *  a row; so does a layer's lone heading, the page's title. A heading holding subheadings hands
- *  its whole section to one container beside it, shaped the same way. Only headings dissolve: a
- *  list owns its items and a table its rows. */
-function shape(graph: Graph, layer: Id): void {
-  dissolve(graph, layer);
-  const sections = kids(graph, layer)
-    .filter((block) => block.type === HEADING && kids(graph, block.id).length)
-    .map((heading) => section(graph, layer, heading.id));
-  gather(graph, layer);
-  for (const id of sections) shape(graph, id);
-}
-
-/** A heading's section, moved into one container beside it. */
-function section(graph: Graph, layer: Id, heading: Id): Id {
-  const held = kids(graph, heading);
-  const id = `more:${heading}`;
-  graph.blocks[id] = {
-    id, parent: layer, type: MORE, name: `${held.length} blocks`, order: held[0]!.order!,
-    body: listed(held),
-  };
-  for (const block of held) graph.blocks[block.id]!.parent = id;
-  return id;
-}
-
-/** Bring up the content of every heading on the layer that needs no layer of its own. */
-function dissolve(graph: Graph, layer: Id): void {
-  for (;;) {
-    const headings = kids(graph, layer).filter((block) => block.type === HEADING);
-    const loose = headings.filter((heading) => {
-      const held = kids(graph, heading.id);
-      return held.length && (headings.length === 1 || !held.some((k) => k.type === HEADING));
-    });
-    if (!loose.length) return;
-    for (const heading of loose) {
-      for (const child of kids(graph, heading.id)) graph.blocks[child.id]!.parent = layer;
-    }
-  }
-}
-
-/** Anchor each run of content on the layer: one block beside its heading, and more than one held
- *  in a container, so the backbone is two columns — headings, and their content.
- *
- *  A run hangs off the heading before it. Content ahead of any gets a lead to hang off. A container
- *  is named for how many it holds, and its body lists them. */
-function gather(graph: Graph, layer: Id): void {
-  const runs: { anchor: Block | null; members: Block[] }[] = [{ anchor: null, members: [] }];
-  for (const block of kids(graph, layer)) {
-    if (block.type === HEADING) runs.push({ anchor: block, members: [] });
-    else if (block.type !== FRONT) runs[runs.length - 1]!.members.push(block);
-  }
-
-  for (const { anchor, members } of runs) {
-    const [first] = members;
-    if (!first) continue;
-
-    // Opening content hangs off a lead, seated just ahead of it.
-    if (!anchor) {
-      const id = `lead:${layer}`;
-      graph.blocks[id] = { id, parent: layer, type: LEAD, name: "lead", order: first.order! - 0.5 };
-    }
-
-    // More than one, and the run is one block that holds it.
-    if (members.length === 1) continue;
-    const id = `more:${first.id}`;
-    graph.blocks[id] = {
-      id, parent: layer, type: MORE, name: `${members.length} blocks`, order: first.order!,
-      body: listed(members),
-    };
-    for (const member of members) graph.blocks[member.id]!.parent = id;
-  }
-}
-
-/** A container's body: the names of what it holds, as a list. */
-function listed(blocks: Block[]): string {
-  return blocks.map((block) => `- ${clip(block.name ?? "", LISTED).replace(MARKUP, "\\$1")}`)
-    .join("\n");
-}
-
-/** Whether a block sits in the backbone column rather than in a row. */
-function is_spine(block: Block): boolean {
-  return [HEADING, FRONT, LEAD].includes(block.type ?? "");
-}
-
-/** The graph laid out as the page reads: a backbone down, each block's content beside it.
- *
- *  Backbone blocks are stacked down the page, a unit of air under the taller card of the row
- *  above, joined by a directed flow line; each one's content sits to its right, chained to it by an
- *  undirected member line, the two sharing one centre line. A layer with no backbone — a
- *  container, a folder — stacks down the page; a table's layer holds its grid, which places itself.
- *  Cards are measured at `card`, the workspace's card size, and `full` lets one that fits
- *  its body grow past it. Drawn, never stored: the held graph keeps no positions or lines to fall
- *  out of step. */
+ *  The outline is drawn as rows first (see {@link inline}). Backbone blocks are stacked down the
+ *  page, a unit of air under the taller card of the row above, joined by a directed flow line;
+ *  each one's content sits to its right, chained to it by an undirected member line, the two
+ *  sharing one centre line. A layer with no backbone — a container, a folder — stacks down the
+ *  page. A table is a grid, too wide for a row: it stands in a row of its own at the backbone's
+ *  left, and what follows it starts another. Cards are measured at `card`, the
+ *  workspace's card size, and `full` lets one that fits its body grow past it. Drawn, never
+ *  stored: the held graph keeps no positions, lines or previews to fall out of step. */
 export function laid(graph: Graph, card: { w: number; h: number }, full = false): Graph {
   set_card(card.w, card.h);
   set_full(full);
-  const blocks = { ...graph.blocks };
-  const edges = { ...graph.edges };
+  const drawn = inline(graph);
+  const blocks = { ...drawn.blocks };
+  const edges = { ...drawn.edges };
   const air = UNITS.unit;
 
-  // A table keeps the one card size and cuts its columns there, rather than growing to list them.
-  for (const block of Object.values(graph.blocks)) {
-    if (block.type !== TABLE) continue;
+  // A table's preview keeps the one card size and cuts its columns there, rather than growing to
+  // list them or drawing the grid.
+  for (const block of Object.values(drawn.blocks)) {
+    if (drawn.blocks[block.of ?? ""]?.type !== TABLE) continue;
     blocks[block.id] = { ...block, w: UNITS.block.w * air, h: UNITS.block.h * air };
   }
-  const measured = { ...graph, blocks: { ...blocks } };
+  const measured = { ...drawn, blocks: { ...blocks } };
   const line = (from: Id, to: Id, type: Id) => {
     const id = `${type}:${to}`;
     edges[id] = { id, from, to, type, ...(type === FLOW ? { dir: "forward" as const } : {}) };
@@ -300,14 +206,14 @@ export function laid(graph: Graph, card: { w: number; h: number }, full = false)
     const held = kids(measured, layer);
     const spined = held.some(is_spine);
     const sized = held.map((block) => ({ block, size: size_of(measured, block.id) }));
-    const across = Math.max(0, ...sized.map(({ size }) => size.w)) + air * 2;
+    const across = pitch(measured, layer);
 
-    // Rows first: a backbone block starts one, and its content joins it.
+    // Rows first: a backbone block or a grid starts one, and content joins it.
     const rows: (typeof sized)[] = [];
     let anchor: Id | null = null;
     let last: Id | null = null;
-    for (const each of sized) {
-      if (!spined || is_spine(each.block) || !rows.length) {
+    for (const [n, each] of sized.entries()) {
+      if (!spined || !rows.length || breaks(each.block, sized[n - 1]?.block)) {
         rows.push([each]);
         if (spined && anchor) line(anchor, each.block.id, FLOW);
         if (spined) anchor = each.block.id;
@@ -331,8 +237,60 @@ export function laid(graph: Graph, card: { w: number; h: number }, full = false)
     }
   };
 
-  seat(graph.root);
-  return { ...graph, blocks, edges };
+  seat(drawn.root);
+  return { ...drawn, blocks, edges };
+}
+
+/** How far apart a laid layer's columns are: its widest card, and a unit of air either side. A
+ *  grid stands in a row of its own, so it sets no column. */
+export function pitch(graph: Graph, layer: Id): number {
+  const widths = kids(graph, layer).filter((block) => !block.grid)
+    .map((block) => size_of(graph, block.id).w);
+  return Math.max(0, ...widths) + UNITS.unit * 2;
+}
+
+
+/** The outline drawn as rows: each heading previews its content beside it.
+ *
+ *  A heading holds its content, and opening it reads that content in full; the row beside it
+ *  carries a reference to each block it holds, subheadings too, drawn as a preview. A layer with fewer than `ROWS` headings
+ *  brings up their subheadings, a level at a time, so the page is never a lone row. Content ahead
+ *  of any heading hangs off a reference to the layer's own block — the document, or the heading
+ *  opened — seated just ahead of it. Only the drawing moves: the held graph stays the outline. */
+function inline(graph: Graph): Graph {
+  const blocks = { ...graph.blocks };
+  const drawn = { ...graph, blocks };
+  const headings = (layer: Id) => kids(drawn, layer).filter((block) => block.type === HEADING);
+
+  const lay = (layer: Id) => {
+    // Too few rows to read as a page: bring up the next level of headings.
+    for (;;) {
+      const held = headings(layer);
+      const nested = held.flatMap((heading) => headings(heading.id));
+      if (held.length >= ROWS || !nested.length) break;
+      for (const block of nested) blocks[block.id] = { ...block, parent: layer };
+    }
+
+    // Each heading previews what it holds in its row, its subheadings included.
+    const held = kids(drawn, layer);
+    for (const heading of held.filter((block) => block.type === HEADING)) {
+      for (const block of kids(drawn, heading.id)) {
+        const id = `see:${block.id}`;
+        blocks[id] = { id, parent: layer, of: block.id, order: block.order! };
+      }
+    }
+
+    // Opening content hangs off the layer's own block, where there is a backbone to hang it on.
+    const first = held.find((block) => block.type !== FRONT);
+    if (first && !is_spine(first) && held.some(is_spine)) {
+      const id = `self:${layer}`;
+      blocks[id] = { id, parent: layer, of: layer, order: first.order! - 0.5 };
+    }
+    for (const block of held) lay(block.id);
+  };
+
+  lay(graph.root);
+  return drawn;
 }
 
 /** A layer's blocks, in the order they were written. */

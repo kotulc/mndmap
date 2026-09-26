@@ -14,7 +14,7 @@ import { Explorer, Icon, TrayFrame, Viewer, WorkspaceHeader, useDisplay,
 import { CARD, children, is_container, open, write, type Graph, type Id } from "@mnd/kit";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apply, Stack, type Edit } from "../edits.js";
-import { laid, read } from "../read.js";
+import { laid, pitch, read } from "../read.js";
 import { dev_sample, drop_folder, pick_file, pick_folder, save, scan, type SourceFile } from "../scan.js";
 import { MD } from "../packages/markdown.js";
 import { rows } from "../series.js";
@@ -33,6 +33,9 @@ const THEMES = [
  *  enough for two. */
 const CONTENT_CARD = { w: 10, h: 3 };
 
+/** How many cards of a row the page view reads at once. */
+const SPAN = 2;
+
 const BLANK = "Drop a markdown document or a folder, or pick one below.";
 
 /** The explorer's library sections, by the ids it folds them under. The kit keeps these to
@@ -48,7 +51,8 @@ const BACK = "ArrowUp";
 const ACROSS = "ArrowRight";
 const OUT = "ArrowLeft";
 const ENTER = "Enter";
-const LEAVE = ["Escape", "Backspace"];
+const CLEAR = "Escape";
+const LEAVE = "Backspace";
 
 
 export function App() {
@@ -62,8 +66,6 @@ export function App() {
   const [note, setNote] = useState(BLANK);
   const [theme, setTheme] = useState<ThemeName>(() => stored_theme());
   const [over, setOver] = useState(false);
-  /** The card the reading is centred on; moved by the keys, not by a click. */
-  const [focus, setFocus] = useState<Id | null>(null);
   const tray = useTray();
   const [big, setBig] = useState(false);
   const { display } = useDisplay({ card: CONTENT_CARD, range: CARD, full: false });
@@ -71,9 +73,12 @@ export function App() {
   const full = display.full ?? false;
   const view = useMemo(() => graph && laid(graph, display.card, full),
     [graph, display.card, full]);
-  /** The open layer's rows, and the one the pick sits in. */
-  const series = useMemo(() => (graph ? rows(graph, layer ?? graph.root) : []), [graph, layer]);
+  /** The open layer's rows as drawn, the one the pick sits in, and how wide the view reads. */
+  const series = useMemo(() => (view ? rows(view, layer ?? view.root) : []), [view, layer]);
   const row = series.find((each) => picked.some((id) => each.covers.has(id))) ?? null;
+  /** What the pick stands for: a preview card picks the block it previews. */
+  const real = picked.map((id) => view?.blocks[id]?.of ?? id);
+  const reach = view ? SPAN * pitch(view, layer ?? view.root) : null;
   const stack = useRef(new Stack());
   const file = useRef<HTMLInputElement>(null);
   const look = THEMES.find((item) => item.name === theme) ?? THEMES[0]!;
@@ -89,7 +94,6 @@ export function App() {
     setGraph(next);
     setLayer(null);
     setPicked([]);
-    setFocus(null);
     setFields(null);
     tray.release();
     // The library shut, and the document open one level: every block below its root folded.
@@ -187,6 +191,13 @@ export function App() {
   /** A pick anywhere but the tray gives the tray back to the canvas. */
   const pick = (ids: Id[]) => { setPicked(ids); tray.release(); };
 
+  /** Where the open layer draws a block: its preview there, or the block itself. */
+  const shown = (id: Id) => Object.values(view?.blocks ?? {})
+    .find((block) => block.of === id && block.parent === (layer ?? view?.root))?.id ?? id;
+
+  /** A pick from the tree, lit where the open layer draws it. */
+  const pick_shown = (ids: Id[]) => pick(ids.map(shown));
+
   /** Read the row `by` rows on from the one being read, staying on the open layer. */
   const turn = (by: number) => {
     const at = row ? series.indexOf(row) + by : 0;
@@ -198,60 +209,84 @@ export function App() {
   /** Pick a card by key: centre it, and open the explorer's branches down to it. */
   const land = (id: Id) => {
     pick([id]);
-    setFocus(id);
     if (!graph) return;
     const up = new Set<Id>();
-    for (let at = graph.blocks[id]?.parent; at; at = graph.blocks[at]?.parent) up.add(at);
+    const start = view?.blocks[id]?.of ?? id;
+    for (let at = graph.blocks[start]?.parent; at; at = graph.blocks[at]?.parent) up.add(at);
     setFolded((held) => held.filter((each) => !up.has(each)));
   };
 
-  /** Across the row: the next card, opened in the explorer. */
+  /** Across the row: the next card, opened in the explorer; past its end, the next row. */
   const across = () => {
     const at = row && picked[0] ? row.cards.indexOf(picked[0]) : -1;
     const next = row?.cards[at + 1];
-    if (!row || at < 0 || !next) return;
+    if (!row || at < 0) return;
+    if (!next) { turn(1); return; }
     land(next);
-    setFolded((held) => held.filter((each) => each !== next));
+    const shown = view?.blocks[next]?.of ?? next;
+    setFolded((held) => held.filter((each) => each !== shown));
   };
 
-  /** Back along the row: the card before, the one left shut; from the heading, out of the layer. */
+  /** Back along the row: the card before, the one left shut; from the heading, its branch shut and
+   *  out of the layer. */
   const back = () => {
     const at = row && picked[0] ? row.cards.indexOf(picked[0]) : -1;
-    if (!row || at <= 0) { leave(); return; }
-    const left = picked[0]!;
+    if (!row || at <= 0) {
+      const shut = real[0];
+      if (shut) setFolded((held) => [...new Set([...held, shut])]);
+      leave();
+      return;
+    }
+    const left = real[0]!;
     land(row.cards[at - 1]!);
     setFolded((held) => [...new Set([...held, left])]);
   };
 
-  /** Open the row being read, where it holds anything, and read its first row. */
+  /** Open the row being read, where it holds anything, and read its first row. A preview opens
+   *  the layer its block lives on instead; with nothing picked, the first row is. */
   const enter = () => {
-    const [id] = picked;
-    if (!graph || !id || picked.length > 1 || !is_container(graph, id)) return;
-    const first = rows(graph, id)[0]?.anchor ?? null;
+    const [id] = real;
+    if (!id && series[0]) { land(series[0].anchor); return; }
+    if (!view || !id || real.length > 1) return;
+    // A preview opens where its block lives, and reads on from it there.
+    if (id !== picked[0]) {
+      const home = view.blocks[id]?.parent;
+      if (!home) return;
+      setLayer(home === view.root ? null : home);
+      setFields(null);
+      land(id);
+      return;
+    }
+    if (!is_container(view, id)) return;
+    const first = rows(view, id)[0]?.anchor ?? null;
     setLayer(id);
     setFields(null);
     if (first) land(first);
-    else { pick([]); setFocus(null); }
+    else pick([]);
   };
 
   /** Leave the open layer, reading on from the row that opened it, its branch shut again. */
   const leave = () => {
-    if (!graph || !layer) return;
-    const up = graph.blocks[layer]?.parent ?? graph.root;
-    setLayer(up === graph.root ? null : up);
+    if (!view || !layer) return;
+    const up = view.blocks[layer]?.parent ?? view.root;
+    setLayer(up === view.root ? null : up);
     setFields(null);
     land(layer);
     setFolded((held) => [...new Set([...held, layer])]);
   };
 
-  /** The arrows read the page, enter opens a card and escape leaves — unless something is typed. */
+  /** Clear the pick, opening out to the whole layer; with nothing picked, leave it. */
+  const clear = () => (picked.length ? pick([]) : leave());
+
+  /** The arrows read the page, enter opens a card, escape clears and backspace leaves — unless
+   *  something is typed. */
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
       const typing = event.target instanceof HTMLElement
         && event.target.closest("input, textarea, select, button, [contenteditable='true']");
       const does: Record<string, () => void> = {
         [FORWARD]: () => turn(1), [BACK]: () => turn(-1), [ACROSS]: across, [OUT]: back,
-        [ENTER]: enter, ...Object.fromEntries(LEAVE.map((name) => [name, leave])),
+        [ENTER]: enter, [CLEAR]: clear, [LEAVE]: leave,
       };
       const act = does[event.key];
       if (typing || event.defaultPrevented || !act) return;
@@ -269,10 +304,12 @@ export function App() {
     /** The root layer is `null`, whatever id the graph gives it. */
     const layer_of = (at: Id | null | undefined) => (!at || at === graph.root ? null : at);
 
-    if (name === "reveal" && id) {
-      /** A row that holds anything opens as the layer; a leaf lights on its parent. */
-      if (is_container(graph, id)) { setLayer(layer_of(id)); setPicked([]); return; }
-      setLayer(layer_of(graph.blocks[id]?.parent));
+    if (name === "reveal" && id && view) {
+      /** A block previewed here lights its preview; else a row that holds anything opens as the
+       *  layer, and a leaf lights on the layer it is drawn on. */
+      if (shown(id) !== id) { setPicked([shown(id)]); return; }
+      if (is_container(view, id)) { setLayer(layer_of(id)); setPicked([]); return; }
+      setLayer(layer_of(view.blocks[id]?.parent));
       setPicked([id]);
       return;
     }
@@ -305,7 +342,7 @@ export function App() {
         edit({ do: "move", id: moveId, parent, ...(at >= 0 ? { at } : {}) });
       }
     }
-  }, [edit, graph]);
+  }, [edit, graph, view, layer]);
 
   if (!graph) {
     return (
@@ -327,7 +364,7 @@ export function App() {
 
   const blocks = Math.max(0, Object.keys(graph.blocks).length - 1);
   /** What the tray is about: the pick, or else the open layer. */
-  const about = graph.blocks[picked[0] ?? layer ?? graph.root];
+  const about = graph.blocks[real[0] ?? ""] ?? graph.blocks[layer ?? graph.root];
   const kind = about?.type ? graph.defs[about.type]?.name ?? about.type : "block";
 
   return (
@@ -355,7 +392,7 @@ export function App() {
           }} />
       </WorkspaceHeader>
 
-      <Explorer graph={graph} open={layer} picked={picked} folded={folded} menu
+      <Explorer graph={graph} open={layer} picked={real} folded={folded} menu
         tools={{ block: false }}
         extra={
           <button type="button" aria-label="Open a document"
@@ -367,16 +404,16 @@ export function App() {
         onAct={act}
         onFold={(id, shut) => setFolded((held) =>
           shut ? [...new Set([...held, id])] : held.filter((each) => each !== id))}
-        onPick={pick} />
+        onPick={pick_shown} />
 
       <main>
         <div className="mm-canvas">
           <Viewer graph={view ?? graph} layer={layer} picked={picked} card={display.card}
-            full={full} scroll focus={focus}
+            full={full} scroll focus={picked[0] ?? null} reach={reach}
             chrome={{ crumbs: true, lattice: display.lattice ?? true, legend: display.legend,
                       corner: display.corner }}
             fields={fields} onFields={setFields}
-            onLook={(at) => { setLayer(at); setFocus(null); }} onPick={pick} />
+            onLook={setLayer} onPick={pick} />
           {note ? (
             <p className="strip mm-strip" onClick={() => setNote("")}>{note}</p>
           ) : null}
@@ -384,7 +421,7 @@ export function App() {
         <TrayFrame open={tray.open} onOpen={tray.onOpen} big={big} onBig={setBig}
           word={kind} name={about?.name ?? ""} tabs={TABS} tab="markdown" onTab={() => {}}>
           {graph.packages[MD]
-            ? <Document graph={graph} row={row} />
+            ? <Document graph={graph} view={view ?? graph} row={row} picked={real} />
             : <Preview graph={graph} picked={about?.id ?? null} />}
         </TrayFrame>
       </main>

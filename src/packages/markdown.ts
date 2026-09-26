@@ -19,8 +19,6 @@ export const TABLE = "md.table";
 export const ROW = "md.row";
 export const IMAGE = "md.image";
 export const FRONT = "md.front";
-export const LEAD = "md.lead";
-export const MORE = "md.more";
 export const FLOW = "md.flow";
 export const MEMBER = "md.member";
 
@@ -31,7 +29,7 @@ export const KEY = "key";
 
 /** How each kind of card draws: its icon, and what it shows under its divider. Prose is its body
  *  alone and grows to fit it; a fence or a list keeps its name over its body; a table lists its
- *  columns. A row and a container wear the base's icon. */
+ *  columns. A row wears the base's icon. */
 const ICON = (icon: string) => ({ card: { icon } });
 const PROSE = (icon: string) => ({ card: { icon, name: "hide", body: "show", height: "fit" } });
 const NAMED = (icon: string) => ({ card: { icon, body: "show", height: "fit" } });
@@ -66,9 +64,9 @@ export const DEFS: Definition[] = [
     components: PROSE("content_quote"),
   },
   {
-    id: TABLE, from: MD, group: "block", extends: "folder", name: "table",
-    about: "A table. Holds one grid of its rows' values, headed by their schema; its key column "
-      + "names each row.",
+    id: TABLE, from: MD, group: "block", extends: "grid", name: "table",
+    about: "A table. One grid of its rows' values, headed by their schema; its key column names "
+      + "each row.",
     components: LISTED("role_table"),
     fields: [{ name: KEY, form: "text" }],
   },
@@ -86,17 +84,6 @@ export const DEFS: Definition[] = [
     id: FRONT, from: MD, group: "block", extends: "note", name: "front matter",
     about: "The document's own metadata, as it was written.",
     components: ICON("content_front"),
-  },
-  {
-    id: LEAD, from: MD, group: "block", extends: "note", name: "lead",
-    about: "Where a layer's opening content hangs, ahead of its first heading.",
-    components: ICON("content_lead"),
-  },
-  {
-    id: MORE, from: MD, group: "block", extends: "folder", name: "container",
-    about: "A heading's content, held in one block where there is more than one. Its body lists "
-      + "what it holds.",
-    components: { card: { body: "show" } },
   },
   {
     id: FLOW, from: MD, group: "relation", extends: "line", name: "flow",
