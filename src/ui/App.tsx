@@ -4,16 +4,16 @@
  *  heading, paragraph, list, fence, quote, image, rule and table row. A folder
  *  is filed by path instead, one block per file. The explorer, the canvas and
  *  the tray are the kit's, and so is what they share: the tray's state and how
- *  the drawing looks. What is mndmap's is reading, the document stacked as it
+ *  the drawing looks. What is mndmap's is reading, the document laid out as it
  *  reads, the preview tab, and reorganizing — edits apply to the held graph,
  *  and undo is the stack of graphs behind it. */
 
 import { Explorer, Icon, Tray, Viewer, WorkspaceHeader, useDisplay,
          useTray } from "@mnd/kit/react";
-import { CARD, UNITS, children, open, write, type Graph, type Id } from "@mnd/kit";
+import { CARD, children, open, write, type Graph, type Id } from "@mnd/kit";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apply, Stack, type Edit } from "../edits.js";
-import { read, stacked } from "../read.js";
+import { laid, read } from "../read.js";
 import { dev_sample, drop_folder, pick_file, pick_folder, save, scan, type SourceFile } from "../scan.js";
 import { Preview } from "./Preview.js";
 
@@ -46,9 +46,8 @@ export function App() {
   const [over, setOver] = useState(false);
   const tray = useTray();
   const { display, onDisplay } = useDisplay({ card: CONTENT_CARD, range: CARD });
-  /** The document stacked down the page at the card's height, the way it reads. */
-  const view = useMemo(() => graph && stacked(graph, (display.card.h + 1) * UNITS.unit),
-    [graph, display.card.h]);
+  /** The document laid out as it reads: a backbone down the page, content across. */
+  const view = useMemo(() => graph && laid(graph, display.card), [graph, display.card]);
   const stack = useRef(new Stack());
   const file = useRef<HTMLInputElement>(null);
   const look = THEMES.find((item) => item.name === theme) ?? THEMES[0]!;
