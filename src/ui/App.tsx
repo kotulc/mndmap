@@ -198,10 +198,15 @@ export function App() {
   /** A pick from the tree, lit where the open layer draws it. */
   const pick_shown = (ids: Id[]) => pick(ids.map(shown));
 
-  /** Read the row `by` rows on from the one being read, staying on the open layer. */
+  /** The open layer's own block picked: the whole layer in view. */
+  const whole = () => { if (view) pick([layer ?? view.root]); };
+
+  /** Read the row `by` rows on from the one being read, staying on the open layer; up past the
+   *  first, the layer itself. */
   const turn = (by: number) => {
     const at = row ? series.indexOf(row) + by : 0;
-    const next = series[Math.max(0, Math.min(series.length - 1, at))];
+    if (at < 0) { whole(); return; }
+    const next = series[Math.min(series.length - 1, at)];
     if (!next) return;
     land(next.anchor);
   };
@@ -228,13 +233,14 @@ export function App() {
   };
 
   /** Back along the row: the card before, the one left shut; from the heading, its branch shut and
-   *  out of the layer. */
+   *  up to the layer itself; from there, out of the layer. */
   const back = () => {
     const at = row && picked[0] ? row.cards.indexOf(picked[0]) : -1;
-    if (!row || at <= 0) {
+    if (!row) { leave(); return; }
+    if (at <= 0) {
       const shut = real[0];
-      if (shut) setFolded((held) => [...new Set([...held, shut])]);
-      leave();
+      if (shut && shut !== layer) setFolded((held) => [...new Set([...held, shut])]);
+      whole();
       return;
     }
     const left = real[0]!;
@@ -259,7 +265,7 @@ export function App() {
     }
     if (!is_container(view, id)) return;
     const first = rows(view, id)[0]?.anchor ?? null;
-    setLayer(id);
+    setLayer(id === view.root ? null : id);
     setFields(null);
     if (first) land(first);
     else pick([]);

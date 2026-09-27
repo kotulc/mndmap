@@ -14,7 +14,7 @@ import { marked, type Token, type Tokens } from "marked";
 import { UNITS, base_graph, new_id, set_card, set_full, size_of, type Block, type Field,
          type Graph, type Id } from "@mnd/kit";
 import {
-  CODE, FLOW, FRONT, HEADING, IMAGE, KEY, LIST, MEMBER, QUOTE, ROW, TABLE,
+  CODE, FLOW, FRONT, HEADING, IMAGE, KEY, LIST, MEMBER, QUOTE, TABLE,
   TEXT, with_markdown,
 } from "./packages/markdown.js";
 import { breaks, is_spine } from "./series.js";
@@ -75,7 +75,7 @@ export function read(name: string, text: string): Graph {
     named.add(unique);
     const id = new_id("def");
     graph.defs[id] = {
-      id, group: "block", extends: ROW, name: unique,
+      id, group: "block", extends: "block", name: unique,
       fields: headers.map((name, n) => ({ name, form: forms[n] ?? "text" })),
     };
     schemas.set(sign, id);
@@ -84,7 +84,7 @@ export function read(name: string, text: string): Graph {
 
   const { front, body } = split_front(text);
   if (front) {
-    put({ id: mint("front"), parent: root, type: FRONT, name: "front matter", body: front });
+    put({ id: mint("front"), parent: root, type: FRONT, name: "frontmatter", body: front });
   }
 
   for (const token of marked.lexer(body)) walk(token);
@@ -178,10 +178,11 @@ export function read(name: string, text: string): Graph {
  *  page, a unit of air under the taller card of the row above, joined by a directed flow line;
  *  each one's content sits to its right, chained to it by an undirected member line, the two
  *  sharing one centre line. A layer with no backbone — a container, a folder — stacks down the
- *  page. A table is a grid, too wide for a row: it stands in a row of its own at the backbone's
- *  left, and what follows it starts another. Cards are measured at `card`, the
- *  workspace's card size, and `full` lets one that fits its body grow past it. Drawn, never
- *  stored: the held graph keeps no positions, lines or previews to fall out of step. */
+ *  page, a row a block, joined the same way. A table is a grid, too wide for a row: it stands in
+ *  a row of its own at the backbone's left, and what follows it starts another. Cards are
+ *  measured at `card`, the workspace's card size, and `full` lets one that fits its body grow past
+ *  it. Drawn, never stored: the held graph keeps no positions, lines or previews to fall out of
+ *  step. */
 export function laid(graph: Graph, card: { w: number; h: number }, full = false): Graph {
   set_card(card.w, card.h);
   set_full(full);
@@ -215,8 +216,8 @@ export function laid(graph: Graph, card: { w: number; h: number }, full = false)
     for (const [n, each] of sized.entries()) {
       if (!spined || !rows.length || breaks(each.block, sized[n - 1]?.block)) {
         rows.push([each]);
-        if (spined && anchor) line(anchor, each.block.id, FLOW);
-        if (spined) anchor = each.block.id;
+        if (anchor) line(anchor, each.block.id, FLOW);
+        anchor = each.block.id;
         last = anchor;
       } else {
         rows[rows.length - 1]!.push(each);

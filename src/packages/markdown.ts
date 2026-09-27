@@ -16,7 +16,6 @@ export const LIST = "md.list";
 export const CODE = "md.code";
 export const QUOTE = "md.quote";
 export const TABLE = "md.table";
-export const ROW = "md.row";
 export const IMAGE = "md.image";
 export const FRONT = "md.front";
 export const FLOW = "md.flow";
@@ -29,7 +28,7 @@ export const KEY = "key";
 
 /** How each kind of card draws: its icon, and what it shows under its divider. Prose is its body
  *  alone and grows to fit it; a fence or a list keeps its name over its body; a table lists its
- *  columns. A row wears the base's icon. */
+ *  columns. */
 const ICON = (icon: string) => ({ card: { icon } });
 const PROSE = (icon: string) => ({ card: { icon, name: "hide", body: "show", height: "fit" } });
 const NAMED = (icon: string) => ({ card: { icon, body: "show", height: "fit" } });
@@ -71,19 +70,14 @@ export const DEFS: Definition[] = [
     fields: [{ name: KEY, form: "text" }],
   },
   {
-    id: ROW, from: MD, group: "block", extends: "block", name: "row",
-    about: "One record. Each table's header extends this with a field per column; a line of its "
-      + "grid is one.",
-  },
-  {
     id: IMAGE, from: MD, group: "block", extends: "reference", name: "image",
     about: "An image. Its source is where it lives; its alt text names it.",
     components: ICON("content_image"),
   },
   {
-    id: FRONT, from: MD, group: "block", extends: "note", name: "front matter",
+    id: FRONT, from: MD, group: "block", extends: "note", name: "frontmatter",
     about: "The document's own metadata, as it was written.",
-    components: ICON("content_front"),
+    components: ICON("data"),
   },
   {
     id: FLOW, from: MD, group: "relation", extends: "line", name: "flow",
