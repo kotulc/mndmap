@@ -30,12 +30,6 @@ export interface Segment {
 const LEVELS = 6;
 
 
-/** Whether a block starts a row of its own: a backbone block, or a grid — too wide to sit in a
- *  row — and whatever follows one. */
-export function breaks(block: Block, before: Block | undefined): boolean {
-  return is_spine(block) || !!block.grid || !!before?.grid;
-}
-
 /** Every block a pick covers: each picked block and all it holds. */
 export function covered(graph: Graph, picked: readonly Id[]): Set<Id> {
   return new Set(picked.flatMap((id) => under(graph, id)));
@@ -47,16 +41,16 @@ export function is_spine(block: Block): boolean {
   return [HEADING, FRONT].includes(block.type ?? "") || block.of === block.parent;
 }
 
-/** A layer's rows, top to bottom. A heading that is a layer of its own covers its whole section;
- *  a layer with no backbone — a container, a folder — is a row per block. */
+/** A layer's rows, top to bottom: each backbone block and the content after it. A layer with no
+ *  backbone — an opened focus, a folder — is a row per block. */
 export function rows(graph: Graph, layer: Id): Row[] {
   const held = children(graph, layer);
   const spined = held.some(is_spine);
   const out: Row[] = [];
-  held.forEach((block, n) => {
+  held.forEach((block) => {
     const row = out[out.length - 1];
     // Content joins the row before it, with all it holds.
-    if (spined && row && !breaks(block, held[n - 1])) {
+    if (spined && row && !is_spine(block)) {
       row.cards.push(block.id);
       for (const id of under(graph, block.id)) row.covers.add(id);
       return;

@@ -7,8 +7,9 @@
  *
  *  Every element is its own block, its body the element as written. A heading
  *  holds what follows it, so the graph is the document's outline; how it reads
- *  as rows is drawn, not stored (see `laid`). What is content rather than a part is no block: a list's items stay in its body, and
- *  a table is one grid of values, headed by its schema. */
+ *  as one page of rows is drawn, not stored (see `laid`). What is content rather than a part is
+ *  no block: a list's items stay in its body, and a table is one grid of values, headed by its
+ *  schema. */
 
 import { marked, type Token, type Tokens } from "marked";
 import { UNITS, base_graph, new_id, set_card, set_full, size_of, type Block, type Field,
@@ -17,13 +18,16 @@ import {
   CODE, FLOW, FRONT, HEADING, IMAGE, KEY, LIST, MEMBER, QUOTE, TABLE,
   TEXT, with_markdown,
 } from "./packages/markdown.js";
-import { breaks, is_spine } from "./series.js";
+import { is_spine, rows } from "./series.js";
 
 /** How much of a block's text a card shows before it is cut. */
 const LABEL = 48;
 
-/** The fewest headings a page reads as; with fewer, their subheadings come up beside them. */
-const ROWS = 3;
+/** How many lines make a fence or list too long for a card, so it is opened to be read. */
+const LONG = 12;
+
+/** What names a focus block's preview on the page. */
+const SEE = "see:";
 
 /** A table's cells, in units: room for a short phrase over two lines. */
 const CELL = { w: 6, h: 2 };
@@ -174,65 +178,56 @@ export function read(name: string, text: string): Graph {
 
 /** The graph laid out as the page reads: a backbone down, each heading's content beside it.
  *
- *  The outline is drawn as rows first (see {@link inline}). Backbone blocks are stacked down the
- *  page, a unit of air under the taller card of the row above, joined by a directed flow line;
- *  each one's content sits to its right, chained to it by an undirected member line, the two
- *  sharing one centre line. A layer with no backbone — a container, a folder — stacks down the
- *  page, a row a block, joined the same way. A table is a grid, too wide for a row: it stands in
- *  a row of its own at the backbone's left, and what follows it starts another. Cards are
- *  measured at `card`, the workspace's card size, and `full` lets one that fits its body grow past
- *  it. Drawn, never stored: the held graph keeps no positions, lines or previews to fall out of
- *  step. */
+ *  The document is drawn as one page (see {@link paged}). Backbone blocks are stacked down the
+ *  page, a unit of air under the taller card of the row above, each heading stepped right a
+ *  column for each level it is nested; a flow line runs to each from its parent or the sibling
+ *  before it. Content starts the column right of its heading, chained to it by an undirected
+ *  member line, the two sharing one centre line. A layer with no backbone — an opened focus, a folder —
+ *  stacks down the page, a row a block. Cards are measured at `card`, the workspace's card size,
+ *  and `full` lets one that fits its body grow past it. Drawn, never stored: the held graph keeps
+ *  no positions, lines or previews to fall out of step. */
 export function laid(graph: Graph, card: { w: number; h: number }, full = false): Graph {
   set_card(card.w, card.h);
   set_full(full);
-  const drawn = inline(graph);
+  const drawn = paged(graph);
   const blocks = { ...drawn.blocks };
   const edges = { ...drawn.edges };
   const air = UNITS.unit;
 
-  // A table's preview keeps the one card size and cuts its columns there, rather than growing to
-  // list them or drawing the grid.
+  // A table's preview keeps the one card size and cuts its columns there.
   for (const block of Object.values(drawn.blocks)) {
     if (drawn.blocks[block.of ?? ""]?.type !== TABLE) continue;
     blocks[block.id] = { ...block, w: UNITS.block.w * air, h: UNITS.block.h * air };
   }
   const measured = { ...drawn, blocks: { ...blocks } };
+  const size = (id: Id) => size_of(measured, id);
   const line = (from: Id, to: Id, type: Id) => {
     const id = `${type}:${to}`;
     edges[id] = { id, from, to, type, ...(type === FLOW ? { dir: "forward" as const } : {}) };
   };
 
   const seat = (layer: Id) => {
-    const held = kids(measured, layer);
-    const spined = held.some(is_spine);
-    const sized = held.map((block) => ({ block, size: size_of(measured, block.id) }));
+    const held = rows(measured, layer);
+    // Each level of heading steps right a backbone column, and its content starts the next one.
+    const lane = Math.max(0, ...held.map((row) => size(row.anchor).w)) + air * 2;
+    const step = (id: Id) => lane * depth(graph, id);
     const across = pitch(measured, layer);
-
-    // Rows first: a backbone block or a grid starts one, and content joins it.
-    const rows: (typeof sized)[] = [];
-    let anchor: Id | null = null;
-    let last: Id | null = null;
-    for (const [n, each] of sized.entries()) {
-      if (!spined || !rows.length || breaks(each.block, sized[n - 1]?.block)) {
-        rows.push([each]);
-        if (anchor) line(anchor, each.block.id, FLOW);
-        anchor = each.block.id;
-        last = anchor;
-      } else {
-        rows[rows.length - 1]!.push(each);
-        if (last) line(last, each.block.id, MEMBER);
-        last = each.block.id;
-      }
-    }
-
-    // Then down the page, each card centred on its row's tallest.
+    const anchors: { id: Id; depth: number }[] = [];
     let y = 0;
-    for (const row of rows) {
-      const tall = Math.max(...row.map(({ size }) => size.h));
-      row.forEach(({ block, size }, col) => {
-        blocks[block.id] = { ...block, x: col * across, y: y + (tall - size.h) / 2 };
-        seat(block.id);
+    for (const row of held) {
+      // Flow runs from the last backbone block as shallow or shallower: a parent or a sibling.
+      const deep = depth(graph, row.anchor);
+      const from = anchors.findLast((each) => each.depth <= deep);
+      if (from) line(from.id, row.anchor, FLOW);
+      anchors.push({ id: row.anchor, depth: deep });
+
+      // Each card centred on the row's tallest.
+      const tall = Math.max(...row.cards.map((id) => size(id).h));
+      row.cards.forEach((id, col) => {
+        const x = col ? step(row.anchor) + lane + (col - 1) * across : step(id);
+        blocks[id] = { ...blocks[id]!, x, y: y + (tall - size(id).h) / 2 };
+        if (col) line(row.cards[col - 1]!, id, MEMBER);
+        seat(id);
       });
       y += tall + air;
     }
@@ -242,56 +237,70 @@ export function laid(graph: Graph, card: { w: number; h: number }, full = false)
   return { ...drawn, blocks, edges };
 }
 
-/** How far apart a laid layer's columns are: its widest card, and a unit of air either side. A
- *  grid stands in a row of its own, so it sets no column. */
+/** How many headings a block sits under. */
+export function depth(graph: Graph, id: Id): number {
+  let n = 0;
+  for (let at = graph.blocks[id]?.parent; at && graph.blocks[at]?.type === HEADING;
+       at = graph.blocks[at]?.parent) n++;
+  return n;
+}
+
+/** How far apart a laid layer's content columns are: its widest content card, and a unit of air
+ *  either side. On a layer with no backbone, every card is content. */
 export function pitch(graph: Graph, layer: Id): number {
-  const widths = kids(graph, layer).filter((block) => !block.grid)
-    .map((block) => size_of(graph, block.id).w);
+  const held = kids(graph, layer);
+  const content = held.some(is_spine) ? held.filter((block) => !is_spine(block)) : held;
+  const widths = content.map((block) => size_of(graph, block.id).w);
   return Math.max(0, ...widths) + UNITS.unit * 2;
 }
 
+/** The card the page draws for a held block: its preview, where it is a focus. */
+export function seen_as(view: Graph, id: Id): Id {
+  return view.blocks[`${SEE}${id}`] ? `${SEE}${id}` : id;
+}
 
-/** The outline drawn as rows: each heading previews its content beside it.
+
+/** Whether a block is opened to be read rather than read in its row: a table, or a fence or list
+ *  too long for a card. */
+function is_focus(block: Block): boolean {
+  const long = (block.body ?? "").split("\n").length >= LONG;
+  return block.type === TABLE || ([CODE, LIST].includes(block.type ?? "") && long);
+}
+
+/** The document drawn as one page.
  *
- *  A heading holds its content, and opening it reads that content in full; the row beside it
- *  carries a reference to each block it holds, subheadings too, drawn as a preview. A layer with fewer than `ROWS` headings
- *  brings up their subheadings, a level at a time, so the page is never a lone row. Content ahead
- *  of any heading hangs off a reference to the layer's own block — the document, or the heading
- *  opened — seated just ahead of it. Only the drawing moves: the held graph stays the outline. */
-function inline(graph: Graph): Graph {
+ *  A heading holds its section, but draws as the row it heads rather than a layer to open: all it
+ *  holds, subheadings too, comes up to the page in reading order. A focus block draws there as a
+ *  preview, and holds itself, so opening the preview reads it alone. Content ahead of any heading
+ *  hangs off a reference to the document, seated just ahead of it. Only the drawing moves: the
+ *  held graph stays the outline. */
+function paged(graph: Graph): Graph {
   const blocks = { ...graph.blocks };
-  const drawn = { ...graph, blocks };
-  const headings = (layer: Id) => kids(drawn, layer).filter((block) => block.type === HEADING);
+  const root = graph.root;
+  let order = 0;
 
-  const lay = (layer: Id) => {
-    // Too few rows to read as a page: bring up the next level of headings.
-    for (;;) {
-      const held = headings(layer);
-      const nested = held.flatMap((heading) => headings(heading.id));
-      if (held.length >= ROWS || !nested.length) break;
-      for (const block of nested) blocks[block.id] = { ...block, parent: layer };
-    }
-
-    // Each heading previews what it holds in its row, its subheadings included.
-    const held = kids(drawn, layer);
-    for (const heading of held.filter((block) => block.type === HEADING)) {
-      for (const block of kids(drawn, heading.id)) {
-        const id = `see:${block.id}`;
-        blocks[id] = { id, parent: layer, of: block.id, order: block.order! };
+  const up = (layer: Id) => {
+    for (const block of kids(graph, layer)) {
+      const at = ++order;
+      if (is_focus(block)) {
+        const id = `${SEE}${block.id}`;
+        blocks[id] = { id, parent: root, of: block.id, order: at };
+        blocks[block.id] = { ...block, parent: id, order: 0 };
+      } else {
+        blocks[block.id] = { ...block, parent: root, order: at };
       }
+      if (block.type === HEADING) up(block.id);
     }
-
-    // Opening content hangs off the layer's own block, where there is a backbone to hang it on.
-    const first = held.find((block) => block.type !== FRONT);
-    if (first && !is_spine(first) && held.some(is_spine)) {
-      const id = `self:${layer}`;
-      blocks[id] = { id, parent: layer, of: layer, order: first.order! - 0.5 };
-    }
-    for (const block of held) lay(block.id);
   };
+  up(root);
 
-  lay(graph.root);
-  return drawn;
+  const held = kids({ ...graph, blocks }, root);
+  const first = held.find((block) => block.type !== FRONT);
+  if (first && !is_spine(first) && held.some(is_spine)) {
+    const id = `self:${root}`;
+    blocks[id] = { id, parent: root, of: root, order: first.order! - 0.5 };
+  }
+  return { ...graph, blocks };
 }
 
 /** A layer's blocks, in the order they were written. */

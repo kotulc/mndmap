@@ -9,10 +9,12 @@
  *         MNDMAP_KIT=.kit npm run dev   (a kit built elsewhere, unwatched) */
 
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
+import { setTimeout as wait } from "node:timers/promises";
 import { resolve } from "node:path";
 
 const KIT = resolve("..", "mndflow", "packages", "kit");
+const BUILT = resolve(KIT, "dist", "index.js");
 // Only the neighbouring checkout is watched: a pinned or pointed kit is taken as built.
 const linked = !process.env.MNDMAP_KIT && existsSync(resolve(KIT, "package.json"));
 const held = [];
@@ -26,12 +28,17 @@ const held = [];
 // build's own output would retrigger it forever.
 if (linked) {
   say("kit", `watching ${resolve(KIT, "..")}`);
+  const started = Date.now();
   held.push(run("npx", [
     "tsup", "--silent",
     "--watch", "..",
     "--ignore-watch", "../kit/dist",
     "--ignore-watch", "../**/node_modules",
   ], KIT, "kit"));
+  // The watcher cleans `dist` before its first build, and vite links the kit only where it finds
+  // one — so vite waits for that build, or it falls back to the vendored tarball unseen.
+  while (!existsSync(BUILT) || statSync(BUILT).mtimeMs < started) await wait(200);
+  say("kit", "built");
 } else {
   say("kit", "vendored tarball");
 }
