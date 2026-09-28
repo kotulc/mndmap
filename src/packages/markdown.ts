@@ -109,17 +109,22 @@ export const DEFS: Definition[] = [
   },
 ];
 
-/** What each block definition is, for reading them grouped: a document's structure, its prose,
- *  its data, or its media. */
-export const KINDS: Record<Id, string> = {
-  [HEADING]: "structure", [FRONT]: "structure",
-  [TEXT]: "prose", [QUOTE]: "prose", [LIST]: "prose", [CODE]: "prose",
-  [TABLE]: "data", [COLUMN]: "data", [SCHEMA]: "data",
-  [IMAGE]: "media",
-};
+/** How the package files its block definitions: a document's structure, its prose, its data and
+ *  its media, a folder each. */
+const FOLDERS: [string, Id[]][] = [
+  ["structure", [HEADING, FRONT]], ["prose", [TEXT, QUOTE, LIST, CODE]],
+  ["data", [TABLE, COLUMN, SCHEMA]], ["media", [IMAGE]],
+];
 
-/** The package as the graph files it: built on the base package, never written into. */
-export const PACKAGE: Package = { id: MD, name: "markdown", extends: BASE_PACKAGE };
+/** The package as the graph files it: built on the base package, never written into, its
+ *  definitions filed in its folders. */
+export const PACKAGE: Package = {
+  id: MD, name: "markdown", extends: BASE_PACKAGE,
+  shelf: FOLDERS.flatMap(([name, ids]) => [
+    { id: `${MD}:${name}`, group: "block" as const, name },
+    ...ids.map((id) => ({ id, group: "block" as const, in: `${MD}:${name}` })),
+  ]),
+};
 
 /** A graph with the markdown package registered in it. */
 export function with_markdown<T extends {

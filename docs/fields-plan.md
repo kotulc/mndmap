@@ -3,7 +3,7 @@
 **Tables become typed block fields, and fields become something a card, the explorer and a layer can
 show.** Spans mndflow (the shell) and mndmap (the translator).
 
-**Status: steps 1–18 done.** mndmap pins `@mnd/kit` 0.9.0. Steps 12–18 are **unreleased**: their
+**Status: steps 1–22 done.** mndmap pins `@mnd/kit` 0.9.0. Steps 12–22 are **unreleased**: their
 kit half lives in mndflow's working tree and reaches mndmap only through the linked dev server.
 Release once they settle.
 
@@ -16,7 +16,8 @@ Release once they settle.
 | **root node** | heads `usages`, wears its own root mark |
 | **schema** | a table's own: a field per column, with the form its cells read as, and its key column marked. Never a definition |
 | **column types** | each distinct column name is a workspace block type; a table's header allocates them |
-| **definitions** | only what is reused across the document. Picking a library section charts its definitions, each beside what it types or what allocates it |
+| **definitions** | only what is reused across the document, filed in folders as any package's are |
+| **projections** | diagrams drawn from the one explorer tree, each its own view under the same rules: the document (the page) and the library (packages and definitions) |
 | **page** | one document reads as one flat page: headings anchor rows, and only focus blocks open |
 | **values** | a table's data rows are values in a grid, headed by its column types — data, not parts. A block is kept for what is reusable |
 | **DB mark** | any card whose block has a schema or set field values says so at a glance |
@@ -45,7 +46,12 @@ Release once they settle.
 | 15 | **column block types**: a workspace definition per distinct column name, extending `md.column`; a grid's header allocates them (`Grid.columns`) and reads their names; the key is a table's own field (`Field.key`) and its header and schema wear a key icon. Fields past a card's height are cut with `…` | mndflow `core` types, `views` (`block`, `derive`), `stage` (`nodes`, css), `theme` icons; mndmap `read.ts`, `packages/markdown.ts`, `series.ts`, `ui/Preview.tsx` | done |
 | 16 | **schemas are the table's; the opened table**: no schema definitions — a table carries a field per column with its form. Opened, it draws its grid with each column's definition over its column (dashed `allocates`), and a reference to its section's heading and its `schema` card beside it. The class diagram toggle goes | mndmap `read.ts` (`beside`, `around`), `packages/markdown.ts`, `ui/App.tsx` | done |
 | 17 | **definition charts**: picking `definitions`, `packages`, a package or one definition charts those block definitions in the page's place. Enter reads a block on the page; Escape leaves | mndmap `read.ts` (`charted`), `series.ts` (`is_spine`), `ui/App.tsx` | done |
-| 18 | **cutouts and groups**: an opened table shows its section around it (heading above, neighbours at either side, columns and schema below). A chart groups definitions in labelled boxes — column types by section, `shared` first, the rest by kind (`KINDS`) — packed by the kit. One definition opens in context: the table cards allocating it under their headings, it under them, related columns below. The unpicked camera fits a drawing's width, not its room | mndmap `read.ts` (`beside`, `around`, `grouped`, `local`), `packages/markdown.ts` (`KINDS`), `ui/App.tsx`; mndflow `stage` `room` | done |
+| 18 | **cutouts and groups** *(groups replaced by 21)*: an opened table shows its section around it (heading above, neighbours at either side, columns and schema below). A chart groups definitions in labelled boxes — column types by section, `shared` first, the rest by kind (`KINDS`) — packed by the kit. One definition opens in context: the table cards allocating it under their headings, it under them, related columns below. The unpicked camera fits a drawing's width, not its room | mndmap `read.ts` (`beside`, `around`, `grouped`, `local`), `packages/markdown.ts` (`KINDS`), `ui/App.tsx`; mndflow `stage` `room` | done |
+
+| 19 | **the tree walk**: the arrows walk the explorer's tree, in the kit — ↓/↑ siblings, out past a branch's end or up to its holder; → the next row in reading order; ← out. A row walked to is chosen as a click chooses it; `usages` is a row like the others. Double-click opens as Enter does (`Viewer` `onOpen`). mndmap's row-by-row keys go | mndflow `explorer` (`keys`), kit `Viewer`; mndmap `ui/App.tsx` | done |
+| 20 | **folding**: the tree stays open only along the way to the pick; the bar's fold toggle holds them, so what the arrows open stays open. A section's fold shuts its branches but leaves it listed. The section holding the pick is lit, folded or not | mndflow `explorer`; mndmap `ui/App.tsx` | done |
+| 21 | **one organisation**: a package files its definitions on a shelf of its own (`Package.shelf`), frozen with it, and lists as the workspace does — blocks and relations, folders, definitions; a package it extends reads inside it as a folder. The markdown package files `structure`, `prose`, `data`, `media`; the reader files column types by section. A band may say how wide it is, and a reference tied to nothing is shelved in it | mndflow `core` (`shelf_of`, `shelf_tree`), `explorer`, `views` `bands`; mndmap `read.ts` (`filed`), `packages/markdown.ts` | done |
+| 22 | **the library projection**: a row of `packages` or `definitions` drawn as nested boxes in the tree's order, `READ` (3) across; a row with definitions of its own draws them as a context — *extends*, *holds* and *allocates*, what lies outside dashed. `WIDEST` goes: an unpicked projection fits its width | mndmap `library.ts`, `ui/App.tsx` | done |
 
 
 ## What step 8 built
@@ -70,13 +76,14 @@ Release once they settle.
 
 | Task | Where | Notes |
 |---|---|---|
-| **release the kit** | mndflow `release:kit`, mndmap `vendor/`, `package.json` | steps 12–17 exist only in mndflow's working tree. Cut a release once they settle, and re-pin |
+| **release the kit** | mndflow `release:kit`, mndmap `vendor/`, `package.json` | steps 12–22 exist only in mndflow's working tree. Cut a release once they settle, and re-pin |
 | **allocation lines meet at one point** | mndflow `views` routing | each column's dashed line ends at the middle of the grid's bottom edge, not under its own column |
 | **two meanings of "allocated"** | mndflow `core` `allocations_of` | the kit already calls a block seated under a header reference *allocated*; a header naming a column type is a second meaning. Settle one word |
-| **charts ignore shelf folders** | mndmap `ui/App.tsx` `chart` | a folder under `definitions` charts its whole group, not only what is filed in it |
 | **a picked definition card is hard to read** | mndflow `theme` | a picked stand-in for a definition fills blue, and its dim name nearly vanishes |
 | **a package definition in context can be long** | mndmap `read.ts` `local` | `heading` in context is every heading in the document, four to a row |
-| **keys on a grouped chart** | mndmap `ui/App.tsx` | ↓/↑ step through groups and cards in order; nothing yet moves across the kit's packing |
+| **the document as a projection** | mndmap `read.ts`, `ui/App.tsx` | `usages` still draws the page on its own terms; it may become a narrowing projection like the library's |
+| **`tree_of` lives in the React entry** | mndflow `explorer`, kit | `library.ts` reads the tree through `@mnd/kit/react`; the tree is pure and could ship from the core entry |
+| **wide pages read small** | mndmap `ui/App.tsx` | with `WIDEST` gone, an unpicked page fits its widest row |
 | **opened fences are one card wide** | mndflow `views` `size`, `stage` | a card is sized from the one card width and ignores its own, so an opened fence or list cuts long lines |
 | **a focus layer's frame label** | mndflow `stage` frame | fitted to its block, an opened table's frame label draws under the crumbs |
 | **previews wear `Ref`** | mndflow `core` `stamps_of` | a focus block's preview is a reference, so it wears the reference mark; it may read better as the block itself |
@@ -108,7 +115,9 @@ Release once they settle.
 |---|---|
 | **a table's schema is its own** | a field per column on the table block, with the form its cells read as. Never a definition. *Replaces "schema lives on a definition"* |
 | **definitions are what is reused** | a definition earns its place by recurring — a column type now |
-| **charts group, they don't flow** | definitions have no reading order, so a chart draws no backbone: column types group by section (`shared` first), the rest by kind. Relations show only in one definition's context |
+| **projections follow the tree** | a projection draws what the explorer files, in its order, so the tree and the drawing never disagree and one walk reads both. Grouping is filing: a folder, in any section. *Replaces "charts group, they don't flow"* |
+| **one organisation** | every section files the same way; a package differs only in being frozen |
+| **a folder shows its relations** | a row holding definitions draws *extends*, *holds* and *allocates* among them, and what lies outside it dashed |
 | **context shows cards** | a definition in context shows the tables allocating it as cards, never as grids |
 | **rows are values** | a table's rows are a grid's lines, not blocks: blocks are reusable parts, and a row is data. *Replaces "rows are usages"* |
 | **a grid cell holds a value or a block** | a plain value where no block is seated; a seated block draws over it |
@@ -137,5 +146,6 @@ Release once they settle.
 | **the shell is mndflow's** | `Tray`, `useTray`, `useDisplay`, the root default and the fields diagram (`Viewer` `fields`) ship in the kit, and mndflow's app runs on the same hooks. mndmap keeps reading, stacking, the `markdown` tab and reorganizing, and no longer draws the fields diagram |
 | **the tray is read only in mndmap** | handed no `onAct`, it offers only the tabs that read. Display answers go to `onDisplay`, since how a drawing looks is the session's. A host's tabs lead a block's |
 | **content-centric cards** | mndmap starts cards at 10 × 3 units; the document restacks to each card's height as it draws |
-| **the reader's camera** | the pick is centred, two cards wide; zoomed out, never more than six. Both are constants in `ui/App.tsx` |
+| **the reader's camera** | the pick is centred, `READ` (3) cards wide; unpicked, a projection fits its width. A constant in `ui/App.tsx` |
+| **navigation is the tree's** | the arrows walk the explorer, in the kit, and a row walked to is chosen as a click chooses it; folding follows the walk unless the bar's toggle holds it |
 | **the explorer bar** | each tool toggles on its own (`filter`, `block`, `folder`, `remove`, `fold`); a host's tools go in `extra`, after the filter. mndmap turns `block` off and adds *add document*. Folds are one chevron, as an editor's tree draws them |

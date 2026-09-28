@@ -12,10 +12,10 @@
  *  schema. */
 
 import { marked, type Token, type Tokens } from "marked";
-import { UNITS, base_graph, base_of, new_id, set_card, set_full, size_of, type Block, type Field,
+import { UNITS, base_graph, new_id, set_card, set_full, size_of, type Block, type Field,
          type Graph, type Id } from "@mnd/kit";
 import {
-  ALLOCATES, CODE, COLUMN, FLOW, FRONT, HEADING, IMAGE, KINDS, LIST, MEMBER, QUOTE, SCHEMA, TABLE,
+  ALLOCATES, CODE, COLUMN, FLOW, FRONT, HEADING, IMAGE, LIST, MEMBER, QUOTE, SCHEMA, TABLE,
   TEXT, with_markdown,
 } from "./packages/markdown.js";
 import { is_spine, rows } from "./series.js";
@@ -35,19 +35,13 @@ const BEFORE = "before";
 const AFTER = "after";
 const SCHEMA_CARD = "schema";
 
-/** What names a definition's card on a chart, each block beside it, and a group of them. */
-export const DEFINED = "defined:";
-const USED = "used:";
-const GROUP = "group:";
+/** One entry on the workspace's shelf of definitions: one filed, or a folder. */
+type Shelved = NonNullable<Block["shelf"]>[number];
 
-/** The group a column type falls in when its tables sit in more than one section. */
+/** The folder a column type is filed in when its tables sit in more than one section, and what
+ *  names each folder. */
 const SHARED = "shared";
-
-/** How many cards a local chart sets in a row. */
-const ACROSS = 4;
-
-/** Where a chart keeps the document's own blocks, out of its drawing. */
-const HELD = "@held";
+const SHELF = "shelf:";
 
 /** A table's cells, in units: room for a short phrase over two lines. */
 const CELL = { w: 6, h: 2 };
@@ -106,6 +100,7 @@ export function read(name: string, text: string): Graph {
   }
 
   for (const token of marked.lexer(body)) walk(token);
+  graph.blocks[root] = { ...graph.blocks[root]!, shelf: filed(graph) };
   return graph;
 
   /** One token, filed under whichever heading is open. */
@@ -206,18 +201,6 @@ export function laid(graph: Graph, card: { w: number; h: number }, full = false)
   set_card(card.w, card.h);
   set_full(full);
   return placed(graph, paged(graph));
-}
-
-/** Definitions charted in the page's place: `defs` grouped for reading, or with `local` named,
- *  that one definition in its own context. */
-export type Chart = { defs: Id[]; local?: Id };
-
-/** A chart drawn: the grouped definitions, packed by the kit, or one definition's context. */
-export function charted(graph: Graph, chart: Chart, card: { w: number; h: number },
-                        full = false): Graph {
-  set_card(card.w, card.h);
-  set_full(full);
-  return chart.local ? local(graph, chart.local) : grouped(graph, chart.defs);
 }
 
 /** A drawing given its places: each layer's rows stacked down it, as {@link laid} describes. */
@@ -349,107 +332,30 @@ function is_focus(block: Block): boolean {
   return block.type === TABLE || ([CODE, LIST].includes(block.type ?? "") && long);
 }
 
-/** The document's blocks, kept out of a chart's drawing: each it shows is a reference, so they
- *  stay where they are, under a holder the chart never draws. */
-function aside(graph: Graph): Record<Id, Block> {
-  const blocks: Record<Id, Block> = {};
-  for (const block of Object.values(graph.blocks)) {
-    blocks[block.id] = block.parent === graph.root ? { ...block, parent: HELD } : block;
-  }
-  blocks[graph.root] = graph.blocks[graph.root]!;
-  return blocks;
-}
-
-/** Definitions in boxes, one a group, the kit packing both the boxes and the cards in them. */
-function grouped(graph: Graph, defs: Id[]): Graph {
-  const blocks = aside(graph);
-  const root = graph.root;
-  blocks[root] = { ...blocks[root]!, arrangement: "auto" };
-  let order = 0;
-  for (const [name, members] of groups(graph, defs)) {
-    const id = `${GROUP}${name}`;
-    blocks[id] = { id, parent: root, type: "group", name, order: ++order };
-    for (const def of members) {
-      const card = `${DEFINED}${def}`;
-      blocks[card] = { id: card, parent: root, group: id, of: def, order: ++order };
-    }
-  }
-  return { ...graph, blocks, edges: {} };
-}
-
-/** Definitions grouped for reading: a column type by the section its tables sit in — `shared`,
- *  first, where they sit in more than one — and any other definition by its kind. Sections keep
- *  the order they are read in. */
-function groups(graph: Graph, defs: Id[]): [string, Id[]][] {
-  const read = reading(graph);
-  const tables = read.filter((block) => block.grid?.columns);
+/** The workspace's definitions filed on its shelf by where they are read: a folder for each
+ *  section whose tables they head, in reading order, and `shared` first for one heading tables in
+ *  several. The explorer lists them so, and the library's projection draws them so. */
+function filed(graph: Graph): Shelved[] {
+  const tables = reading(graph).filter((block) => block.grid?.columns);
   const section = (block: Block) => graph.blocks[block.parent ?? ""]?.name ?? "document";
-  const out = new Map<string, Id[]>([[SHARED, []],
+  const folders = new Map<string, Id[]>([[SHARED, []],
     ...tables.map((table): [string, Id[]] => [section(table), []])]);
-  for (const def of defs) {
-    const sections = new Set(tables.filter((t) => t.grid!.columns!.includes(def)).map(section));
-    const name = sections.size > 1 ? SHARED : [...sections][0]
-      ?? KINDS[def] ?? base_of(graph, def) ?? "other";
-    out.set(name, [...(out.get(name) ?? []), def]);
+  const own = Object.values(graph.defs).filter((def) => !def.from && def.extends === COLUMN)
+    .sort((left, right) => left.name.localeCompare(right.name));
+  for (const def of own) {
+    const sections = new Set(tables.filter((t) => t.grid!.columns!.includes(def.id)).map(section));
+    const name = sections.size > 1 ? SHARED : [...sections][0] ?? SHARED;
+    folders.get(name)!.push(def.id);
   }
-  return [...out].filter(([, members]) => members.length);
-}
-
-/** One definition in its own context: the blocks it types or the tables allocating it, as cards,
- *  in rows of `ACROSS`, each under the heading of its section; the definition under them; and
- *  under it, the other columns those tables allocate, each dashed to the tables it shares. */
-function local(graph: Graph, def: Id): Graph {
-  const blocks = aside(graph);
-  const edges: Graph["edges"] = {};
-  const root = graph.root;
-  const air = UNITS.unit;
-  const card = { w: UNITS.block.w * air, h: UNITS.block.h * air };
-  const gap = air * 2;
-  const step = card.w + gap * 2;
-  let order = 0;
-  const put = (id: Id, of: Id, x: number, y: number) => {
-    blocks[id] = { id, parent: root, of, order: ++order, x, y, ...card };
-  };
-  const line = (from: Id, to: Id, type: Id) => {
-    const id = `${type}:${from}:${to}`;
-    edges[id] = { id, from, to, type };
-  };
-
-  const users = reading(graph).filter((b) => b.type === def || b.grid?.columns?.includes(def));
-  const wide = Math.max(1, Math.min(users.length, ACROSS)) * step - gap * 2;
-  const centred = (count: number) => (wide - (count * step - gap * 2)) / 2;
-  const tall = card.h * 2 + gap * 3;
-  const centre = `${DEFINED}${def}`;
-  const y = Math.ceil(users.length / ACROSS) * tall;
-  put(centre, def, centred(1), y);
-
-  users.forEach((user, n) => {
-    const x = (n % ACROSS) * step;
-    const top = Math.floor(n / ACROSS) * tall;
-    const use = `${USED}${user.id}`;
-    put(use, user.id, x, top + card.h + gap);
-    line(centre, use, user.type === def ? MEMBER : ALLOCATES);
-    const section = graph.blocks[user.parent ?? ""];
-    if (section?.type !== HEADING) return;
-    put(`${SECTION}:${user.id}`, section.id, x, top);
-    line(`${SECTION}:${user.id}`, use, MEMBER);
+  return [...folders].filter(([, defs]) => defs.length).flatMap(([name, defs], n): Shelved[] => {
+    const folder = `${SHELF}${n}`;
+    return [{ id: folder, group: "block", name },
+            ...defs.map((id): Shelved => ({ id, group: "block", in: folder }))];
   });
-
-  // The columns allocated beside it, each dashed to the tables it shares with it.
-  const related = [...new Set(users.flatMap((user) => user.grid?.columns ?? []))]
-    .filter((other) => other !== def);
-  related.forEach((other, n) => {
-    const id = `${DEFINED}${other}`;
-    put(id, other, centred(related.length) + n * step, y + card.h + gap * 3);
-    for (const user of users.filter((u) => u.grid?.columns?.includes(other))) {
-      line(id, `${USED}${user.id}`, ALLOCATES);
-    }
-  });
-  return { ...graph, blocks, edges };
 }
 
 /** The document's blocks in reading order. */
-function reading(graph: Graph): Block[] {
+export function reading(graph: Graph): Block[] {
   return kids(graph, graph.root).flatMap(function all(block): Block[] {
     return [block, ...kids(graph, block.id).flatMap(all)];
   });

@@ -17,8 +17,9 @@ Nothing is uploaded and nothing is kept between runs. The page is the whole of i
 | **nesting** | content sits under its heading in the graph; the canvas draws it as one flat page |
 | **markdown package** | what a heading, table, list, fence or link *is*, as definitions |
 | **tables** | a table carries its own schema; each distinct column name is a column block type its header allocates; rows are values |
-| **definitions** | blocks reused across the document — column types now; keywords, tags and concepts later — charted beside what uses or allocates them |
-| **shell** | explorer, canvas, tray, workspace display — all from `@mnd/kit`. mndmap adds the page, the charts, the `markdown` tab and reorganizing |
+| **definitions** | blocks reused across the document — column types now; keywords, tags and concepts later — filed in folders like any package's |
+| **projections** | diagrams drawn from the one explorer tree: the **document** (the page) and the **library** (packages and definitions). Each is its own view, and all follow the same navigation |
+| **shell** | explorer, canvas, tray, workspace display — all from `@mnd/kit`. mndmap adds the projections, the `markdown` tab and reorganizing |
 
 The parser and the package both live here. mndmap is the markdown-specific
 translator; mndflow is the general shell it draws with.
@@ -71,12 +72,13 @@ Then re-pin with a real release when the kit change is settled: run
 
 | Path | What |
 |---|---|
-| `src/read.ts` | one markdown document → blocks: nesting, tables with their schemas and column types; and what the canvas draws — the page, an opened table, a chart |
+| `src/read.ts` | one markdown document → blocks: nesting, tables with their schemas and column types, its definitions filed by section; and the document projection — the page, an opened table |
+| `src/library.ts` | the library projection: a row of packages or definitions as nested boxes, a folder's own definitions with how they relate, one definition in context |
 | `src/packages/markdown.ts` | the markdown package: what each element is, as definitions |
 | `src/scan.ts` | a folder or file on disk → a graph of blocks |
 | `src/edits.ts` | move / order / rename / create / delete, and the undo stack |
 | `src/series.ts` | the page's rows, and the document written back as markdown |
-| `src/ui/App.tsx` | the shell, assembled from the kit: navbar, explorer, canvas, tray; the reader's keys |
+| `src/ui/App.tsx` | the shell, assembled from the kit: navbar, explorer, canvas, tray; which projection is drawn; Enter, Backspace and Escape |
 | `src/ui/Preview.tsx` | the tray's `preview` tab — the picked block's markdown, rendered |
 | `docs/fields-plan.md` | the fields work: vision, steps and decisions |
 | `scripts/dev.mjs` | runs the kit watcher, then the app once the kit's first build is written |
@@ -106,24 +108,45 @@ Then re-pin with a real release when the kit change is settled: run
 9. An **opened table** is a cutout of its section: the table in the middle, its section's
    heading above, the blocks read before and after it at either side, and below it each
    column's definition under its column (a dashed *allocates* line), then its schema card.
-10. Picking a library section — `definitions`, `packages` or a package — **charts** its block
-    definitions in the page's place, in labelled groups: a column type by the section its tables
-    sit in (`shared` first, for those in more than one), anything else by its kind (structure,
-    prose, data, media).
-11. Picking one definition, or Enter on its card, shows it **in context**: the cards of the
-    tables allocating it (or the blocks it types), each under its section's heading, the
-    definition under them, and below it the other columns those tables allocate.
+
+## Projections
+
+A **projection** draws part of the explorer's tree as a diagram. There are two, each its own view
+over the same tree and the same rules: the **document** projection (the page, above) and the
+**library** projection (packages and definitions). `usages` shows the document; any row of
+`packages` or `definitions` shows the library.
+
+| Rule | |
+|---|---|
+| **one tree** | a projection draws what the explorer files, in the explorer's order, so walking the tree walks the drawing |
+| **same laws everywhere** | every section organises the same way — groups, folders, definitions. A package is only frozen: filed when it is made, never refiled |
+| **drilling narrows** | a row draws everything under it; each branch a box, boxes inside boxes, definitions as cards, `READ` across |
+| **a folder is a context** | a row holding definitions of its own draws them with how they relate — what each *extends*, and from the document which *holds* which and which columns *allocate* which tables. What they relate to outside the row is drawn dashed |
+| **one definition in context** | Enter or double-click on a definition shows its use: the tables allocating it (or the blocks it types) under their headings, it under them, the columns it shares below |
+
+The markdown package files its definitions as `structure`, `prose`, `data` and `media`, and the
+base package it builds on reads inside it as a folder of its own. The reader files the
+document's column types by the section their tables sit in, `shared` first for those in more
+than one.
 
 ## Reading it
 
+The arrows walk the explorer's tree; the canvas follows.
+
 | Key | Does |
 |---|---|
-| ↓ / ↑ | next / previous row as deep or shallower: a sibling section, or out to the next row after the last sibling |
-| → | along the row; past its end, the next row in reading order — the way into a section's subheadings |
-| ← | back along the row; from a heading, up to the heading it sits under |
-| Enter | open a focus block; on a chart, a definition in context; in context, a block on the page |
-| Backspace | leave a focus block, back to its card on the page; from context back to the chart; leave a chart |
+| ↓ / ↑ | next / previous row at the same level. Past the last, out to the next branch — or into this one where there is none; past the first, up to its holder |
+| → | the next row in reading order: into a branch, else on to the next block |
+| ← | out to the row's holder; at the top, the section before |
+| Enter / double-click | open: a focus block on the page, a definition in context, a block from context onto the page |
+| Backspace | leave: a focus block for its card, a context for its projection, a projection for the page |
 | Escape | clear the pick; with nothing picked, leave |
 
-The camera centres the picked card, two cards wide (`READ`), and never takes in more than six
-(`WIDEST`) — both set in `src/ui/App.tsx`. With nothing picked, the page is read from its top.
+**Folding.** The arrows open each branch they step into. By default the tree stays open only
+along the way to the picked row: a branch the arrows leave folds behind them. The fold toggle at
+the right of the explorer's bar (a chevron pair, barred while held) makes folds sticky: what is
+open stays open as the arrows move on. A section's own fold shuts or opens every branch in it but
+leaves the section listed; its mark hides it.
+
+**Camera.** A pick is centred `READ` (3) cards wide, set in `src/ui/App.tsx`. With nothing
+picked, a projection is fitted to its full width and read from its top.
