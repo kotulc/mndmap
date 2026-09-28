@@ -36,21 +36,22 @@ export function covered(graph: Graph, picked: readonly Id[]): Set<Id> {
 }
 
 /** Whether a block sits in the backbone column rather than in a row: a heading, the front matter,
- *  or the layer's own block standing in at its head. */
-export function is_spine(block: Block): boolean {
-  return [HEADING, FRONT].includes(block.type ?? "") || block.of === block.parent;
+ *  the layer's own block standing in at its head, or on a chart a definition or a group of them. */
+export function is_spine(graph: Graph, block: Block): boolean {
+  return [HEADING, FRONT, "group"].includes(block.type ?? "") || block.of === block.parent
+    || !!graph.defs[block.of ?? ""];
 }
 
 /** A layer's rows, top to bottom: each backbone block and the content after it. A layer with no
  *  backbone — an opened focus, a folder — is a row per block. */
 export function rows(graph: Graph, layer: Id): Row[] {
   const held = children(graph, layer);
-  const spined = held.some(is_spine);
+  const spined = held.some((block) => is_spine(graph, block));
   const out: Row[] = [];
   held.forEach((block) => {
     const row = out[out.length - 1];
     // Content joins the row before it, with all it holds.
-    if (spined && row && !is_spine(block)) {
+    if (spined && row && !is_spine(graph, block)) {
       row.cards.push(block.id);
       for (const id of under(graph, block.id)) row.covers.add(id);
       return;
@@ -76,10 +77,10 @@ export function segments(graph: Graph, layer: Id = graph.root, depth = 0): Segme
 }
 
 
-/** A table's cells, from its grid: the schema's fields as its header, a line per row of values. */
+/** A table's cells: its own fields as its header, a line per row of its grid's values. */
 function cells_of(graph: Graph, id: Id): string[][] | null {
   const grid = graph.blocks[id]?.grid;
-  const fields = grid?.schema ? graph.defs[grid.schema]?.fields ?? [] : [];
+  const fields = graph.blocks[id]?.fields ?? [];
   if (!grid || !fields.length) return null;
   const values = (grid.values ?? []).slice(1).map((row) => fields.map((_, n) => row[n] ?? ""));
   return [fields.map((field) => field.name), ...values];

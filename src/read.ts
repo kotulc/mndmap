@@ -12,10 +12,10 @@
  *  schema. */
 
 import { marked, type Token, type Tokens } from "marked";
-import { UNITS, base_graph, new_id, set_card, set_full, size_of, type Block, type Field,
+import { UNITS, base_graph, base_of, new_id, set_card, set_full, size_of, type Block, type Field,
          type Graph, type Id } from "@mnd/kit";
 import {
-  CODE, FLOW, FRONT, HEADING, IMAGE, KEY, LIST, MEMBER, QUOTE, TABLE,
+  ALLOCATES, CODE, COLUMN, FLOW, FRONT, HEADING, IMAGE, KINDS, LIST, MEMBER, QUOTE, SCHEMA, TABLE,
   TEXT, with_markdown,
 } from "./packages/markdown.js";
 import { is_spine, rows } from "./series.js";
@@ -28,6 +28,26 @@ const LONG = 12;
 
 /** What names a focus block's preview on the page. */
 const SEE = "see:";
+
+/** What names each part an opened table is drawn with, but for its columns' definitions. */
+const SECTION = "section";
+const BEFORE = "before";
+const AFTER = "after";
+const SCHEMA_CARD = "schema";
+
+/** What names a definition's card on a chart, each block beside it, and a group of them. */
+export const DEFINED = "defined:";
+const USED = "used:";
+const GROUP = "group:";
+
+/** The group a column type falls in when its tables sit in more than one section. */
+const SHARED = "shared";
+
+/** How many cards a local chart sets in a row. */
+const ACROSS = 4;
+
+/** Where a chart keeps the document's own blocks, out of its drawing. */
+const HELD = "@held";
 
 /** A table's cells, in units: room for a short phrase over two lines. */
 const CELL = { w: 6, h: 2 };
@@ -64,25 +84,19 @@ export function read(name: string, text: string): Graph {
     return held;
   };
 
-  /** Each unique header row is one workspace definition: a row schema, a field per column.
-   *  Tables sharing a header and its forms share it, so their rows are usages of one thing. It is
-   *  named for the section its first table sits in, or for its key column outside of one — and
-   *  numbered where that is taken, since two workspace definitions may not share a name. */
-  const schemas = new Map<string, Id>();
+  /** Each distinct column name is one workspace definition, a column block type, whichever table
+   *  it heads. Two definitions may not share a name, so one clipped to a taken name is numbered. */
+  const columns = new Map<string, Id>();
   const named = new Set<string>();
-  const schema_for = (headers: string[], forms: Field["form"][], name: string): Id => {
-    const sign = headers.map((name, n) => `${name}:${forms[n]}`).join("\u0000");
-    const known = schemas.get(sign);
+  const column_for = (name: string): Id => {
+    const known = columns.get(name);
     if (known) return known;
     let unique = clip(name);
     for (let n = 2; named.has(unique); n++) unique = `${clip(name)} ${n}`;
     named.add(unique);
     const id = new_id("def");
-    graph.defs[id] = {
-      id, group: "block", extends: "block", name: unique,
-      fields: headers.map((name, n) => ({ name, form: forms[n] ?? "text" })),
-    };
-    schemas.set(sign, id);
+    graph.defs[id] = { id, group: "block", extends: COLUMN, name: unique };
+    columns.set(name, id);
     return id;
   };
 
@@ -153,16 +167,18 @@ export function read(name: string, text: string): Graph {
       case "table": {
         const table = token as Tokens.Table;
         const headers = table.header.map((cell, n) => cell.text || `col ${n + 1}`);
-        const key = headers[0] ?? "";
-        const name = clip(open.length ? graph.blocks[parent]!.name! : key || "table");
         const forms = headers.map((_, n) => form_of(table.rows.map((row) => row[n]?.text ?? "")));
-        // Named for what it is: its section already says what it is about. Its rows are values,
-        // not parts: it is one grid, headed by the schema.
+        // Named for what it is: its section already says what it is about. Its schema is its own,
+        // a field per column, the first the key. Its rows are values, not parts: it is one grid,
+        // its header allocating each column's definition.
         put({
-          id: mint("table"), parent, type: TABLE, name: "table", fields: [field(KEY, "text", key)],
+          id: mint("table"), parent, type: TABLE, name: "table",
+          fields: headers.map((name, n) => ({
+            name, form: forms[n] ?? "text", ...(n === 0 ? { key: true } : {}),
+          })),
           grid: {
             rows: table.rows.length + 1, cols: headers.length, size: CELL,
-            schema: schema_for(headers, forms, name),
+            columns: headers.map(column_for),
             values: [[], ...table.rows.map((row) => row.map((cell) => cell.text.trim()))],
           },
         });
@@ -189,15 +205,34 @@ export function read(name: string, text: string): Graph {
 export function laid(graph: Graph, card: { w: number; h: number }, full = false): Graph {
   set_card(card.w, card.h);
   set_full(full);
-  const drawn = paged(graph);
+  return placed(graph, paged(graph));
+}
+
+/** Definitions charted in the page's place: `defs` grouped for reading, or with `local` named,
+ *  that one definition in its own context. */
+export type Chart = { defs: Id[]; local?: Id };
+
+/** A chart drawn: the grouped definitions, packed by the kit, or one definition's context. */
+export function charted(graph: Graph, chart: Chart, card: { w: number; h: number },
+                        full = false): Graph {
+  set_card(card.w, card.h);
+  set_full(full);
+  return chart.local ? local(graph, chart.local) : grouped(graph, chart.defs);
+}
+
+/** A drawing given its places: each layer's rows stacked down it, as {@link laid} describes. */
+function placed(graph: Graph, drawn: Graph): Graph {
   const blocks = { ...drawn.blocks };
   const edges = { ...drawn.edges };
   const air = UNITS.unit;
 
-  // A table's preview keeps the one card size and cuts its columns there.
   for (const block of Object.values(drawn.blocks)) {
-    if (drawn.blocks[block.of ?? ""]?.type !== TABLE) continue;
-    blocks[block.id] = { ...block, w: UNITS.block.w * air, h: UNITS.block.h * air };
+    // A table's preview keeps the one card size and cuts its columns there.
+    if (drawn.blocks[block.of ?? ""]?.type === TABLE) {
+      blocks[block.id] = { ...block, w: UNITS.block.w * air, h: UNITS.block.h * air };
+    }
+    // A column's definition, over an opened table, is as wide as the column it heads.
+    if (drawn.defs[block.of ?? ""]) blocks[block.id] = { ...block, w: CELL.w * air, h: CELL.h * air };
   }
   const measured = { ...drawn, blocks: { ...blocks } };
   const size = (id: Id) => size_of(measured, id);
@@ -206,7 +241,46 @@ export function laid(graph: Graph, card: { w: number; h: number }, full = false)
     edges[id] = { id, from, to, type, ...(type === FLOW ? { dir: "forward" as const } : {}) };
   };
 
+  /** An opened table, as a cutout of its section: its section's heading above it, the blocks
+   *  read before and after it at either side, and under it each column's definition under its
+   *  own column, dashed up to the grid, then its schema. */
+  const around = (layer: Id, table: Id) => {
+    const gap = air * 3;
+    const grid = size(table);
+    const part = (name: string) => measured.blocks[`${name}:${table}`];
+    const put = (id: Id, x: number, y: number, type: Id, forward = false) => {
+      blocks[id] = { ...blocks[id]!, x, y };
+      const [from, to] = forward ? [table, id] : [id, table];
+      edges[`${type}:${id}`] = { id: `${type}:${id}`, from, to, type,
+                                 ...(type === FLOW ? { dir: "forward" as const } : {}) };
+    };
+    const centred = (id: Id) => (grid.w - size(id).w) / 2;
+
+    // The section's heading over the table, and the table under it.
+    const section = part(SECTION);
+    const top = section ? size(section.id).h + gap : 0;
+    if (section) put(section.id, centred(section.id), 0, MEMBER);
+    blocks[table] = { ...blocks[table]!, x: 0, y: top };
+
+    // What is read before and after it, level with its middle.
+    const middle = (id: Id) => top + (grid.h - size(id).h) / 2;
+    const before = part(BEFORE);
+    const after = part(AFTER);
+    if (before) put(before.id, -(size(before.id).w + gap), middle(before.id), FLOW);
+    if (after) put(after.id, grid.w + gap, middle(after.id), FLOW, true);
+
+    // Under it: each column's definition under its column, then the schema.
+    const under = top + grid.h + gap;
+    const columns = kids(measured, layer).filter((block) => measured.defs[block.of ?? ""]);
+    columns.forEach((block, n) => put(block.id, n * CELL.w * air, under, ALLOCATES));
+    const schema = part(SCHEMA_CARD);
+    const low = under + (columns.length ? CELL.h * air + gap : 0);
+    if (schema) put(schema.id, centred(schema.id), low, MEMBER);
+  };
+
   const seat = (layer: Id) => {
+    const opened = measured.blocks[measured.blocks[layer]?.of ?? ""];
+    if (opened?.type === TABLE) { around(layer, opened.id); return; }
     const held = rows(measured, layer);
     // Each level of heading steps right a backbone column, and its content starts the next one.
     const lane = Math.max(0, ...held.map((row) => size(row.anchor).w)) + air * 2;
@@ -249,9 +323,17 @@ export function depth(graph: Graph, id: Id): number {
  *  either side. On a layer with no backbone, every card is content. */
 export function pitch(graph: Graph, layer: Id): number {
   const held = kids(graph, layer);
-  const content = held.some(is_spine) ? held.filter((block) => !is_spine(block)) : held;
+  const spine = (block: Block) => is_spine(graph, block);
+  const content = held.some(spine) ? held.filter((block) => !spine(block)) : held;
   const widths = content.map((block) => size_of(graph, block.id).w);
   return Math.max(0, ...widths) + UNITS.unit * 2;
+}
+
+/** How wide a laid layer's drawing is, from its leftmost card to its rightmost. */
+export function span(graph: Graph, layer: Id): number {
+  const held = kids(graph, layer);
+  const left = Math.min(0, ...held.map((block) => block.x ?? 0));
+  return Math.max(0, ...held.map((block) => (block.x ?? 0) + size_of(graph, block.id).w)) - left;
 }
 
 /** The card the page draws for a held block: its preview, where it is a focus. */
@@ -267,13 +349,143 @@ function is_focus(block: Block): boolean {
   return block.type === TABLE || ([CODE, LIST].includes(block.type ?? "") && long);
 }
 
+/** The document's blocks, kept out of a chart's drawing: each it shows is a reference, so they
+ *  stay where they are, under a holder the chart never draws. */
+function aside(graph: Graph): Record<Id, Block> {
+  const blocks: Record<Id, Block> = {};
+  for (const block of Object.values(graph.blocks)) {
+    blocks[block.id] = block.parent === graph.root ? { ...block, parent: HELD } : block;
+  }
+  blocks[graph.root] = graph.blocks[graph.root]!;
+  return blocks;
+}
+
+/** Definitions in boxes, one a group, the kit packing both the boxes and the cards in them. */
+function grouped(graph: Graph, defs: Id[]): Graph {
+  const blocks = aside(graph);
+  const root = graph.root;
+  blocks[root] = { ...blocks[root]!, arrangement: "auto" };
+  let order = 0;
+  for (const [name, members] of groups(graph, defs)) {
+    const id = `${GROUP}${name}`;
+    blocks[id] = { id, parent: root, type: "group", name, order: ++order };
+    for (const def of members) {
+      const card = `${DEFINED}${def}`;
+      blocks[card] = { id: card, parent: root, group: id, of: def, order: ++order };
+    }
+  }
+  return { ...graph, blocks, edges: {} };
+}
+
+/** Definitions grouped for reading: a column type by the section its tables sit in — `shared`,
+ *  first, where they sit in more than one — and any other definition by its kind. Sections keep
+ *  the order they are read in. */
+function groups(graph: Graph, defs: Id[]): [string, Id[]][] {
+  const read = reading(graph);
+  const tables = read.filter((block) => block.grid?.columns);
+  const section = (block: Block) => graph.blocks[block.parent ?? ""]?.name ?? "document";
+  const out = new Map<string, Id[]>([[SHARED, []],
+    ...tables.map((table): [string, Id[]] => [section(table), []])]);
+  for (const def of defs) {
+    const sections = new Set(tables.filter((t) => t.grid!.columns!.includes(def)).map(section));
+    const name = sections.size > 1 ? SHARED : [...sections][0]
+      ?? KINDS[def] ?? base_of(graph, def) ?? "other";
+    out.set(name, [...(out.get(name) ?? []), def]);
+  }
+  return [...out].filter(([, members]) => members.length);
+}
+
+/** One definition in its own context: the blocks it types or the tables allocating it, as cards,
+ *  in rows of `ACROSS`, each under the heading of its section; the definition under them; and
+ *  under it, the other columns those tables allocate, each dashed to the tables it shares. */
+function local(graph: Graph, def: Id): Graph {
+  const blocks = aside(graph);
+  const edges: Graph["edges"] = {};
+  const root = graph.root;
+  const air = UNITS.unit;
+  const card = { w: UNITS.block.w * air, h: UNITS.block.h * air };
+  const gap = air * 2;
+  const step = card.w + gap * 2;
+  let order = 0;
+  const put = (id: Id, of: Id, x: number, y: number) => {
+    blocks[id] = { id, parent: root, of, order: ++order, x, y, ...card };
+  };
+  const line = (from: Id, to: Id, type: Id) => {
+    const id = `${type}:${from}:${to}`;
+    edges[id] = { id, from, to, type };
+  };
+
+  const users = reading(graph).filter((b) => b.type === def || b.grid?.columns?.includes(def));
+  const wide = Math.max(1, Math.min(users.length, ACROSS)) * step - gap * 2;
+  const centred = (count: number) => (wide - (count * step - gap * 2)) / 2;
+  const tall = card.h * 2 + gap * 3;
+  const centre = `${DEFINED}${def}`;
+  const y = Math.ceil(users.length / ACROSS) * tall;
+  put(centre, def, centred(1), y);
+
+  users.forEach((user, n) => {
+    const x = (n % ACROSS) * step;
+    const top = Math.floor(n / ACROSS) * tall;
+    const use = `${USED}${user.id}`;
+    put(use, user.id, x, top + card.h + gap);
+    line(centre, use, user.type === def ? MEMBER : ALLOCATES);
+    const section = graph.blocks[user.parent ?? ""];
+    if (section?.type !== HEADING) return;
+    put(`${SECTION}:${user.id}`, section.id, x, top);
+    line(`${SECTION}:${user.id}`, use, MEMBER);
+  });
+
+  // The columns allocated beside it, each dashed to the tables it shares with it.
+  const related = [...new Set(users.flatMap((user) => user.grid?.columns ?? []))]
+    .filter((other) => other !== def);
+  related.forEach((other, n) => {
+    const id = `${DEFINED}${other}`;
+    put(id, other, centred(related.length) + n * step, y + card.h + gap * 3);
+    for (const user of users.filter((u) => u.grid?.columns?.includes(other))) {
+      line(id, `${USED}${user.id}`, ALLOCATES);
+    }
+  });
+  return { ...graph, blocks, edges };
+}
+
+/** The document's blocks in reading order. */
+function reading(graph: Graph): Block[] {
+  return kids(graph, graph.root).flatMap(function all(block): Block[] {
+    return [block, ...kids(graph, block.id).flatMap(all)];
+  });
+}
+
+/** What an opened table is drawn with: the heading of the section it sits in, the blocks read
+ *  before and after it there, the definition each column allocates, and its own schema. Drawn
+ *  only: each is a reference or a card of its own, never a block of the document. */
+function beside(graph: Graph, table: Block, layer: Id): Block[] {
+  if (table.type !== TABLE) return [];
+  const out: Block[] = [];
+  const add = (name: string, block: Omit<Block, "id" | "parent" | "order">) =>
+    out.push({ ...block, id: `${name}:${table.id}`, parent: layer, order: out.length + 1 });
+
+  // Its section's heading, and its neighbours in the section, as they are read.
+  const section = graph.blocks[table.parent ?? ""];
+  if (section?.type === HEADING) add(SECTION, { of: section.id });
+  const kin = kids(graph, table.parent ?? graph.root);
+  const at = kin.findIndex((block) => block.id === table.id);
+  if (kin[at - 1]) add(BEFORE, { of: kin[at - 1]!.id });
+  if (kin[at + 1]) add(AFTER, { of: kin[at + 1]!.id });
+
+  // A column's definition is sized to the column it heads, so its card keeps the size it is given.
+  (table.grid?.columns ?? []).forEach((def, n) =>
+    add(`column:${n}`, { of: def, looks: { card: { height: "free" } } }));
+  add(SCHEMA_CARD, { type: SCHEMA, name: "schema", fields: table.fields ?? [] });
+  return out;
+}
+
 /** The document drawn as one page.
  *
  *  A heading holds its section, but draws as the row it heads rather than a layer to open: all it
  *  holds, subheadings too, comes up to the page in reading order. A focus block draws there as a
- *  preview, and holds itself, so opening the preview reads it alone. Content ahead of any heading
- *  hangs off a reference to the document, seated just ahead of it. Only the drawing moves: the
- *  held graph stays the outline. */
+ *  preview, and holds itself — a table with what it is drawn beside (see {@link beside}) — so
+ *  opening the preview reads it alone. Content ahead of any heading hangs off a reference to the
+ *  document, seated just ahead of it. Only the drawing moves: the held graph stays the outline. */
 function paged(graph: Graph): Graph {
   const blocks = { ...graph.blocks };
   const root = graph.root;
@@ -286,6 +498,7 @@ function paged(graph: Graph): Graph {
         const id = `${SEE}${block.id}`;
         blocks[id] = { id, parent: root, of: block.id, order: at };
         blocks[block.id] = { ...block, parent: id, order: 0 };
+        for (const each of beside(graph, block, id)) blocks[each.id] = each;
       } else {
         blocks[block.id] = { ...block, parent: root, order: at };
       }
@@ -296,7 +509,7 @@ function paged(graph: Graph): Graph {
 
   const held = kids({ ...graph, blocks }, root);
   const first = held.find((block) => block.type !== FRONT);
-  if (first && !is_spine(first) && held.some(is_spine)) {
+  if (first && !is_spine(graph, first) && held.some((block) => is_spine(graph, block))) {
     const id = `self:${root}`;
     blocks[id] = { id, parent: root, of: root, order: first.order! - 0.5 };
   }
@@ -337,10 +550,6 @@ function only_image(paragraph: Tokens.Paragraph): Tokens.Image | null {
 
 function tasks(list: Tokens.List): boolean {
   return list.items.some((item) => item.task);
-}
-
-function field(name: string, form: Field["form"], value: string): Field {
-  return { name, form, value };
 }
 
 /** One line of a block's text, short enough to read on a card.

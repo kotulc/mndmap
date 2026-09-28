@@ -16,15 +16,17 @@ export const LIST = "md.list";
 export const CODE = "md.code";
 export const QUOTE = "md.quote";
 export const TABLE = "md.table";
+export const COLUMN = "md.column";
+export const SCHEMA = "md.schema";
 export const IMAGE = "md.image";
 export const FRONT = "md.front";
 export const FLOW = "md.flow";
 export const MEMBER = "md.member";
+export const ALLOCATES = "md.allocates";
 
-/** The one field the package declares: which column of a table names its rows.
- *  Everything else markdown says — a heading's level, a fence's language, a
- *  task's tick — is written in the block's body, as the page writes it. */
-export const KEY = "key";
+/* The package declares no fields. What markdown says — a heading's level, a fence's language, a
+ * task's tick — is written in the block's body, as the page writes it. A table carries its own:
+ * a field per column, with the form its cells read as, and its key column marked. */
 
 /** How each kind of card draws: its icon, and what it shows under its divider. Prose is its body
  *  alone and grows to fit it; a fence or a list keeps its name over its body; a table lists its
@@ -67,7 +69,18 @@ export const DEFS: Definition[] = [
     about: "A table. One grid of its rows' values, headed by their schema; its key column names "
       + "each row.",
     components: LISTED("role_table"),
-    fields: [{ name: KEY, form: "text" }],
+  },
+  {
+    id: COLUMN, from: MD, group: "block", extends: "block", name: "column",
+    about: "A table's column, as a block type: each distinct column name is one, extending this. "
+      + "A header allocates it rather than using it, so it adds no block to the document.",
+    components: ICON("header_col"),
+  },
+  {
+    id: SCHEMA, from: MD, group: "block", extends: "block", name: "schema",
+    about: "A table's columns and the forms its cells read as, drawn beside it when it is opened. "
+      + "Its own, never a definition.",
+    components: LISTED("data"),
   },
   {
     id: IMAGE, from: MD, group: "block", extends: "reference", name: "image",
@@ -89,7 +102,21 @@ export const DEFS: Definition[] = [
     about: "Across a row, from a backbone block through the content it introduces.",
     components: { line: { name: "hide" } },
   },
+  {
+    id: ALLOCATES, from: MD, group: "relation", extends: "line", name: "allocates",
+    about: "From a column's definition to the table whose header allocates it.",
+    components: { line: { name: "hide" }, style: { border_style: "dashed" } },
+  },
 ];
+
+/** What each block definition is, for reading them grouped: a document's structure, its prose,
+ *  its data, or its media. */
+export const KINDS: Record<Id, string> = {
+  [HEADING]: "structure", [FRONT]: "structure",
+  [TEXT]: "prose", [QUOTE]: "prose", [LIST]: "prose", [CODE]: "prose",
+  [TABLE]: "data", [COLUMN]: "data", [SCHEMA]: "data",
+  [IMAGE]: "media",
+};
 
 /** The package as the graph files it: built on the base package, never written into. */
 export const PACKAGE: Package = { id: MD, name: "markdown", extends: BASE_PACKAGE };

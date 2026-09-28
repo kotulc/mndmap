@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { Inline, Markdown } from "@mnd/kit/react";
 import { children, type Block, type Graph, type Id } from "@mnd/kit";
-import { FRONT, KEY, TABLE } from "../packages/markdown.js";
+import { FRONT, TABLE } from "../packages/markdown.js";
 import { is_markdown } from "../scan.js";
 import { covered, segments, type Row, type Segment } from "../series.js";
 
@@ -91,7 +91,7 @@ function Table({ className, cells }: { className: string; cells: string[][] }) {
 /** What the block is, in a few words: its kind, and what qualifies it. */
 function about(graph: Graph, block: Block): string {
   const kind = block.type ? graph.defs[block.type]?.name ?? block.type : "block";
-  const key = block.fields?.find((each) => each.name === KEY)?.value;
+  const key = block.fields?.find((each) => each.key)?.name;
   const held = children(graph, block.id).length;
   const parts = [kind];
   if (key) parts.push(`keyed by ${key}`);
