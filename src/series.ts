@@ -6,6 +6,8 @@
  *  stepping through the page. The markdown is read from the held outline. */
 
 import { children, type Block, type Graph, type Id } from "@mnd/kit";
+import { marked, type Tokens } from "marked";
+import { plain } from "./names.js";
 import { FRONT, HEADING, TABLE } from "./packages/markdown.js";
 
 /** One row of the page: the layer it sits on, its backbone block, its cards left to right, and
@@ -69,7 +71,7 @@ export function segments(graph: Graph, layer: Id = graph.root, depth = 0): Segme
     const level = block.type === HEADING ? Math.min(depth + 1, LEVELS) : 0;
     const cells = block.type === TABLE ? cells_of(graph, block.id) : null;
     const text = cells ? table_text(cells)
-      : level ? `${"#".repeat(level)} ${block.name ?? ""}` : markdown_of(block);
+      : level ? `${"#".repeat(level)} ${title(block)}` : markdown_of(block);
     if (text) out.push({ id: block.id, text, ...(cells ? { cells } : {}), ...(level ? { level } : {}) });
     out.push(...segments(graph, block.id, level || depth));
   }
@@ -77,13 +79,28 @@ export function segments(graph: Graph, layer: Id = graph.root, depth = 0): Segme
 }
 
 
-/** A table's cells: its own fields as its header, a line per row of its grid's values. */
+/** A table's cells: its header as the page wrote it, a line per row of its grid's values. */
 function cells_of(graph: Graph, id: Id): string[][] | null {
-  const grid = graph.blocks[id]?.grid;
-  const fields = graph.blocks[id]?.fields ?? [];
+  const block = graph.blocks[id];
+  const grid = block?.grid;
+  const fields = block?.fields ?? [];
   if (!grid || !fields.length) return null;
   const values = (grid.values ?? []).slice(1).map((row) => fields.map((_, n) => row[n] ?? ""));
-  return [fields.map((field) => field.name), ...values];
+  return [head_of(block!.body, fields.map((field) => field.name)), ...values];
+}
+
+/** A table's header as written, where its body still has one a cell per field; else its names. */
+function head_of(body: string | undefined, names: string[]): string[] {
+  const [token] = marked.lexer(body ?? "");
+  const cells = token?.type === "table" ? (token as Tokens.Table).header.map((cell) => cell.text) : [];
+  return cells.length === names.length ? cells : names;
+}
+
+/** A heading's text as the page wrote it, while its name is still the one read from it; renamed,
+ *  it writes its new name. */
+function title(block: Block): string {
+  const written = (block.body ?? "").split("\n")[0]!.replace(/^#+\s*|\s*#+\s*$/g, "").trim();
+  return plain(written) === block.name ? written : block.name ?? "";
 }
 
 /** What one block writes. */

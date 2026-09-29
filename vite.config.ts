@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
-import { join, relative, resolve } from "node:path";
+import { extname, join, relative, resolve } from "node:path";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
 
@@ -8,8 +8,9 @@ import { defineConfig, type Plugin } from "vite";
  *
  *  `samples/sample.md` is the document being designed against, so the dev
  *  server opens on it. `?folder` serves `samples/docs` instead, for when the
- *  folder case needs looking at. The built page serves neither: there, an
- *  empty tab is the truth, and a run starts with a file or a folder. */
+ *  folder case needs looking at. An image the sample points at is served from
+ *  beside it. The built page serves neither: there, an empty tab is the truth,
+ *  and a run starts with a file or a folder. */
 function sample(): Plugin {
   return {
     name: "mndmap-sample",
@@ -17,6 +18,13 @@ function sample(): Plugin {
     configureServer(server) {
       server.middlewares.use((request, response, next) => {
         const [at, query] = (request.url ?? "").split("?");
+        const image = IMAGES[extname(at ?? "").toLowerCase()];
+        const file = resolve("samples", `.${at}`);
+        if (image && file.startsWith(resolve("samples")) && existsSync(file)) {
+          response.setHeader("content-type", image);
+          readFile(file).then((body) => response.end(body)).catch(() => next());
+          return;
+        }
         if (at !== "/sample.json") return next();
         const folder = new URLSearchParams(query ?? "").has("folder");
         const held = folder
@@ -33,6 +41,12 @@ function sample(): Plugin {
     },
   };
 }
+
+/** The images a sample may point at, by extension, and the type each is served as. */
+const IMAGES: Record<string, string> = {
+  ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+  ".gif": "image/gif", ".webp": "image/webp",
+};
 
 /** Every file under a sample folder, by its path from it. */
 async function walk(dir: string, root = dir): Promise<{ path: string; text: string }[]> {

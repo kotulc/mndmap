@@ -300,7 +300,7 @@ plain, unlabelled, still a code block
 
 ### Media
 
-![A placeholder image](https://example.com/diagram.png)
+![A concept map](diagram.svg)
 
 A reference-style [link][ref] and an autolink <https://example.com>.
 

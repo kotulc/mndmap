@@ -18,10 +18,8 @@ import {
   ALLOCATES, CODE, COLUMN, FLOW, FRONT, HEADING, IMAGE, LIST, MEMBER, QUOTE, SCHEMA, TABLE,
   TEXT, with_markdown,
 } from "./packages/markdown.js";
+import { plain } from "./names.js";
 import { is_spine, rows } from "./series.js";
-
-/** How much of a block's text a card shows before it is cut. */
-const LABEL = 48;
 
 /** How many lines make a fence or list too long for a card, so it is opened to be read. */
 const LONG = 12;
@@ -85,8 +83,8 @@ export function read(name: string, text: string): Graph {
   const column_for = (name: string): Id => {
     const known = columns.get(name);
     if (known) return known;
-    let unique = clip(name);
-    for (let n = 2; named.has(unique); n++) unique = `${clip(name)} ${n}`;
+    let unique = name;
+    for (let n = 2; named.has(unique); n++) unique = `${name} ${n}`;
     named.add(unique);
     const id = new_id("def");
     graph.defs[id] = { id, group: "block", extends: COLUMN, name: unique };
@@ -111,7 +109,7 @@ export function read(name: string, text: string): Graph {
         const heading = token as Tokens.Heading;
         while (open.length && open[open.length - 1]!.depth >= heading.depth) open.pop();
         const held = put({
-          id: mint("heading"), parent: under(), type: HEADING, name: heading.text,
+          id: mint("heading"), parent: under(), type: HEADING, name: plain(heading.text),
           body: heading.raw.trim(),
         });
         open.push({ id: held.id, depth: heading.depth });
@@ -122,13 +120,13 @@ export function read(name: string, text: string): Graph {
         const lone = only_image(paragraph);
         if (lone) {
           put({
-            id: mint("image"), parent, type: IMAGE, name: lone.text || "image",
+            id: mint("image"), parent, type: IMAGE, name: plain(lone.text) || "image",
             source: lone.href, body: paragraph.raw.trim(),
           });
           return;
         }
         put({
-          id: mint("text"), parent, type: TEXT, name: clip(paragraph.text),
+          id: mint("text"), parent, type: TEXT, name: plain(paragraph.text),
           body: paragraph.text,
         });
         return;
@@ -136,7 +134,7 @@ export function read(name: string, text: string): Graph {
       case "code": {
         const code = token as Tokens.Code;
         put({
-          id: mint("code"), parent, type: CODE, name: code.lang || "code",
+          id: mint("code"), parent, type: CODE, name: plain(code.lang ?? "") || "code",
           body: code.raw.trim(),
         });
         return;
@@ -144,7 +142,7 @@ export function read(name: string, text: string): Graph {
       case "blockquote": {
         const quote = token as Tokens.Blockquote;
         put({
-          id: mint("quote"), parent, type: QUOTE, name: clip(quote.text),
+          id: mint("quote"), parent, type: QUOTE, name: plain(quote.text),
           body: quote.raw.trim(),
         });
         return;
@@ -161,13 +159,14 @@ export function read(name: string, text: string): Graph {
       }
       case "table": {
         const table = token as Tokens.Table;
-        const headers = table.header.map((cell, n) => cell.text || `col ${n + 1}`);
+        const headers = table.header.map((cell, n) => plain(cell.text) || `col ${n + 1}`);
         const forms = headers.map((_, n) => form_of(table.rows.map((row) => row[n]?.text ?? "")));
-        // Named for what it is: its section already says what it is about. Its schema is its own,
-        // a field per column, the first the key. Its rows are values, not parts: it is one grid,
-        // its header allocating each column's definition.
+        // Named after its key column, the first, which names each of its rows. Its schema is its
+        // own, a field per column. Its rows are values, not parts: it is one grid, its header
+        // allocating each column's definition. Its body is the table as written.
         put({
-          id: mint("table"), parent, type: TABLE, name: "table",
+          id: mint("table"), parent, type: TABLE, body: table.raw.trim(),
+          name: plain(table.header[0]?.text ?? "") || "table",
           fields: headers.map((name, n) => ({
             name, form: forms[n] ?? "text", ...(n === 0 ? { key: true } : {}),
           })),
@@ -456,18 +455,4 @@ function only_image(paragraph: Tokens.Paragraph): Tokens.Image | null {
 
 function tasks(list: Tokens.List): boolean {
   return list.items.some((item) => item.task);
-}
-
-/** One line of a block's text, short enough to read on a card.
- *
- *  Inline markup is dropped: a card shows what the text says, and `**this**`
- *  is how it was written rather than part of it. The body keeps the original. */
-function clip(text: string, most = LABEL): string {
-  const line = text
-    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")   // links and images, keeping the text
-    .replace(/[`*_~]+/g, "")                      // emphasis, code spans, strikethrough
-    .replace(/^\s*>+\s*/gm, "")                   // quote markers
-    .replace(/\s+/g, " ")
-    .trim();
-  return line.length > most ? `${line.slice(0, most - 1)}…` : line;
 }

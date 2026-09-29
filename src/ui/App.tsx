@@ -11,10 +11,12 @@
 
 import { Explorer, Icon, TrayFrame, Viewer, WorkspaceHeader, tree_of, useDisplay,
          useTray, type Pointed } from "@mnd/kit/react";
-import { CARD, children, is_container, open, write, type Graph, type Id } from "@mnd/kit";
+import { CARD, UNITS, children, is_container, open, opens, write, type Graph, type Id }
+  from "@mnd/kit";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apply, Stack, type Edit } from "../edits.js";
-import { charted, DEFINED, holder_of, listed, type Chart } from "../library.js";
+import { box_for, charted, chart_width, DEFINED, holder_of, parent_of, path_of, pointed_of,
+         section_of, shelf_at, type Chart, type Shelf } from "../library.js";
 import { laid, pitch, read, seen_as, span } from "../read.js";
 import { dev_sample, drop_folder, pick_file, pick_folder, save, scan, type SourceFile } from "../scan.js";
 import { MD } from "../packages/markdown.js";
@@ -35,18 +37,23 @@ const THEMES = [
  *  enough for two. */
 const CONTENT_CARD = { w: 10, h: 3 };
 
-/** How many cards of a row the page reads at once, zoomed in on a pick, and how many a chart's
- *  group sets across. An opened block reads alone, fitted to itself. */
-const READ = 3;
+/** How many cards a row reads at once: as many as the canvas holds at their own size, but never
+ *  fewer than a portrait canvas holds, nor more than a row reads at a glance. An opened block
+ *  reads alone, fitted to itself. */
+const ACROSS = { least: 3, most: 8 };
 
-/** The fewest cards across a definition's context reads at, so it is seen whole. */
-const CONTEXT = 4;
+/** The most a drawing magnifies: its cards at their own size. */
+const ACTUAL = 1;
 
 const BLANK = "Drop a markdown document or a folder, or pick one below.";
 
 /** The explorer's usages section, by the id it folds it under. The kit keeps this to itself, so
  *  it is named again here. */
 const USAGES = "@uses";
+
+/** A chart's crumbs for the page it leaves, and for the definition opened in it. */
+const PAGE = "page";
+const LOCAL = "local";
 
 /** The tray's one tab. */
 const TABS = ["markdown"] as const;
@@ -75,8 +82,16 @@ export function App() {
     [graph, display.card, full]);
   /** The definitions charted in the page's place, while a library section is picked. */
   const [charting, setCharting] = useState<Chart | null>(null);
-  const view = useMemo(() => graph && charting ? charted(graph, charting, display.card, full, READ)
-    : page, [graph, charting, page, display.card, full]);
+  /** How wide the canvas is, and how many of a step it holds across at their own size. */
+  const [canvas, setCanvas] = useState<HTMLDivElement | null>(null);
+  const room = useWidth(canvas);
+  const fitted = (step: number) =>
+    Math.min(ACROSS.most, Math.max(ACROSS.least, Math.floor(room / Math.max(1, step))));
+  /** How many cards a chart sets across: a card and the air after it are its step. */
+  const across = fitted((display.card.w + UNITS.gap) * UNITS.unit);
+  const view = useMemo(() => graph && charting
+    ? charted(graph, charting, display.card, full, across) : page,
+    [graph, charting, page, display.card, full, across]);
   /** The open layer's rows as drawn, the one the pick sits in, and how wide the view reads. */
   const series = useMemo(() => (view ? rows(view, layer ?? view.root) : []), [view, layer]);
   const row = series.find((each) => picked.some((id) => each.covers.has(id))) ?? null;
@@ -204,15 +219,27 @@ export function App() {
   /** Where a block is drawn: itself inside the focus opened on it, else its card on the page. */
   const shown = (id: Id) => (!page || view?.blocks[opened ?? ""]?.of === id ? id : seen_as(page, id));
 
-  /** Project a row of the library in the page's place, as the explorer files it. A definition is
-   *  picked on the projection holding it, or on its own folder's where this one does not. */
+  /** Where the pick sits on a chart: the folder it is in, and so the crumbs and the explorer's lit
+   *  row. */
+  const here = graph && charting ? shelf_at(graph, picked[0], charting) : null;
+
+  /** Go to a folder on its section's chart: its box picked, or the whole of it for the section. */
+  const visit = (at: Shelf) => {
+    if (!graph) return;
+    const box = box_for(graph, at);
+    setCharting({ at: section_of(graph, at) });
+    pick(box ? [box] : []);
+  };
+
+  /** Project a section of the library in the page's place, as the explorer files it, and light
+   *  what the explorer picked on it — a folder's box, or a definition's card — as the page does. */
   const chart = (at: Pointed) => {
     if (!graph) return;
     setLayer(null);
-    if (at.of === "defs") { setCharting({ at }); setPicked([]); return; }
-    const drawn = charting && listed(graph, charting.at).includes(at.id);
-    const home = drawn && !charting?.local ? null : holder_of(graph, at.id);
-    if (home) setCharting({ at: home });
+    if (at.of === "defs") { visit(at); return; }
+    const home = holder_of(graph, at.id);
+    if (!home) return;
+    setCharting({ at: section_of(graph, home) });
     setPicked([`${DEFINED}${at.id}`]);
   };
 
@@ -223,12 +250,16 @@ export function App() {
     pick(ids.map(shown));
   };
 
-  /** Open a card, what is picked by default: on a chart, a definition in its own context and a block on the page; a
-   *  card that holds anything — a focus block, a folder — as the layer, its first row picked. */
+  /** Open a card, what is picked by default: on a chart, a folder's box brought into view, a
+   *  definition the document uses opened, and a usage on the page; a card that holds anything — a
+   *  focus block, a folder — as the layer, its first row picked. */
   const enter = (id = picked.length === 1 ? picked[0] : undefined) => {
     const held = id && (view?.blocks[id]?.of ?? id);
     if (!view || !id || !held) return;
+    const folder = charting && graph ? pointed_of(graph, id) : null;
+    if (folder) { visit(folder); return; }
     if (charting && graph?.defs[held]) {
+      if (!opens(view, id)) return;
       setCharting({ ...charting, local: held });
       pick([`${DEFINED}${held}`]);
       return;
@@ -238,14 +269,14 @@ export function App() {
       pick([seen_as(page, held)]);
       return;
     }
-    if (!is_container(view, id)) return;
+    if (charting || !is_container(view, id)) return;
     const first = rows(view, id)[0]?.anchor;
     setLayer(id === view.root ? null : id);
     pick(first ? [first] : []);
   };
 
-  /** Leave the open layer, its card picked; leave a definition's context for its chart, and a
-   *  chart for the page. */
+  /** Leave the open layer, its card picked; on a chart, leave a definition opened for its card,
+   *  a folder for the one it is filed in, and the whole section for the page. */
   const leave = () => {
     const local = charting?.local;
     if (charting && local) {
@@ -253,7 +284,13 @@ export function App() {
       pick([`${DEFINED}${local}`]);
       return;
     }
-    if (charting) { setCharting(null); pick([]); return; }
+    if (charting && graph) {
+      const box = picked[0] ? pointed_of(graph, picked[0]) : null;
+      const up = box ? parent_of(graph, box) : picked.length ? here : null;
+      if (up) visit(up);
+      else { setCharting(null); pick([]); }
+      return;
+    }
     if (!view || !layer) return;
     const up = view.blocks[layer]?.parent ?? view.root;
     setLayer(up === view.root ? null : up);
@@ -350,6 +387,20 @@ export function App() {
   /** What the tray is about: the pick, or else the open layer. */
   const about = graph.blocks[real[0] ?? ""] ?? graph.blocks[layer ?? graph.root];
   const kind = about?.type ? graph.defs[about.type]?.name ?? about.type : "block";
+  /** A chart's crumbs: the page, the folders the pick is filed down through, and a definition
+   *  opened. Picking one goes there; going up one is leaving. */
+  const steps = here ? path_of(graph, here) : [];
+  const trail = charting ? [
+    { id: PAGE, label: graph.blocks[graph.root]?.name ?? "page" },
+    ...steps.map((step, n) => ({ id: String(n), label: step.label })),
+    ...(charting.local ? [{ id: LOCAL, label: graph.defs[charting.local]?.name ?? "" }] : []),
+  ] : null;
+  const walk = (id: string | null) => {
+    if (id === null) { leave(); return; }
+    if (id === PAGE) { setCharting(null); setLayer(null); pick([]); return; }
+    const step = steps[Number(id)];
+    if (step) visit(step.at);
+  };
 
   return (
     <div className={`app${over ? " over" : ""}`}
@@ -384,7 +435,7 @@ export function App() {
             onClick={(event) => void add(event.shiftKey)}><Icon name="add_document" /></button>
         }
         section={tray.section(graph.root) ?? (charting && !charting.local
-          && !real.some((id) => graph.defs[id]) ? charting.at : null)}
+          && !real.some((id) => graph.defs[id]) ? here : null)}
         onSection={(at) => { tray.onSection(at); chart(at); }}
         onAct={act}
         onFold={(id, shut) => setFolded((held) =>
@@ -392,18 +443,19 @@ export function App() {
         onPick={pick_shown} />
 
       <main>
-        <div className="mm-canvas">
-          {/* One per drawing — the page, a chart, a definition's context — so each is framed
-              afresh. */}
+        <div className="mm-canvas" ref={setCanvas}>
+          {/* One per drawing — the page, a chart, a definition opened — so each is framed afresh.
+              Each reads as many cards across as the canvas holds, at their own size at most. */}
           <Viewer key={charting ? charting.local ?? JSON.stringify(charting.at) : "page"}
             graph={view ?? graph}
             layer={layer} picked={cards} card={display.card} full={full || !!opened} scroll
             focus={opened || charting?.local ? null : cards[0] ?? null}
             reach={opened ? span(view!, opened)
-              : charting?.local ? Math.max(span(view!, view!.root), CONTEXT * (column ?? 0))
-              : column && READ * column}
+              : charting ? chart_width(charting, across) : column && fitted(column) * column}
+            most={opened ? null : ACTUAL}
             chrome={{ crumbs: true, lattice: display.lattice ?? true, legend: display.legend,
-                      corner: display.corner }}
+                      corner: display.corner, frame: false }}
+            trail={trail} onTrail={walk}
             onLook={setLayer} onPick={pick} onOpen={enter} />
           {note ? (
             <p className="strip mm-strip" onClick={() => setNote("")}>{note}</p>
@@ -420,6 +472,18 @@ export function App() {
   );
 }
 
+
+/** How wide an element is, in pixels, as it is resized; nothing until there is one. */
+function useWidth(element: HTMLElement | null): number {
+  const [width, setWidth] = useState(0);
+  useEffect(() => {
+    if (!element) return;
+    const watch = new ResizeObserver(([entry]) => setWidth(entry?.contentRect.width ?? 0));
+    watch.observe(element);
+    return () => watch.disconnect();
+  }, [element]);
+  return width;
+}
 
 function stored_theme(): ThemeName {
   try {

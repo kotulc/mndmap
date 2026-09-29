@@ -36,61 +36,72 @@ const PROSE = (icon: string) => ({ card: { icon, name: "hide", body: "show", hei
 const NAMED = (icon: string) => ({ card: { icon, body: "show", height: "fit" } });
 const LISTED = (icon: string) => ({ card: { icon, fields: "show", height: "free" } });
 
+/** The hue each kind paints itself with: each folder of kinds a colour of its own — structure
+ *  blue, prose rose, data violet, media yellow — and the kinds in it shades of it, the one most
+ *  read strongest. Each stands off the dark ground; plain text, the page's bulk, the least. */
+const TINT = (hue: number, intensity = 0.65, more: Record<string, string | number> = {}) =>
+  ({ style: { hue, intensity, ...more } });
+
+/** What a kind built on a faint base undoes to stand out as the rest do: a grid's faint name, and
+ *  a note's all but clear fill. */
+const PLAIN_NAME = { name_contrast: "strong", border_contrast: "soft" };
+const SOLID = { fill: "solid", opacity: 1, name_contrast: "strong" };
+
 
 /** Every definition in the package, in reading order. */
 export const DEFS: Definition[] = [
   {
     id: HEADING, from: MD, group: "block", extends: "block", name: "heading",
     about: "A section heading. Its level is in its body, as the page writes it.",
-    components: { card: { icon: "content_heading", align: "center" } },
+    components: { card: { icon: "content_heading", align: "center" }, ...TINT(235, 0.9) },
   },
   {
     id: TEXT, from: MD, group: "block", extends: "block", name: "text",
     about: "A paragraph of prose, held whole on the block's body.",
-    components: PROSE("content_text"),
+    components: { ...PROSE("content_text"), ...TINT(350, 0.6) },
   },
   {
     id: LIST, from: MD, group: "block", extends: "block", name: "list",
     about: "An ordered, unordered or task list. Its items are its body, as written.",
-    components: NAMED("content_list"),
+    components: { ...NAMED("content_list"), ...TINT(5, 0.8) },
   },
   {
     id: CODE, from: MD, group: "block", extends: "block", name: "code",
     about: "A fenced block, fence and all. Its language names it.",
-    components: NAMED("content_code"),
+    components: { ...NAMED("content_code"), ...TINT(340, 0.95) },
   },
   {
     id: QUOTE, from: MD, group: "block", extends: "block", name: "quote",
     about: "A block quote, however deeply nested.",
-    components: PROSE("content_quote"),
+    components: { ...PROSE("content_quote"), ...TINT(330, 0.75) },
   },
   {
     id: TABLE, from: MD, group: "block", extends: "grid", name: "table",
     about: "A table. One grid of its rows' values, headed by their schema; its key column names "
       + "each row.",
-    components: LISTED("role_table"),
+    components: { ...LISTED("role_table"), ...TINT(285, 0.95, PLAIN_NAME) },
   },
   {
     id: COLUMN, from: MD, group: "block", extends: "block", name: "column",
     about: "A table's column, as a block type: each distinct column name is one, extending this. "
       + "A header allocates it rather than using it, so it adds no block to the document.",
-    components: ICON("header_col"),
+    components: { ...ICON("header_col"), ...TINT(270, 0.75) },
   },
   {
     id: SCHEMA, from: MD, group: "block", extends: "block", name: "schema",
     about: "A table's columns and the forms its cells read as, drawn beside it when it is opened. "
       + "Its own, never a definition.",
-    components: LISTED("data"),
+    components: { ...LISTED("define"), ...TINT(300, 0.6) },
   },
   {
-    id: IMAGE, from: MD, group: "block", extends: "reference", name: "image",
-    about: "An image. Its source is where it lives; its alt text names it.",
-    components: ICON("content_image"),
+    id: IMAGE, from: MD, group: "block", extends: "block", name: "image",
+    about: "An image. Its source is where it lives, previewed on its card; its alt text names it.",
+    components: { card: { icon: "content_image", preview: "show" }, ...TINT(90, 0.85) },
   },
   {
     id: FRONT, from: MD, group: "block", extends: "note", name: "frontmatter",
     about: "The document's own metadata, as it was written.",
-    components: ICON("data"),
+    components: { ...ICON("data"), ...TINT(220, 0.6, SOLID) },
   },
   {
     id: FLOW, from: MD, group: "relation", extends: "line", name: "flow",
