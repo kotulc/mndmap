@@ -113,7 +113,17 @@
 
 /* Reading: the whole document, the row being read lit. */
 .mm-document, .mm-picked { display: flex; flex-direction: column; gap: 0.6em; }
-.mm-document .mm-prose { padding: 2px 8px; border-left: 2px solid transparent; opacity: 0.55; }
+.mm-document .mm-section {
+  padding: 2px 8px;
+  border-left: 2px solid transparent;
+  opacity: 0.55;
+  cursor: pointer;
+}
+/* A section under the pointer is one click from being picked. */
+.mm-document .mm-section:hover {
+  opacity: 0.85;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
 .mm-document .mm-heading { margin: 0.4em 0 0; font-weight: 700; color: var(--accent); }
 .mm-document .mm-lit { border-left-color: var(--accent); opacity: 1; scroll-margin-top: 48px; }
 

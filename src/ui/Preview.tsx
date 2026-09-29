@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { Inline, Markdown } from "@mnd/kit/react";
 import { children, type Block, type Graph, type Id } from "@mnd/kit";
-import { FRONT, TABLE } from "../packages/markdown.js";
+import { FRONT, IMAGE, TABLE } from "../packages/markdown.js";
 import { is_markdown } from "../scan.js";
 import { covered, segments, type Row, type Segment } from "../series.js";
 
@@ -20,7 +20,9 @@ export function Preview({ graph, picked }: { graph: Graph; picked: Id | null }) 
   return (
     <div className="mm-content">
       <p className="mm-path">{about(graph, block)}</p>
-      {text ? (
+      {block.type === IMAGE && block.source ? (
+        <p className="mm-prose"><img src={block.source} alt={block.name ?? ""} /></p>
+      ) : text ? (
         <Markdown className="mm-prose" text={text} />
       ) : (
         <p className="mm-empty">Nothing to preview; its fields and contents are in their tabs.</p>
@@ -32,14 +34,18 @@ export function Preview({ graph, picked }: { graph: Graph; picked: Id | null }) 
 
 /** The whole document, as the graph now orders it: the row being read lit, what the canvas picked
  *  outlined as one group, and both kept in view. What a pick covers is read as it is drawn. */
-export function Document({ graph, view, row, picked }: {
+export function Document({ graph, view, row, picked, onPick, onPoint }: {
   graph: Graph; view: Graph; row: Row | null; picked: readonly Id[];
+  onPick: (id: Id) => void; onPoint: (id: Id | null) => void;
 }) {
   const parts = useMemo(() => segments(graph), [graph]);
   const chosen = useMemo(() => covered(view, picked), [view, picked]);
   const held = useRef<HTMLDivElement>(null);
+  /** Whether the pick came from here, where the section is already in view. */
+  const here = useRef(false);
 
   useEffect(() => {
+    if (here.current) { here.current = false; return; }
     const seen = held.current?.querySelector(".mm-picked") ?? held.current?.querySelector(".mm-lit");
     seen?.scrollIntoView({ block: "start", behavior: "smooth" });
   }, [row, chosen]);
@@ -53,13 +59,20 @@ export function Document({ graph, view, row, picked }: {
     else runs.push({ picked: on, parts: [part] });
   }
 
+  /** A section clicked picks the block it was read from. */
+  const chose = (id: Id) => { here.current = true; onPick(id); };
+
   // A heading shows its markdown as written, so it reads apart from the content under it.
-  const draw = ({ id, text, cells, level }: Segment) => {
-    const lit = `mm-prose${row?.covers.has(id) ? " mm-lit" : ""}`;
-    if (cells) return <Table key={id} className={lit} cells={cells} />;
-    if (level) return <p key={id} className={`${lit} mm-heading`}><Inline text={text} /></p>;
-    return <Markdown key={id} className={lit} text={text} />;
-  };
+  const draw = ({ id, text, cells, level, image }: Segment) => (
+    <div key={id} className={`mm-section${row?.covers.has(id) ? " mm-lit" : ""}`}
+      onClick={() => chose(id)}
+      onMouseEnter={() => onPoint(id)} onMouseLeave={() => onPoint(null)}>
+      {cells ? <Table className="mm-prose" cells={cells} />
+        : level ? <p className="mm-prose mm-heading"><Inline text={text} /></p>
+        : image ? <p className="mm-prose"><img src={image} alt="" /></p>
+        : <Markdown className="mm-prose" text={text} />}
+    </div>
+  );
 
   return (
     <div className="mm-content mm-document" ref={held}>

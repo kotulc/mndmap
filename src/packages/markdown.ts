@@ -101,7 +101,7 @@ export const DEFS: Definition[] = [
   {
     id: FRONT, from: MD, group: "block", extends: "note", name: "frontmatter",
     about: "The document's own metadata, as it was written.",
-    components: { ...ICON("data"), ...TINT(220, 0.6, SOLID) },
+    components: { ...ICON("content_front"), ...TINT(220, 0.6, SOLID) },
   },
   {
     id: FLOW, from: MD, group: "relation", extends: "line", name: "flow",

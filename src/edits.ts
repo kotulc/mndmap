@@ -20,6 +20,8 @@ export type Edit =
 export interface Applied {
   graph: Graph;
   faults: string[];
+  /** The block the gesture leaves in hand: the one made or moved. */
+  made: Id | null;
 }
 
 
@@ -28,7 +30,15 @@ export interface Applied {
 export function apply(graph: Graph, edit: Edit): Applied {
   const next = clone(graph);
   const fault = run(next, edit);
-  return fault ? { graph, faults: [fault] } : { graph: next, faults: [] };
+  if (fault) return { graph, faults: [fault], made: null };
+  return { graph: next, faults: [], made: made_of(graph, next, edit) };
+}
+
+/** What a gesture leaves in hand: the block moved, or the one block that was not there before. */
+function made_of(before: Graph, after: Graph, edit: Edit): Id | null {
+  if (edit.do === "move") return edit.id;
+  if (edit.do !== "create") return null;
+  return Object.keys(after.blocks).find((id) => !before.blocks[id]) ?? null;
 }
 
 function run(graph: Graph, edit: Edit): string | null {

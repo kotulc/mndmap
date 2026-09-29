@@ -73,6 +73,8 @@ export function App() {
   const [note, setNote] = useState(BLANK);
   const [theme, setTheme] = useState<ThemeName>(() => stored_theme());
   const [over, setOver] = useState(false);
+  /** The block the tray's pointer is over, lit on the canvas. */
+  const [pointed, setPointed] = useState<Id | null>(null);
   const tray = useTray();
   const [big, setBig] = useState(false);
   const { display } = useDisplay({ card: CONTENT_CARD, range: CARD, full: false });
@@ -104,6 +106,8 @@ export function App() {
   /** The opened focus block, where the open layer is one: its preview on the page. */
   const opened = layer && view?.blocks[layer]?.of ? layer : null;
   const stack = useRef(new Stack());
+  /** A block just made or moved, revealed once the page is laid out with it. */
+  const follow = useRef<Id | null>(null);
   const file = useRef<HTMLInputElement>(null);
   const look = THEMES.find((item) => item.name === theme) ?? THEMES[0]!;
   const nextLook = THEMES[(THEMES.indexOf(look) + 1) % THEMES.length]!;
@@ -132,6 +136,7 @@ export function App() {
       const result = apply(held, change);
       if (result.faults.length) { setNote(result.faults.join("\n")); return held; }
       stack.current.push(held);
+      follow.current = result.made ?? follow.current;
       setNote("");
       return result.graph;
     });
@@ -365,6 +370,14 @@ export function App() {
     }
   }, [edit, graph, page, view, layer, opened]);
 
+  /** What was made or moved becomes the context: revealed, so the camera centers on it. */
+  useEffect(() => {
+    const id = follow.current;
+    if (!id || !page?.blocks[seen_as(page, id)]) return;
+    follow.current = null;
+    act("reveal", { id });
+  }, [page, act]);
+
   if (!graph) {
     return (
       <main className={`app blank${over ? " over" : ""}`}
@@ -432,7 +445,7 @@ export function App() {
         extra={
           <button type="button" aria-label="Open a document"
             title="open a markdown document — shift+click for a folder"
-            onClick={(event) => void add(event.shiftKey)}><Icon name="add_document" /></button>
+            onClick={(event) => void add(event.shiftKey)}><Icon name="add" /></button>
         }
         section={tray.section(graph.root) ?? (charting && !charting.local
           && !real.some((id) => graph.defs[id]) ? here : null)}
@@ -448,7 +461,8 @@ export function App() {
               Each reads as many cards across as the canvas holds, at their own size at most. */}
           <Viewer key={charting ? charting.local ?? JSON.stringify(charting.at) : "page"}
             graph={view ?? graph}
-            layer={layer} picked={cards} card={display.card} full={full || !!opened} scroll
+            layer={layer} picked={cards} lit={pointed && page ? [seen_as(page, pointed)] : []}
+            card={display.card} full={full || !!opened} scroll
             focus={opened || charting?.local ? null : cards[0] ?? null}
             reach={opened ? span(view!, opened)
               : charting ? chart_width(charting, across) : column && fitted(column) * column}
@@ -464,7 +478,8 @@ export function App() {
         <TrayFrame open={tray.open} onOpen={tray.onOpen} big={big} onBig={setBig}
           word={kind} name={about?.name ?? ""} tabs={TABS} tab="markdown" onTab={() => {}}>
           {graph.packages[MD]
-            ? <Document graph={graph} view={view ?? graph} row={row} picked={real} />
+            ? <Document graph={graph} view={view ?? graph} row={row} picked={real}
+                onPick={(id) => act("reveal", { id })} onPoint={setPointed} />
             : <Preview graph={graph} picked={about?.id ?? null} />}
         </TrayFrame>
       </main>

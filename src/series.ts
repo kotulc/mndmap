@@ -8,7 +8,7 @@
 import { children, type Block, type Graph, type Id } from "@mnd/kit";
 import { marked, type Tokens } from "marked";
 import { plain } from "./names.js";
-import { FRONT, HEADING, TABLE } from "./packages/markdown.js";
+import { FRONT, HEADING, IMAGE, TABLE } from "./packages/markdown.js";
 
 /** One row of the page: the layer it sits on, its backbone block, its cards left to right, and
  *  every block it covers. */
@@ -26,6 +26,8 @@ export interface Segment {
   text: string;
   cells?: string[][];
   level?: number;
+  /** Where an image lives, which the kit's markdown does not draw. */
+  image?: string;
 }
 
 /** The deepest heading markdown writes. */
@@ -72,7 +74,9 @@ export function segments(graph: Graph, layer: Id = graph.root, depth = 0): Segme
     const cells = block.type === TABLE ? cells_of(graph, block.id) : null;
     const text = cells ? table_text(cells)
       : level ? `${"#".repeat(level)} ${title(block)}` : markdown_of(block);
-    if (text) out.push({ id: block.id, text, ...(cells ? { cells } : {}), ...(level ? { level } : {}) });
+    const image = block.type === IMAGE && block.source ? { image: block.source } : {};
+    if (text) out.push({ id: block.id, text, ...(cells ? { cells } : {}), ...(level ? { level } : {}),
+      ...image });
     out.push(...segments(graph, block.id, level || depth));
   }
   return out;
