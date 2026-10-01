@@ -1,26 +1,14 @@
-/** The held graph, back in reading order: its rows, and its markdown.
+/** The held graph, back in reading order: what a pick covers, and the document's markdown.
  *
- *  Both walk the graph as it is now, not as it was read, so a block moved in
- *  the explorer is read in its new place. A row is a backbone block and the
- *  content beside it, read from the drawn graph; stepping through the rows is
- *  stepping through the page. The markdown is read from the held outline. */
+ *  Both walk the graph as it is now, not as it was read, so a block moved in the explorer is read
+ *  in its new place. A section covers every block grouped in it, however deep. */
 
 import { children, type Block, type Graph, type Id } from "@mnd/kit";
 import { marked, type Tokens } from "marked";
-import { plain } from "./names.js";
-import { FRONT, HEADING, IMAGE, TABLE } from "./packages/markdown.js";
-
-/** One row of the page: the layer it sits on, its backbone block, its cards left to right, and
- *  every block it covers. */
-export interface Row {
-  layer: Id;
-  anchor: Id;
-  cards: Id[];
-  covers: Set<Id>;
-}
+import { FRONT, HEADING, IMAGE, SECTION, TABLE } from "./packages/markdown.js";
 
 /** One block's markdown, as the page writes it. A table also carries its cells, header first, and
- *  a heading its level. */
+ *  a section its heading's level. */
 export interface Segment {
   id: Id;
   text: string;
@@ -34,63 +22,55 @@ export interface Segment {
 const LEVELS = 6;
 
 
-/** Every block a pick covers: each picked block and all it holds. */
+/** Every block a pick covers: each picked block, and all a picked section groups. */
 export function covered(graph: Graph, picked: readonly Id[]): Set<Id> {
-  return new Set(picked.flatMap((id) => under(graph, id)));
+  return new Set(picked.flatMap((id) => members(graph, id)));
 }
 
-/** Whether a block sits in the backbone column rather than in a row: a heading, the front matter,
- *  the layer's own block standing in at its head, or on a chart a definition or a group of them. */
-export function is_spine(graph: Graph, block: Block): boolean {
-  return [HEADING, FRONT, "group"].includes(block.type ?? "") || block.of === block.parent
-    || !!graph.defs[block.of ?? ""];
-}
-
-/** A layer's rows, top to bottom: each backbone block and the content after it. A layer with no
- *  backbone — an opened focus, a folder — is a row per block. */
-export function rows(graph: Graph, layer: Id): Row[] {
-  const held = children(graph, layer);
-  const spined = held.some((block) => is_spine(graph, block));
-  const out: Row[] = [];
-  held.forEach((block) => {
-    const row = out[out.length - 1];
-    // Content joins the row before it, with all it holds.
-    if (spined && row && !is_spine(graph, block)) {
-      row.cards.push(block.id);
-      for (const id of under(graph, block.id)) row.covers.add(id);
-      return;
-    }
-    out.push({ layer, anchor: block.id, cards: [block.id], covers: new Set(under(graph, block.id)) });
-  });
-  return out;
+/** The section a block sits in, where it sits in one. */
+export function section_of(graph: Graph, id: Id | undefined): Id | null {
+  const group = graph.blocks[id ?? ""]?.group;
+  return graph.blocks[group ?? ""]?.type === SECTION ? group! : null;
 }
 
 /** The document as markdown, one segment per block that writes any, in reading order. A heading's
- *  level is how deep it is nested under headings, so moving one in the explorer re-levels it. */
-export function segments(graph: Graph, layer: Id = graph.root, depth = 0): Segment[] {
-  const out: Segment[] = [];
-  for (const block of children(graph, layer)) {
-    const level = block.type === HEADING ? Math.min(depth + 1, LEVELS) : 0;
-    const cells = block.type === TABLE ? cells_of(graph, block.id) : null;
+ *  level is how deep its section sits, so moving one re-levels it; a section writes nothing of its
+ *  own. */
+export function segments(graph: Graph, layer: Id = graph.root): Segment[] {
+  return children(graph, layer).flatMap((block): Segment[] => {
+    if (block.type === SECTION) return [];
+    const level = block.type === HEADING ? Math.min(depth(graph, block.id), LEVELS) : 0;
+    const cells = block.type === TABLE ? cells_of(block) : null;
     const text = cells ? table_text(cells)
-      : level ? `${"#".repeat(level)} ${title(block)}` : markdown_of(block);
+      : level ? `${"#".repeat(level)} ${(block.body ?? "").replace(/^#+\s*/, "")}`
+      : markdown_of(block);
     const image = block.type === IMAGE && block.source ? { image: block.source } : {};
-    if (text) out.push({ id: block.id, text, ...(cells ? { cells } : {}), ...(level ? { level } : {}),
-      ...image });
-    out.push(...segments(graph, block.id, level || depth));
-  }
-  return out;
+    const own = text ? [{ id: block.id, text, ...(cells ? { cells } : {}),
+                          ...(level ? { level } : {}), ...image }] : [];
+    return [...own, ...segments(graph, block.id)];
+  });
 }
 
 
+/** A block and every block grouped in it, however deep. */
+function members(graph: Graph, id: Id): Id[] {
+  const held = Object.values(graph.blocks).filter((block) => block.group === id);
+  return [id, ...held.flatMap((block) => members(graph, block.id))];
+}
+
+/** How many sections a block sits in. */
+function depth(graph: Graph, id: Id): number {
+  const up = section_of(graph, id);
+  return up ? 1 + depth(graph, up) : 0;
+}
+
 /** A table's cells: its header as the page wrote it, a line per row of its grid's values. */
-function cells_of(graph: Graph, id: Id): string[][] | null {
-  const block = graph.blocks[id];
-  const grid = block?.grid;
-  const fields = block?.fields ?? [];
+function cells_of(block: Block): string[][] | null {
+  const grid = block.grid;
+  const fields = block.fields ?? [];
   if (!grid || !fields.length) return null;
   const values = (grid.values ?? []).slice(1).map((row) => fields.map((_, n) => row[n] ?? ""));
-  return [head_of(block!.body, fields.map((field) => field.name)), ...values];
+  return [head_of(block.body, fields.map((field) => field.name)), ...values];
 }
 
 /** A table's header as written, where its body still has one a cell per field; else its names. */
@@ -98,13 +78,6 @@ function head_of(body: string | undefined, names: string[]): string[] {
   const [token] = marked.lexer(body ?? "");
   const cells = token?.type === "table" ? (token as Tokens.Table).header.map((cell) => cell.text) : [];
   return cells.length === names.length ? cells : names;
-}
-
-/** A heading's text as the page wrote it, while its name is still the one read from it; renamed,
- *  it writes its new name. */
-function title(block: Block): string {
-  const written = (block.body ?? "").split("\n")[0]!.replace(/^#+\s*|\s*#+\s*$/g, "").trim();
-  return plain(written) === block.name ? written : block.name ?? "";
 }
 
 /** What one block writes. */
@@ -118,9 +91,4 @@ function table_text(cells: string[][]): string {
   const line = (row: string[]) => `| ${row.join(" | ")} |`;
   const [head = [], ...body] = cells;
   return [line(head), line(head.map(() => "---")), ...body.map(line)].join("\n");
-}
-
-/** A block and everything under it. */
-function under(graph: Graph, id: Id): Id[] {
-  return [id, ...children(graph, id).flatMap((block) => under(graph, block.id))];
 }

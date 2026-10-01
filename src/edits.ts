@@ -7,8 +7,8 @@
 import { children, type Block, type Graph, type Id } from "@mnd/kit";
 
 export type Edit =
-  /** Re-parent, and land at a place among the new siblings. */
-  | { do: "move"; id: Id; parent: Id; at?: number }
+  /** Re-parent, and land at a place among the new siblings; in the group named, or in none. */
+  | { do: "move"; id: Id; parent: Id; at?: number; group?: Id | null }
   /** Re-order among the siblings it already has. */
   | { do: "order"; id: Id; at: number }
   | { do: "rename"; id: Id; name: string }
@@ -49,6 +49,8 @@ function run(graph: Graph, edit: Edit): string | null {
       if (!graph.blocks[edit.parent]) return `there is nowhere called ${edit.parent}`;
       if (holds(graph, edit.id, edit.parent)) return `${name_of(graph, edit.id)} cannot hold itself`;
       block.parent = edit.parent;
+      if (edit.group === null || edit.group === edit.id) delete block.group;
+      else if (edit.group) block.group = edit.group;
       seat(graph, edit.parent, edit.id, edit.at);
       return null;
     }

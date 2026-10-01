@@ -2,14 +2,14 @@
  *
  *  What a block is, carries and holds are the kit tray's own tabs; this is the one thing they do
  *  not show — the markdown read as markdown. mndmap hands it to the tray as its first tab. While
- *  reading, it is the whole document instead, with the row being read lit. */
+ *  reading, it is the whole document instead, with the section being read lit. */
 
 import { useEffect, useMemo, useRef } from "react";
 import { Inline, Markdown } from "@mnd/kit/react";
 import { children, type Block, type Graph, type Id } from "@mnd/kit";
 import { FRONT, IMAGE, TABLE } from "../packages/markdown.js";
 import { is_markdown } from "../scan.js";
-import { covered, segments, type Row, type Segment } from "../series.js";
+import { covered, segments, type Segment } from "../series.js";
 
 export function Preview({ graph, picked }: { graph: Graph; picked: Id | null }) {
   const block = picked ? graph.blocks[picked] : undefined;
@@ -32,14 +32,17 @@ export function Preview({ graph, picked }: { graph: Graph; picked: Id | null }) 
 }
 
 
-/** The whole document, as the graph now orders it: the row being read lit, what the canvas picked
- *  outlined as one group, and both kept in view. What a pick covers is read as it is drawn. */
-export function Document({ graph, view, row, picked, onPick, onPoint }: {
-  graph: Graph; view: Graph; row: Row | null; picked: readonly Id[];
+/** The whole document, as the graph now orders it: the section being read lit, what the canvas
+ *  picked outlined as one group, and both kept in view. */
+export function Document({ graph, lit, picked, onPick, onPoint }: {
+  graph: Graph; lit: ReadonlySet<Id>; picked: readonly Id[];
   onPick: (id: Id) => void; onPoint: (id: Id | null) => void;
 }) {
   const parts = useMemo(() => segments(graph), [graph]);
-  const chosen = useMemo(() => covered(view, picked), [view, picked]);
+  const chosen = useMemo(() => covered(graph, picked), [graph, picked]);
+  /** What is lit and picked, as one key: the view scrolls only when it changes, never on a
+   *  re-render alone, such as a section pointed at. */
+  const seen_key = `${[...lit].join(" ")}|${[...chosen].join(" ")}`;
   const held = useRef<HTMLDivElement>(null);
   /** Whether the pick came from here, where the section is already in view. */
   const here = useRef(false);
@@ -48,7 +51,7 @@ export function Document({ graph, view, row, picked, onPick, onPoint }: {
     if (here.current) { here.current = false; return; }
     const seen = held.current?.querySelector(".mm-picked") ?? held.current?.querySelector(".mm-lit");
     seen?.scrollIntoView({ block: "start", behavior: "smooth" });
-  }, [row, chosen]);
+  }, [seen_key]);
 
   // Consecutive picked segments share one outline; the rest stand alone.
   const runs: { picked: boolean; parts: Segment[] }[] = [];
@@ -64,7 +67,7 @@ export function Document({ graph, view, row, picked, onPick, onPoint }: {
 
   // A heading shows its markdown as written, so it reads apart from the content under it.
   const draw = ({ id, text, cells, level, image }: Segment) => (
-    <div key={id} className={`mm-section${row?.covers.has(id) ? " mm-lit" : ""}`}
+    <div key={id} className={`mm-section${lit.has(id) ? " mm-lit" : ""}`}
       onClick={() => chose(id)}
       onMouseEnter={() => onPoint(id)} onMouseLeave={() => onPoint(null)}>
       {cells ? <Table className="mm-prose" cells={cells} />

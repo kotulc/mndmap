@@ -1,28 +1,27 @@
 /** The markdown package: what each kind of content in a document *is*.
  *
- *  The parser decides where a block starts and stops. This decides what it
- *  means and how it draws — so adding an element is a definition here, not a
- *  branch in the reader. Every definition extends one of the kit's bases, so
- *  a document opens in mndflow with its look already on it. */
+ *  The parser decides where a block starts and stops. This decides what it means, how it draws,
+ *  and which content group it belongs to — so adding an element is a definition here, not a branch
+ *  in the reader. Every definition extends one of the kit's bases, so a document opens in mndflow
+ *  with its look already on it.
+ *
+ *  A package is a vocabulary *and* how it is projected: its groups box its definitions on its own
+ *  layer, and are the content groups a document's blocks are tagged with. */
 
 import { BASE_PACKAGE, type Definition, type Id, type Package } from "@mnd/kit";
 
 /** The package every definition below belongs to. */
 export const MD = "md";
 
+export const SECTION = "md.section";
 export const HEADING = "md.heading";
 export const TEXT = "md.text";
 export const LIST = "md.list";
 export const CODE = "md.code";
-export const QUOTE = "md.quote";
 export const TABLE = "md.table";
-export const COLUMN = "md.column";
-export const SCHEMA = "md.schema";
 export const IMAGE = "md.image";
 export const FRONT = "md.front";
 export const FLOW = "md.flow";
-export const MEMBER = "md.member";
-export const ALLOCATES = "md.allocates";
 
 /* The package declares no fields. What markdown says — a heading's level, a fence's language, a
  * task's tick — is written in the block's body, as the page writes it. A table carries its own:
@@ -36,7 +35,7 @@ const PROSE = (icon: string) => ({ card: { icon, name: "hide", body: "show", hei
 const NAMED = (icon: string) => ({ card: { icon, body: "show", height: "fit" } });
 const LISTED = (icon: string) => ({ card: { icon, fields: "show", height: "free" } });
 
-/** The hue each kind paints itself with: each folder of kinds a colour of its own — structure
+/** The hue each kind paints itself with: each content group a colour of its own — structure
  *  blue, prose rose, data violet, media yellow — and the kinds in it shades of it, the one most
  *  read strongest. Each stands off the dark ground; plain text, the page's bulk, the least. */
 const TINT = (hue: number, intensity = 0.65, more: Record<string, string | number> = {}) =>
@@ -51,13 +50,20 @@ const SOLID = { fill: "solid", opacity: 1, name_contrast: "strong" };
 /** Every definition in the package, in reading order. */
 export const DEFS: Definition[] = [
   {
+    id: SECTION, from: MD, group: "block", extends: "group", name: "section",
+    about: "A heading and what it heads, until a heading as high: a group of its heading, its "
+      + "content and its own sections. Named by the heading as written.",
+    components: { ...ICON("content_heading"), ...TINT(235, 0.9) },
+  },
+  {
     id: HEADING, from: MD, group: "block", extends: "block", name: "heading",
-    about: "A section heading. Its level is in its body, as the page writes it.",
+    about: "A section's heading, first in its section: the backbone the document reads down. Its "
+      + "level is how deep its section sits.",
     components: { card: { icon: "content_heading", align: "center" }, ...TINT(235, 0.9) },
   },
   {
     id: TEXT, from: MD, group: "block", extends: "block", name: "text",
-    about: "A paragraph of prose, held whole on the block's body.",
+    about: "Prose: a run of paragraphs and quotes, held whole on the block's body.",
     components: { ...PROSE("content_text"), ...TINT(350, 0.6) },
   },
   {
@@ -71,27 +77,10 @@ export const DEFS: Definition[] = [
     components: { ...NAMED("content_code"), ...TINT(340, 0.95) },
   },
   {
-    id: QUOTE, from: MD, group: "block", extends: "block", name: "quote",
-    about: "A block quote, however deeply nested.",
-    components: { ...PROSE("content_quote"), ...TINT(330, 0.75) },
-  },
-  {
     id: TABLE, from: MD, group: "block", extends: "grid", name: "table",
     about: "A table. One grid of its rows' values, headed by their schema; its key column names "
       + "each row.",
     components: { ...LISTED("role_table"), ...TINT(285, 0.95, PLAIN_NAME) },
-  },
-  {
-    id: COLUMN, from: MD, group: "block", extends: "block", name: "column",
-    about: "A table's column, as a block type: each distinct column name is one, extending this. "
-      + "A header allocates it rather than using it, so it adds no block to the document.",
-    components: { ...ICON("header_col"), ...TINT(270, 0.75) },
-  },
-  {
-    id: SCHEMA, from: MD, group: "block", extends: "block", name: "schema",
-    about: "A table's columns and the forms its cells read as, drawn beside it when it is opened. "
-      + "Its own, never a definition.",
-    components: { ...LISTED("define"), ...TINT(300, 0.6) },
   },
   {
     id: IMAGE, from: MD, group: "block", extends: "block", name: "image",
@@ -105,37 +94,35 @@ export const DEFS: Definition[] = [
   },
   {
     id: FLOW, from: MD, group: "relation", extends: "line", name: "flow",
-    about: "Down the page, from one backbone block to the next.",
+    about: "The order a document reads in: section to section, and block to block inside one.",
     components: { line: { name: "hide" } },
-  },
-  {
-    id: MEMBER, from: MD, group: "relation", extends: "line", name: "member",
-    about: "Across a row, from a backbone block through the content it introduces.",
-    components: { line: { name: "hide" } },
-  },
-  {
-    id: ALLOCATES, from: MD, group: "relation", extends: "line", name: "allocates",
-    about: "From a column's definition to the table whose header allocates it.",
-    components: { line: { name: "hide" }, style: { border_style: "dashed" } },
   },
 ];
 
-/** How the package files its block definitions: a document's structure, its prose, its data and
- *  its media, a folder each. */
-const FOLDERS: [string, Id[]][] = [
-  ["structure", [HEADING, FRONT]], ["prose", [TEXT, QUOTE, LIST, CODE]],
-  ["data", [TABLE, COLUMN, SCHEMA]], ["media", [IMAGE]],
+/** The package's content groups, each with the definitions in it: a document's structure, its
+ *  prose, its data and its media. Its relations are filed apart, as every package's are. */
+export const GROUPS: [string, Id[]][] = [
+  ["structure", [SECTION, HEADING, FRONT]], ["prose", [TEXT, LIST, CODE]], ["data", [TABLE]],
+  ["media", [IMAGE]],
 ];
 
-/** The package as the graph files it: built on the base package, never written into, its
- *  definitions filed in its folders. */
+/** What names a content group on the package's shelf. */
+const SHELF = `${MD}:`;
+
+/** The package as the graph files it: built on the base package, never written into, each
+ *  definition filed in its content group. */
 export const PACKAGE: Package = {
   id: MD, name: "markdown", extends: BASE_PACKAGE,
-  shelf: FOLDERS.flatMap(([name, ids]) => [
-    { id: `${MD}:${name}`, group: "block" as const, name },
-    ...ids.map((id) => ({ id, group: "block" as const, in: `${MD}:${name}` })),
+  shelf: GROUPS.flatMap(([name, ids]) => [
+    { id: `${SHELF}${name}`, group: "block" as const, name },
+    ...ids.map((id) => ({ id, group: "block" as const, in: `${SHELF}${name}` })),
   ]),
 };
+
+/** The content group a definition is filed in, by name. */
+export function group_of(def: Id | undefined): string | null {
+  return GROUPS.find(([, ids]) => ids.includes(def ?? ""))?.[0] ?? null;
+}
 
 /** A graph with the markdown package registered in it. */
 export function with_markdown<T extends {

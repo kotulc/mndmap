@@ -3,9 +3,9 @@
 **Tables become typed block fields, and fields become something a card, the explorer and a layer can
 show.** Spans mndflow (the shell) and mndmap (the translator).
 
-**Status: steps 1–22 done.** mndmap pins `@mnd/kit` 0.9.0. Steps 12–22 are **unreleased**: their
-kit half lives in mndflow's working tree and reaches mndmap only through the linked dev server.
-Release once they settle.
+**Status: steps 1–23 done.** mndmap pins `@mnd/kit` 0.10.0. Step 23's kit half, and anything since
+0.10.0, is **unreleased**: it lives in mndflow's working tree and reaches mndmap only through the
+linked dev server. Release once it settles.
 
 
 ## Vision
@@ -15,13 +15,14 @@ Release once they settle.
 | **explorer** | three sections inside the workspace: `packages` (imported content), `definitions` (the user's working definitions), `usages` (the block tree, under a root node) |
 | **root node** | heads `usages`, wears its own root mark |
 | **schema** | a table's own: a field per column, with the form its cells read as, and its key column marked. Never a definition |
-| **column types** | each distinct column name is a workspace block type; a table's header allocates them |
-| **definitions** | only what is reused across the document, filed in folders as any package's are |
+| **terms** | what two or more blocks mention — a column name, a value, a marked term — normalized to one key |
+| **definitions** | only terms, filed by kind (`columns`, `tags`, `values`); a header allocates a shared column's, every other block is tagged with what it mentions |
 | **projections** | diagrams drawn from the one explorer tree, each its own view under the same rules: the document (the page) and the library (packages and definitions) |
 | **page** | one document reads as one flat page: headings anchor rows, and only focus blocks open |
 | **values** | a table's data rows are values in a grid, headed by its column types — data, not parts. A block is kept for what is reusable |
 | **DB mark** | any card whose block has a schema or set field values says so at a glance |
-| **opened table** | a cutout of its section: the table in the middle, its section's heading above, its neighbours at either side, its columns' definitions and its schema below — on one layer, with no view to toggle |
+| **opened focus** | a cutout of its section: a box of the block and its neighbours, its section's heading above, a table's schema below — on one layer, with no view to toggle |
+| **definition in context** | the definition in the middle, what it extends above, a box of its usages below pointing up to it |
 | **card** | a head, a divider, and a compartment: fields for a table-like block, a formatted preview of the body for content |
 
 
@@ -51,6 +52,7 @@ Release once they settle.
 | 19 | **the tree walk**: the arrows walk the explorer's tree, in the kit — ↓/↑ siblings, out past a branch's end or up to its holder; → the next row in reading order; ← out. A row walked to is chosen as a click chooses it; `usages` is a row like the others. Double-click opens as Enter does (`Viewer` `onOpen`). mndmap's row-by-row keys go | mndflow `explorer` (`keys`), kit `Viewer`; mndmap `ui/App.tsx` | done |
 | 20 | **folding**: the tree stays open only along the way to the pick; the bar's fold toggle holds them, so what the arrows open stays open. A section's fold shuts its branches but leaves it listed. The section holding the pick is lit, folded or not | mndflow `explorer`; mndmap `ui/App.tsx` | done |
 | 21 | **one organisation**: a package files its definitions on a shelf of its own (`Package.shelf`), frozen with it, and lists as the workspace does — blocks and relations, folders, definitions; a package it extends reads inside it as a folder. The markdown package files `structure`, `prose`, `data`, `media`; the reader files column types by section. A band may say how wide it is, and a reference tied to nothing is shelved in it | mndflow `core` (`shelf_of`, `shelf_tree`), `explorer`, `views` `bands`; mndmap `read.ts` (`filed`), `packages/markdown.ts` | done |
+| 23 | **shared terms**: a definition only for a term two or more blocks mention (`terms.ts`). Marked spans — column names, cell and short list-item values, code spans, bold, link text and targets, headings — normalize to one key: a value by its form (number, link, choice), words lowercase, separators cleaned, stemmed. Kind by strength: column, tag, value; filed `columns`, `tags`, `values`, named as most often written. A column heading one table only is plain text in its header (`Grid.columns` `""`). Other mentions tag the block (`Block.tags`), which the kit counts as usages. Opened focus blocks (tables, long lists and fences) draw a context box — before, the block, after — with the heading over it and a table's schema under it; column definitions leave the cutout. A definition opened draws its usages in one box under it, a directed `uses` line up to it. The crumbs are layers only, from the section. A table is named `<rows>x<columns> items`, a list `<n> items` | mndmap `terms.ts`, `read.ts` (`defined`, `filed`, `beside`, `around`), `library.ts` (`local`), `packages/markdown.ts`; mndflow `core` (`used_by`, types), `views` `block`, `stage` `Crumbs`, `theme` shell.css | done |
 | 22 | **the library projection**: a row of `packages` or `definitions` drawn as nested boxes in the tree's order, `READ` (3) across; a row with definitions of its own draws them as a context — *extends*, *holds* and *allocates*, what lies outside dashed. `WIDEST` goes: an unpicked projection fits its width | mndmap `library.ts`, `ui/App.tsx` | done |
 
 
@@ -76,11 +78,13 @@ Release once they settle.
 
 | Task | Where | Notes |
 |---|---|---|
-| **release the kit** | mndflow `release:kit`, mndmap `vendor/`, `package.json` | steps 12–22 exist only in mndflow's working tree. Cut a release once they settle, and re-pin |
-| **allocation lines meet at one point** | mndflow `views` routing | each column's dashed line ends at the middle of the grid's bottom edge, not under its own column |
+| **release the kit** | mndflow `release:kit`, mndmap `vendor/`, `package.json` | step 23's kit half exists only in mndflow's working tree. Cut a release once it settles, and re-pin |
 | **two meanings of "allocated"** | mndflow `core` `allocations_of` | the kit already calls a block seated under a header reference *allocated*; a header naming a column type is a second meaning. Settle one word |
 | **a picked definition card is hard to read** | mndflow `theme` | a picked stand-in for a definition fills blue, and its dim name nearly vanishes |
-| **a package definition in context can be long** | mndmap `read.ts` `local` | `heading` in context is every heading in the document, four to a row |
+| **a package definition in context can be long** | mndmap `library.ts` `local` | `heading` in context is every heading in the document, `across` to a row |
+| **tags are definition ids** | mndflow `core` `Block.tags` | `tags` held free words; mndmap now stores definition ids there. The kit's tray tags chip would show ids. A field of its own (`mentions`) may be cleaner |
+| **term noise** | mndmap `terms.ts` | every marked span counts: `code`, `key`, `https://example.com` qualify on two mentions. A stoplist or a ranking may be needed once a corpus is read |
+| **a picked usage box line jogs** | mndflow `views` `snap` | a card centred over a box snaps to the unit, so the line between them can bend by half a unit |
 | **the document as a projection** | mndmap `read.ts`, `ui/App.tsx` | `usages` still draws the page on its own terms; it may become a narrowing projection like the library's |
 | **`tree_of` lives in the React entry** | mndflow `explorer`, kit | `library.ts` reads the tree through `@mnd/kit/react`; the tree is pure and could ship from the core entry |
 | **wide pages read small** | mndmap `ui/App.tsx` | with `WIDEST` gone, an unpicked page fits its widest row |
@@ -114,18 +118,21 @@ Release once they settle.
 | | |
 |---|---|
 | **a table's schema is its own** | a field per column on the table block, with the form its cells read as. Never a definition. *Replaces "schema lives on a definition"* |
-| **definitions are what is reused** | a definition earns its place by recurring — a column type now |
+| **definitions are what is reused** | a definition earns its place by two or more blocks mentioning it — a column, a tag or a value. Nothing is defined for one block |
+| **terms are normalized** | a value by its form, words lowercase, separators cleaned and stemmed, so `Passages`, `passage` and `**passages**` are one term |
+| **tags, not lines** | blocks sharing a term are tagged with its definition, never joined by a line on the page; the definition in context shows them together |
 | **projections follow the tree** | a projection draws what the explorer files, in its order, so the tree and the drawing never disagree and one walk reads both. Grouping is filing: a folder, in any section. *Replaces "charts group, they don't flow"* |
 | **one organisation** | every section files the same way; a package differs only in being frozen |
-| **a folder shows its relations** | a row holding definitions draws *extends*, *holds* and *allocates* among them, and what lies outside it dashed |
-| **context shows cards** | a definition in context shows the tables allocating it as cards, never as grids |
+| **context shows cards** | a definition in context shows its usages as cards, never as grids, in one box under it pointing up to it |
 | **rows are values** | a table's rows are a grid's lines, not blocks: blocks are reusable parts, and a row is data. *Replaces "rows are usages"* |
 | **a grid cell holds a value or a block** | a plain value where no block is seated; a seated block draws over it |
-| **headers come from column types** | a grid reads its header from the definitions it allocates (`Grid.columns`), never from stored text, so a column has one name |
-| **a column is a block type** | each distinct column name is one workspace definition, extending `md.column`, identified by name alone. *Replaces "a column becomes a block only once it proves reusable"* |
-| **a header allocates, not uses** | a grid's header names the column type each column allocates. An allocation is not a usage: it adds no block to the tree |
+| **headers are the table's text** | a grid's first line holds its header as written; a shared column also allocates its definition (`Grid.columns`), `""` where none |
+| **a column is a type once shared** | a column name heading two tables, or mentioned by another block, is a definition extending `md.column`. *Replaces "a column is a block type"* |
+| **an allocation is a usage** | a table allocating a column counts among its usages, as a tagged block does |
 | **the key is the table's** | the key column is marked on the table's own field (`Field.key`), the first for now |
-| **an opened table is a cutout** | its grid in full at the centre, its section's heading above, the blocks read before and after it at either side, its columns' definitions and its schema below. *Replaces the class diagram toggle* |
+| **an opened focus is a cutout** | a box of the block and the blocks read before and after it, its section's heading above joined to the box, a table's schema below. Column definitions are left to the definition in context. *Replaces the columns under the table* |
+| **crumbs are layers** | one crumb per layer, from the section drawn — `usages`, `packages`, `definitions` — and what is opened on it. Folders are the explorer's to show; nothing is folded to `…` |
+| **size names** | a table is named `<rows>x<columns> items`, a list `<n> items`: what it holds, not its first header |
 | **headings anchor, not contain** | on the page a heading is the row its content reads in, never a layer to open. The held graph keeps the sections; only the drawing is flat. Deep nesting is left to the multi-document case |
 | **only what holds opens** | `open` is offered only on a block with child content — a focus block's preview, a folder. A link is followed by double-click |
 | **list items are body** | a list's items stay in its body as written; no item blocks |

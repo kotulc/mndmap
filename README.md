@@ -16,8 +16,9 @@ Nothing is uploaded and nothing is kept between runs. The page is the whole of i
 | **parser** | markdown → blocks. General, minimal, one document at a time. |
 | **nesting** | content sits under its heading in the graph; the canvas draws it as one flat page |
 | **markdown package** | what a heading, table, list, fence or link *is*, as definitions |
-| **tables** | a table carries its own schema; each distinct column name is a column block type its header allocates; rows are values |
-| **definitions** | blocks reused across the document — column types now; keywords, tags and concepts later — filed in folders like any package's |
+| **tables** | a table carries its own schema and its header as written; rows are values |
+| **terms** | what two or more blocks mention — a column name, a value, a marked term — normalized to one key |
+| **definitions** | only terms: shared columns, tags and values, filed by kind. Where the document's blocks link up |
 | **projections** | diagrams drawn from the one explorer tree: the **document** (the page) and the **library** (packages and definitions). Each is its own view, and all follow the same navigation |
 | **shell** | explorer, canvas, tray, workspace display — all from `@mnd/kit`. mndmap adds the projections, the `markdown` tab and reorganizing |
 
@@ -72,8 +73,9 @@ Then re-pin with a real release when the kit change is settled: run
 
 | Path | What |
 |---|---|
-| `src/read.ts` | one markdown document → blocks: nesting, tables with their schemas and column types, its definitions filed by section; and the document projection — the page, an opened table |
-| `src/library.ts` | the library projection: a row of packages or definitions as nested boxes, a folder's own definitions with how they relate, one definition in context |
+| `src/read.ts` | one markdown document → blocks: nesting, tables with their schemas, its shared terms as definitions filed by kind; and the document projection — the page, an opened focus |
+| `src/terms.ts` | a block's marked spans → terms, each normalized to one key; value forms |
+| `src/library.ts` | the library projection: a row of packages or definitions as nested boxes, one definition in context |
 | `src/packages/markdown.ts` | the markdown package: what each element is, as definitions |
 | `src/scan.ts` | a folder or file on disk → a graph of blocks |
 | `src/edits.ts` | move / order / rename / create / delete, and the undo stack |
@@ -100,14 +102,32 @@ Then re-pin with a real release when the kit change is settled: run
 5. Rows stack down the page by each card's measured height, a unit of air apart, each card
    centred on its row's tallest.
 6. A block's body is its element as written: `## Title`, a fence with its language, `- [x] item`.
+   A table is named by its size, `<rows>x<columns> items`, and a list by its count, `<n> items`.
 7. A table carries its own **schema**: a field per column, with the form its cells read as — a
-   column of numbers, yes/no or links reads as that form. The first column is the **key** that
-   names each row; its header and its schema wear a key icon.
-8. Each distinct column name is a workspace definition — a **column block type**. A table's
-   header *allocates* those types; an allocation is not a usage and adds no block to the tree.
-9. An **opened table** is a cutout of its section: the table in the middle, its section's
-   heading above, the blocks read before and after it at either side, and below it each
-   column's definition under its column (a dashed *allocates* line), then its schema card.
+   column of numbers, yes/no, links, or short repeating phrases (`choice`) reads as that form. The
+   first column is the **key** that names each row; its header and its schema wear a key icon.
+8. An **opened focus block** is a cutout of its section: a box of the block and the blocks read
+   before and after it, flowing left to right; its section's heading above, joined to the box; and
+   for a table, its schema below.
+
+## Shared terms
+
+A definition is only made for what **two or more blocks** mention. Everything else stays text.
+
+| Span | Kind |
+|---|---|
+| a table's column name | column |
+| code span, bold text, a link's text, a heading | tag |
+| a cell or short list item: a number, a link, a short phrase; a link's target | value |
+
+| Rule | |
+|---|---|
+| **one key** | a value by its form (`1,000` → `1000`, a link by its target); words lowercase, separators cleaned, stemmed — `Passages`, `passage` and `**passages**` are one term |
+| **kind by strength** | a term mentioned as more than one kind is the first of column, tag, value |
+| **named as written** | a definition takes the form it is most often written in |
+| **filed by kind** | `columns`, `tags`, `values` under `definitions` |
+| **usage** | a table allocates a shared column (`Grid.columns`); any other block mentioning a term is tagged with it (`Block.tags`). A column heading one table only is plain header text |
+| **no lines on the page** | blocks sharing a term are joined only in the definition's context |
 
 ## Projections
 
@@ -121,13 +141,11 @@ over the same tree and the same rules: the **document** projection (the page, ab
 | **one tree** | a projection draws what the explorer files, in the explorer's order, so walking the tree walks the drawing |
 | **same laws everywhere** | every section organises the same way — groups, folders, definitions. A package is only frozen: filed when it is made, never refiled |
 | **drilling narrows** | a row draws everything under it; each branch a box, boxes inside boxes, definitions as cards, `READ` across |
-| **a folder is a context** | a row holding definitions of its own draws them with how they relate — what each *extends*, and from the document which *holds* which and which columns *allocate* which tables. What they relate to outside the row is drawn dashed |
-| **one definition in context** | Enter or double-click on a definition shows its use: the tables allocating it (or the blocks it types) under their headings, it under them, the columns it shares below |
+| **one definition in context** | Enter or double-click on a definition shows its use: the definition in the middle, what it extends above, and `usages (N)` below — one box of every block it types, tags or is allocated by, pointing up to it |
 
-The markdown package files its definitions as `structure`, `prose`, `data` and `media`, and the
-base package it builds on reads inside it as a folder of its own. The reader files the
-document's column types by the section their tables sit in, `shared` first for those in more
-than one.
+The markdown package files its definitions as `structure`, `prose`, `data`, `media` and `terms`,
+and the base package it builds on reads inside it as a folder of its own. The reader files the
+document's shared terms by kind: `columns`, `tags`, `values`.
 
 ## Reading it
 
@@ -139,6 +157,7 @@ The arrows walk the explorer's tree; the canvas follows.
 | → | the next row in reading order: into a branch, else on to the next block |
 | ← | out to the row's holder; at the top, the section before |
 | Enter / double-click | open: a focus block on the page, a definition in context, a block from context onto the page |
+| crumbs | one per layer, from the section drawn: `usages / 5x2 items`, `definitions / taggly`. Folders are the explorer's to show |
 | Backspace | leave: a focus block for its card, a context for its projection, a projection for the page |
 | Escape | clear the pick; with nothing picked, leave |
 
