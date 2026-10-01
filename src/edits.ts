@@ -7,8 +7,9 @@
 import { children, type Block, type Graph, type Id } from "@mnd/kit";
 
 export type Edit =
-  /** Re-parent, and land at a place among the new siblings; in the group named, or in none. */
-  | { do: "move"; id: Id; parent: Id; at?: number; group?: Id | null }
+  /** Re-parent, and land together, in order, at a place among the new siblings. What is not
+   *  grouped by another of them joins the group named, or none. */
+  | { do: "move"; ids: Id[]; parent: Id; at?: number; group?: Id | null }
   /** Re-order among the siblings it already has. */
   | { do: "order"; id: Id; at: number }
   | { do: "rename"; id: Id; name: string }
@@ -36,7 +37,7 @@ export function apply(graph: Graph, edit: Edit): Applied {
 
 /** What a gesture leaves in hand: the block moved, or the one block that was not there before. */
 function made_of(before: Graph, after: Graph, edit: Edit): Id | null {
-  if (edit.do === "move") return edit.id;
+  if (edit.do === "move") return edit.ids[0] ?? null;
   if (edit.do !== "create") return null;
   return Object.keys(after.blocks).find((id) => !before.blocks[id]) ?? null;
 }
@@ -44,14 +45,24 @@ function made_of(before: Graph, after: Graph, edit: Edit): Id | null {
 function run(graph: Graph, edit: Edit): string | null {
   switch (edit.do) {
     case "move": {
-      const block = graph.blocks[edit.id];
-      if (!block) return `nothing here is called ${edit.id}`;
       if (!graph.blocks[edit.parent]) return `there is nowhere called ${edit.parent}`;
-      if (holds(graph, edit.id, edit.parent)) return `${name_of(graph, edit.id)} cannot hold itself`;
-      block.parent = edit.parent;
-      if (edit.group === null || edit.group === edit.id) delete block.group;
-      else if (edit.group) block.group = edit.group;
-      seat(graph, edit.parent, edit.id, edit.at);
+      if (edit.group && edit.ids.includes(edit.group)) return "a group cannot hold itself";
+      for (const id of edit.ids) {
+        if (!graph.blocks[id]) return `nothing here is called ${id}`;
+        if (holds(graph, id, edit.parent)) return `${name_of(graph, id)} cannot hold itself`;
+      }
+      // What the moved blocks group among themselves stays so; the rest join where they land.
+      const top = edit.ids.filter((id) => !edit.ids.includes(graph.blocks[id]!.group ?? ""));
+      for (const id of edit.ids) graph.blocks[id]!.parent = edit.parent;
+      for (const id of top) {
+        if (edit.group) graph.blocks[id]!.group = edit.group;
+        else if (edit.group === null) delete graph.blocks[id]!.group;
+      }
+      const held = children(graph, edit.parent).map((block) => block.id)
+        .filter((id) => !edit.ids.includes(id));
+      const at = edit.at === undefined || edit.at < 0 || edit.at > held.length ? held.length : edit.at;
+      held.splice(at, 0, ...edit.ids);
+      held.forEach((id, n) => { graph.blocks[id]!.order = n + 1; });
       return null;
     }
     case "order": {

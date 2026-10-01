@@ -10,30 +10,19 @@
  *  and image its own — and read in order. A block's tags are derived from its groups. */
 
 import { marked, type Token, type Tokens } from "marked";
-import { UNITS, base_graph, children, set_card, set_full, size_of, type Block,
+import { UNITS, allows_of, base_graph, children, set_card, set_full, size_of, type Block,
          type Graph, type Id } from "@mnd/kit";
-import { CODE, FLOW, FRONT, GROUPS, HEADING, IMAGE, LIST, SECTION, TABLE, TEXT, group_of,
-         with_markdown }
+import { CODE, FLOW, FRONT, GROUPS, HEADING, IMAGE, LIST, SECTION, TABLE, TEXT, with_markdown }
   from "./packages/markdown.js";
+import { staircase } from "./backbone.js";
 import { form_of } from "./forms.js";
 import { plain } from "./names.js";
 
 /** One entry on the workspace's shelf of definitions: one filed, or a group. */
 type Shelved = NonNullable<Block["shelf"]>[number];
 
-/** What names a group kind's definition, and its group on the shelf. */
+/** What names a group kind's definition. */
 const KIND = "kind.";
-const SHELF = "shelf:";
-
-/** The group kind a block sitting in a section is tagged with. */
-const SECTIONED = `${KIND}section`;
-
-/** The workspace's group kinds, each a definition its blocks are tagged with: the document group
- *  a block sits in, and the content group its definition is filed in. */
-const KINDS: [string, [string, string][]][] = [
-  ["document", [["section", "A block sits in a section: under a heading."]]],
-  ["content", GROUPS.map(([name]) => [name, `A block of the package's ${name} group.`])],
-];
 
 /** How many lines make a fence or list long, so it spans two columns. */
 const LONG = 12;
@@ -52,13 +41,17 @@ const LINES = 6;
 export function read(name: string, text: string): Graph {
   const graph = with_markdown(base_graph());
   const root = graph.root;
-  graph.blocks[root] = { ...graph.blocks[root]!, name, source: name, shelf: shelved() };
-  for (const [, kinds] of KINDS) {
-    for (const [kind, about] of kinds) {
-      const id = `${KIND}${kind}`;
-      graph.defs[id] = { id, group: "block", extends: "group", name: kind, about };
-    }
+  // The workspace's kinds: a group definition per content group of the package, taking the
+  // definitions filed in it as members. A block is tagged with the kind that takes its own.
+  const shelf: Shelved[] = [];
+  for (const [kind, members] of GROUPS) {
+    const id = `${KIND}${kind}`;
+    graph.defs[id] = { id, group: "block", extends: "group", name: kind,
+                       about: `What the package files as ${kind}.`,
+                       components: { allows: { members } } };
+    shelf.push({ id, group: "block" });
   }
+  graph.blocks[root] = { ...graph.blocks[root]!, name, source: name, shelf };
 
   /** The sections still open, outermost first. A heading holds what follows it until one of the
    *  same level or higher closes it. */
@@ -126,7 +119,7 @@ export function read(name: string, text: string): Graph {
       case "list": {
         // Its items are content, not parts: they live in its body, as written.
         const list = token as Tokens.List;
-        put({ type: LIST, name: `${list.items.length} items`, body: raw }, "list");
+        put({ type: LIST, name: `list (${list.items.length} items)`, body: raw }, "list");
         return;
       }
       case "table": {
@@ -137,7 +130,7 @@ export function read(name: string, text: string): Graph {
         const headers = table.header.map((cell, n) => plain(cell.text) || `col ${n + 1}`);
         const forms = headers.map((_, n) => form_of(table.rows.map((row) => row[n]?.text ?? "")));
         put({
-          type: TABLE, body: raw, name: `${table.rows.length}x${headers.length} items`,
+          type: TABLE, body: raw, name: `table (${table.rows.length}x${headers.length} items)`,
           fields: headers.map((name, n) => ({
             name, form: forms[n] ?? "text", ...(n === 0 ? { key: true } : {}),
           })),
@@ -155,32 +148,27 @@ export function read(name: string, text: string): Graph {
   }
 }
 
-/** The graph with every block's tags derived from its groups: the section it sits in, and the
- *  content group its definition is filed in. Membership is the truth; tags only follow it. */
+/** The graph with every block tagged with the workspace's kinds that take its definition as a
+ *  member. Membership is the truth; tags only follow it. */
 export function tagged(graph: Graph): Graph {
+  const kinds = Object.values(graph.defs).filter((def) => !def.from)
+    .map((def) => ({ id: def.id, members: allows_of(graph, def.id).members }));
   const blocks: Record<Id, Block> = {};
   for (const block of Object.values(graph.blocks)) {
     const { tags: _was, ...rest } = block;
-    const content = group_of(block.type);
-    const tags = [
-      ...(graph.blocks[block.group ?? ""]?.type === SECTION ? [SECTIONED] : []),
-      ...(content ? [`${KIND}${content}`] : []),
-    ];
+    const tags = kinds.filter((kind) => Array.isArray(kind.members)
+      && kind.members.includes(block.type ?? "")).map((kind) => kind.id);
     blocks[block.id] = tags.length ? { ...rest, tags } : rest;
   }
   return { ...graph, blocks };
 }
 
 /** The document laid out as it reads: a backbone of headings down the page, each section's content
- *  beside its heading.
+ *  beside its heading, its own sections boxed under it (see `staircase`).
  *
- *  Each section is a box holding its heading, its content in rows `across` cards wide beside the
- *  heading, and under them its own sections, a column right — so the headings step down the page
- *  as a staircase. A flow line runs to each heading from its parent's or the sibling's before it,
- *  and from the heading through its content in order. A small block is one card; a table spans a
- *  column for every two of its own, a long fence or list two. A block is cut at `TALL` cards
- *  high, unless `full` shows all of it. Drawn, never stored: the held graph keeps no sizes, places
- *  or lines. */
+ *  A small block is one card; a table spans a column for every two of its own, a long fence or
+ *  list two. A block is cut at `TALL` cards high, unless `full` shows all of it. Drawn, never
+ *  stored: the held graph keeps no sizes, places or lines. */
 export function laid(graph: Graph, card: { w: number; h: number }, full: boolean,
                      across: number): Graph {
   set_card(card.w, card.h);
@@ -188,10 +176,7 @@ export function laid(graph: Graph, card: { w: number; h: number }, full: boolean
   const gap = UNITS.gap * air;
   const one = { w: UNITS.block.w * air, h: UNITS.block.h * air };
   const wide = (span: number) => span * one.w + (span - 1) * gap;
-  /** The column content starts in, right of a heading; and how far a section's own sections step. */
-  const lane = one.w + air * 2;
   const blocks = { ...graph.blocks };
-  const edges = { ...graph.edges };
   const kin = children(graph, graph.root);
 
   /** How tall a block would be, shown whole. */
@@ -201,12 +186,6 @@ export function laid(graph: Graph, card: { w: number; h: number }, full: boolean
     set_full(full);
     return h;
   };
-  /** A directed flow line, from one block to the next it reads to. */
-  const flow = (from: Id, to: Id) => {
-    const id = `${FLOW}:${to}`;
-    edges[id] = { id, from, to, type: FLOW, dir: "forward" };
-  };
-
   // Each content block spans its columns and is cut at its height.
   for (const block of kin) {
     const span = spanned(block, across);
@@ -220,78 +199,10 @@ export function laid(graph: Graph, card: { w: number; h: number }, full: boolean
       blocks[block.id] = { ...block, w: wide(span), h, looks: { card: { height: "free" } } };
     }
   }
-  const sized: Graph = { ...graph, blocks };
-  const size = (id: Id) => size_of(sized, id);
-  const put = (id: Id, x: number, y: number) => { blocks[id] = { ...blocks[id]!, x, y }; };
-
-  /** Blocks in a row from `x`, wrapping `across` cards wide back to it, flowed in order from
-   *  `from`; how far down they reach. */
-  const row = (held: Block[], x: number, y: number, from: Id | null): number => {
-    let at = x;
-    let top = y;
-    let tall = 0;
-    for (const block of held) {
-      const { w, h } = size(block.id);
-      if (at > x && at + w > x + wide(across)) { top += tall + air; at = x; tall = 0; }
-      put(block.id, at, top);
-      if (from) flow(from, block.id);
-      from = block.id;
-      at += w + gap;
-      tall = Math.max(tall, h);
-    }
-    return held.length ? top + tall : y;
-  };
-
-  /** A section placed by hand from its own corner: its heading, its content beside it, and its
-   *  own sections under them a column right. How tall it is, inside its box. */
-  const section = (id: Id): number => {
-    const held = kin.filter((block) => block.group === id);
-    const heading = held.find((block) => block.type === HEADING);
-    const content = held.filter((block) => block !== heading && block.type !== SECTION);
-    if (heading) put(heading.id, 0, 0);
-    const reach = row(content, heading ? lane : 0, 0, heading?.id ?? null);
-    let y = Math.max(heading ? size(heading.id).h : 0, reach) + air * 2;
-    for (const sub of held.filter((block) => block.type === SECTION)) {
-      const h = section(sub.id);
-      put(sub.id, lane, y);
-      y += h + gap * 2 + air * 2;
-    }
-    blocks[id] = { ...blocks[id]!, arrangement: "free" };
-    return y - air * 2;
-  };
-
-  // The page: the front matter, what sits in no section, then each section, down the page.
-  const sizes = new Map<Id, number>();
-  for (const block of kin.filter((each) => each.type === SECTION && !each.group)) {
-    sizes.set(block.id, section(block.id) + gap * 2);
-  }
-  const front = kin.find((block) => block.type === FRONT && !block.group);
-  let y = 0;
-  if (front) { put(front.id, 0, 0); y = size(front.id).h + air * 2; }
-  const loose = kin.filter((block) => !block.group && block.type !== SECTION && block !== front);
-  if (loose.length) y = row(loose, front ? lane : 0, y, front?.id ?? null) + air * 2;
-  for (const block of kin.filter((each) => sizes.has(each.id))) {
-    put(block.id, 0, y);
-    y += sizes.get(block.id)! + air * 2;
-  }
-
-  // The backbone: each heading flowed to from its parent's, or the sibling's before it.
-  const spine: { id: Id; depth: number }[] = front ? [{ id: front.id, depth: 0 }] : [];
-  for (const block of kin.filter((each) => each.type === HEADING)) {
-    const deep = depth(graph, block.id) - 1;
-    const from = spine.findLast((each) => each.depth <= deep);
-    if (from) flow(from.id, block.id);
-    spine.push({ id: block.id, depth: deep });
-  }
-  return { ...sized, edges };
+  return staircase({ ...graph, blocks }, across, FLOW,
+                   (_, n) => `section (${n} ${n === 1 ? "block" : "blocks"})`);
 }
 
-
-/** How many sections a block sits in. */
-function depth(graph: Graph, id: Id): number {
-  const group = graph.blocks[id]?.group;
-  return group ? 1 + depth(graph, group) : 0;
-}
 
 /** How many columns a block spans: a table one for every two of its own, a long fence or list
  *  two, anything else one — never more than a row holds. */
@@ -308,15 +219,6 @@ function cut(values: string[][], most: number): string[][] {
   const kept = values.slice(0, most - 1);
   const more = `… ${values.length - kept.length} more`;
   return [...kept, values[0]!.map((_, n) => (n ? "" : more))];
-}
-
-/** The workspace's shelf: each group kind filed in its group — document, content. */
-function shelved(): Shelved[] {
-  return KINDS.flatMap(([group, kinds]): Shelved[] => [
-    { id: `${SHELF}${group}`, group: "block", name: group },
-    ...kinds.map(([kind]): Shelved => ({ id: `${KIND}${kind}`, group: "block",
-                                         in: `${SHELF}${group}` })),
-  ]);
 }
 
 /** The front matter, and the document without it. */

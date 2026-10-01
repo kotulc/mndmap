@@ -52,8 +52,8 @@ export const DEFS: Definition[] = [
   {
     id: SECTION, from: MD, group: "block", extends: "group", name: "section",
     about: "A heading and what it heads, until a heading as high: a group of its heading, its "
-      + "content and its own sections. Named by the heading as written.",
-    components: { ...ICON("content_heading"), ...TINT(235, 0.9) },
+      + "content and its own sections, headed by its heading. Named by the heading as written.",
+    components: { ...ICON("content_heading"), ...TINT(235, 0.9), allows: { heads: [HEADING] } },
   },
   {
     id: HEADING, from: MD, group: "block", extends: "block", name: "heading",
@@ -118,11 +118,6 @@ export const PACKAGE: Package = {
     ...ids.map((id) => ({ id, group: "block" as const, in: `${SHELF}${name}` })),
   ]),
 };
-
-/** The content group a definition is filed in, by name. */
-export function group_of(def: Id | undefined): string | null {
-  return GROUPS.find(([, ids]) => ids.includes(def ?? ""))?.[0] ?? null;
-}
 
 /** A graph with the markdown package registered in it. */
 export function with_markdown<T extends {

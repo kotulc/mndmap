@@ -1,42 +1,38 @@
 /** The library projected: the explorer's packages and definitions, drawn as diagrams.
  *
- *  Each library row is one layer. `packages` draws a box per package of the definitions it holds;
- *  a package, or `definitions`, draws a box per group its shelf files them in, then its unfiled
- *  blocks and relations, each definition a card, `across` cards to a row. One definition opened
- *  is its own layer: what it extends over it and a box of its usages under it. Drawn, never
- *  stored: the shelves are the one source, as the explorer lists them.
+ *  Each library section is one drawing, as the page is for usages, and its rows only move the pick
+ *  on it. `packages` draws a box per package holding a box per group it files, each definition a
+ *  card, `across` cards to a row. `definitions` projects the document's usages by kind, as the page
+ *  does by section: a box per kind headed by its card, inside it a box per definition it takes,
+ *  headed by that definition's card, its usages flowing beside it in reading order. Drawn, never
+ *  stored: the shelves and the kinds are the one source, as the explorer lists them.
  *
  *  The document's own projection, the page, is `read.ts`'s. */
 
 import type { Pointed } from "@mnd/kit/react";
-import { BASE_PACKAGE, UNITS, box_of, packages, project, set_card, set_full, shelf_of,
+import { BASE_PACKAGE, UNITS, allows_of, box_of, packages, project, set_card, set_full, shelf_of,
          type Block, type Graph, type Id } from "@mnd/kit";
+import { staircase } from "./backbone.js";
+import { FLOW } from "./packages/markdown.js";
 
-/** A library section, as the explorer points at one: `packages`, a package, or `definitions`. */
+/** A library section, as the explorer points at one: `packages`, a package, or `definitions`. A
+ *  chart is only ever of a section; a package is a box on `packages`. */
 export type Shelf = Extract<Pointed, { of: "defs" }>;
 
-/** A projection of the library: the section it is of, or with `local` named, that one definition
- *  with what it extends and where it is used. */
-export type Chart = { at: Shelf; local?: Id };
+/** A projection of the library: the section it is of. */
+export type Chart = { at: Shelf };
 
 /** What names a definition's card, a usage's, and a box of them. */
 export const DEFINED = "defined:";
 const USED = "used:";
 const GROUP = "group:";
 
-/** What a drawing's boxes are: a group of its own, so none is counted as a usage of the kit's. */
+/** What a drawing's boxes are: a group of its own, so none is counted as a usage of the kit's,
+ *  headed by whatever comes first in it. */
 const BOX = "chart.box";
-
-/** The relations a projection draws that no package defines: a definition built on another, and
- *  its usages pointing to it. */
-const EXTENDS = "extends";
-const USES = "uses";
-
-/** The definitions a projection draws with, beside the graph's own. */
 const DRAWN = {
-  [BOX]: { id: BOX, group: "block" as const, extends: "group", name: "box" },
-  [EXTENDS]: { id: EXTENDS, group: "relation" as const, extends: "line", name: "extends" },
-  [USES]: { id: USES, group: "relation" as const, extends: "line", name: "uses" },
+  [BOX]: { id: BOX, group: "block" as const, extends: "group", name: "box",
+           components: { allows: { heads: true } } },
 };
 
 /** Where a projection keeps the document's own blocks, out of its drawing. */
@@ -47,18 +43,40 @@ const PACKAGES: Shelf = { of: "defs", only: "packages" };
 const DEFINITIONS: Shelf = { of: "defs", only: "all" };
 
 
-/** A projection drawn: a library section, or one definition opened, `across` cards wide. */
+/** A projection drawn: a library section, `across` cards wide. */
 export function charted(graph: Graph, chart: Chart, card: { w: number; h: number },
                         full: boolean, across: number): Graph {
   set_card(card.w, card.h);
   set_full(full);
-  return chart.local ? local(graph, chart.local, across) : boxed(graph, chart.at, across);
+  return chart.at.only === "packages" ? boxed(graph, across) : projected(graph, across);
 }
 
-/** The section a definition is drawn on: its package, or the workspace's definitions. */
-export function home_of(graph: Graph, def: Id): Shelf {
-  const pack = graph.defs[def]?.from;
-  return pack ? { ...PACKAGES, from: graph.packages[pack]?.name ?? pack } : DEFINITIONS;
+/** The section a definition's row is drawn on: the one it is listed in, else `packages` for a
+ *  package's and `definitions` for the workspace's. */
+export function home_of(graph: Graph, def: Id, only?: Shelf["only"]): Shelf {
+  if (only) return only === "packages" ? PACKAGES : DEFINITIONS;
+  return graph.defs[def]?.from ? PACKAGES : DEFINITIONS;
+}
+
+/** Whether `definitions` draws a definition: a kind, or one a kind takes. */
+export function projects(graph: Graph, def: Id): boolean {
+  return kinds(graph).some((kind) => kind.id === def || kind.members.includes(def));
+}
+
+/** The section a library row is drawn on: a package's is `packages`. */
+export function chart_of(at: Shelf): Shelf {
+  return at.only === "packages" ? PACKAGES : DEFINITIONS;
+}
+
+/** The `definitions` section. */
+export function definitions(): Shelf {
+  return DEFINITIONS;
+}
+
+/** A package's box on `packages`, as the explorer points at the package. */
+export function pack_box(graph: Graph, at: Shelf): Id | null {
+  const pack = at.from ? packages(graph).find((each) => each.name === at.from) : undefined;
+  return pack ? `${GROUP}${pack.from}` : null;
 }
 
 /** The package a box on `packages` stands for, as the explorer points at it. */
@@ -67,14 +85,9 @@ export function boxed_pack(graph: Graph, id: Id): Shelf | null {
   return pack ? { ...PACKAGES, from: pack.name } : null;
 }
 
-/** The section one up from this one: a package's is `packages`; the top has none. */
-export function up_of(at: Shelf): Shelf | null {
-  return at.only === "packages" && at.from ? PACKAGES : null;
-}
-
 /** What a section is called in the crumbs. */
 export function label_of(at: Shelf): string {
-  return at.from ?? (at.only === "packages" ? "packages" : "definitions");
+  return at.only === "packages" ? "packages" : "definitions";
 }
 
 /** How wide a projection `across` cards wide reads: a box's widest row. */
@@ -83,14 +96,12 @@ export function chart_width(across: number): number {
 }
 
 
-/** A section drawn as its boxes, down the page: on `packages` a box per package holding a box per
- *  group it files, else a box per group its shelf files, then its unfiled blocks and relations.
- *  Each box is named with how many it holds, and each definition is a card in it. */
-function boxed(graph: Graph, at: Shelf, across: number): Graph {
+/** `packages` drawn as its boxes, down the page: a box per package holding a box per group it
+ *  files, then its unfiled blocks and relations. Each box is named with how many it holds, and
+ *  each definition is a card in it. */
+function boxed(graph: Graph, across: number): Graph {
   const blocks = aside(graph);
-  const all = at.only === "packages" && !at.from;
-  const pack = at.from ? packages(graph).find((each) => each.name === at.from)?.from : undefined;
-  const tops = all ? packages(graph).map((each) => `${GROUP}${each.from}`) : [];
+  const tops = packages(graph).map((each) => `${GROUP}${each.from}`);
   let order = 0;
 
   /** A box of definitions, or of boxes, named with how many definitions it holds. */
@@ -98,24 +109,19 @@ function boxed(graph: Graph, at: Shelf, across: number): Graph {
     blocks[id] = { id, parent: graph.root, type: BOX, order: ++order, name: counted(name, held), w,
                    ...(group ? { group } : {}) };
   };
-  const shelf = (from: Id | undefined, group?: Id) => {
-    for (const each of shelved(graph, from)) {
+  for (const pack of packages(graph)) {
+    const id = `${GROUP}${pack.from}`;
+    box(id, pack.name, pack.defs.length, row_width(across, across));
+    for (const each of shelved(graph, pack.from)) {
       box(each.id, each.name, each.defs.length, row_width(Math.max(1, each.defs.length), across),
-          group);
-      if (!group) tops.push(each.id);
+          id);
       for (const def of each.defs) {
-        const id = `${DEFINED}${def}`;
-        blocks[id] = { id, parent: graph.root, order: ++order, group: each.id, ...def_card(graph, def) };
+        const card = `${DEFINED}${def}`;
+        blocks[card] = { id: card, parent: graph.root, order: ++order, group: each.id,
+                         ...def_card(graph, def) };
       }
     }
-  };
-  if (all) {
-    for (const each of packages(graph)) {
-      const id = `${GROUP}${each.from}`;
-      box(id, each.name, each.defs.length, row_width(across, across));
-      shelf(each.from, id);
-    }
-  } else shelf(pack);
+  }
 
   // Measured as the kit lays them, then stacked down the page a card's height apart.
   const drawn: Graph = { ...graph, blocks, defs: { ...graph.defs, ...DRAWN } };
@@ -126,6 +132,42 @@ function boxed(graph: Graph, at: Shelf, across: number): Graph {
     y += (sizes.get(id)?.h ?? 0) + UNITS.block.h * UNITS.unit;
   }
   return drawn;
+}
+
+/** `definitions` drawn as the document's usages by kind, as the page draws them by section: a box
+ *  per kind headed by its card, inside it a box per definition it takes, headed by that one's card,
+ *  its usages beside it in reading order. */
+function projected(graph: Graph, across: number): Graph {
+  const blocks = aside(graph);
+  const counts = new Map<Id, number>();
+  let order = 0;
+  const add = (block: Omit<Block, "parent" | "order">) => {
+    blocks[block.id] = { ...block, parent: graph.root, order: ++order } as Block;
+  };
+  for (const kind of kinds(graph)) {
+    const box = `${GROUP}${kind.id}`;
+    add({ id: box, type: BOX });
+    add({ id: `${DEFINED}${kind.id}`, group: box, ...def_card(graph, kind.id) });
+    counts.set(box, kind.members.length);
+    for (const def of kind.members) {
+      const sub = `${GROUP}${kind.id}:${def}`;
+      add({ id: sub, type: BOX, group: box });
+      add({ id: `${DEFINED}${def}`, group: sub, ...def_card(graph, def) });
+      for (const block of uses(graph, def).filter((each) => each.type === def)) {
+        add({ id: `${USED}${block.id}`, of: block.id, group: sub });
+      }
+    }
+  }
+  const drawn: Graph = { ...graph, blocks, defs: { ...graph.defs, ...DRAWN } };
+  return staircase(drawn, across, FLOW, (group, n) => counts.has(group.id)
+    ? `kind (${counts.get(group.id)} definitions)` : `definition (${n} usages)`);
+}
+
+/** The workspace's kinds, as it files them: each with the definitions it takes as members. */
+function kinds(graph: Graph): { id: Id; members: Id[] }[] {
+  return shelf_of(graph).filter((entry) => entry.name === undefined && graph.defs[entry.id])
+    .map((entry) => ({ id: entry.id, members: allows_of(graph, entry.id).members }))
+    .filter((kind): kind is { id: Id; members: Id[] } => Array.isArray(kind.members));
 }
 
 /** A shelf's definitions in its groups, in order: each group it files, then its unfiled blocks and
@@ -183,50 +225,4 @@ function aside(graph: Graph): Record<Id, Block> {
   }
   blocks[graph.root] = graph.blocks[graph.root]!;
   return blocks;
-}
-
-/** One definition opened: its card in the middle, over it what it extends, each link of the
- *  chain over the one it is built on, and under it a box of its usages, `across` to a row,
- *  pointing up to it. */
-function local(graph: Graph, def: Id, across: number): Graph {
-  const blocks = aside(graph);
-  const edges: Graph["edges"] = {};
-  const root = graph.root;
-  const air = UNITS.unit;
-  const card = { w: UNITS.block.w * air, h: UNITS.block.h * air };
-  const rise = card.h + air * 3;
-  const used = uses(graph, def);
-  const wide = row_width(Math.max(1, Math.min(used.length, across)), across);
-  const x = (wide - card.w) / 2;
-  let order = 0;
-
-  // The chain: the definition first, and each it extends over it, centred over its usages.
-  const chain: Id[] = [];
-  for (let at: Id | undefined = def; at && graph.defs[at] && !chain.includes(at);
-       at = graph.defs[at]!.extends) chain.push(at);
-  const top = (chain.length - 1) * rise;
-  chain.forEach((link, n) => {
-    const id = `${DEFINED}${link}`;
-    blocks[id] = { id, parent: root, of: link, order: ++order, x, y: top - n * rise, ...card };
-    if (!n) return;
-    const from = `${DEFINED}${chain[n - 1]}`;
-    edges[`${EXTENDS}:${from}`] = { id: `${EXTENDS}:${from}`, from, to: id, type: EXTENDS,
-                                    dir: "forward" };
-  });
-
-  // Its usages under it, in one box pointing up to it: set a gap left, as the kit pads a box.
-  const centre = `${DEFINED}${def}`;
-  blocks[centre] = { ...blocks[centre]!, ...def_card(graph, def) };
-  const drawn: Graph = { ...graph, blocks, edges, defs: { ...graph.defs, ...DRAWN } };
-  if (!used.length) return drawn;
-  const group = `${GROUP}${def}`;
-  blocks[group] = { id: group, parent: root, type: BOX, name: counted("usages", used.length),
-                    order: ++order, w: wide, x: -UNITS.gap * air, y: top + rise };
-  for (const block of used) {
-    const id = `${USED}${block.id}`;
-    blocks[id] = { id, parent: root, of: block.id, order: ++order, group };
-  }
-  edges[`${USES}:${group}`] = { id: `${USES}:${group}`, from: group, to: centre, type: USES,
-                                dir: "forward" };
-  return drawn;
 }

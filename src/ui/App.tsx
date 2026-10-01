@@ -9,12 +9,12 @@
 
 import { Explorer, Icon, TrayFrame, Viewer, WorkspaceHeader, tree_of, useDisplay,
          useTray, type Pointed } from "@mnd/kit/react";
-import { CARD, UNITS, children, is_container, open, write, type Graph, type Id }
+import { CARD, UNITS, children, headed_group, is_container, open, write, type Graph, type Id }
   from "@mnd/kit";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apply, Stack, type Edit } from "../edits.js";
-import { boxed_pack, charted, chart_width, DEFINED, home_of, label_of, up_of,
-         type Chart } from "../library.js";
+import { boxed_pack, charted, chart_width, chart_of, DEFINED, definitions, home_of, label_of,
+         pack_box, projects, type Chart } from "../library.js";
 import { laid, read, tagged } from "../read.js";
 import { dev_sample, drop_folder, pick_file, pick_folder, save, scan, type SourceFile } from "../scan.js";
 import { MD } from "../packages/markdown.js";
@@ -210,13 +210,18 @@ export function App() {
   /** A pick anywhere but the tray gives the tray back to the canvas. */
   const pick = (ids: Id[]) => { setPicked(ids); tray.release(); };
 
-  /** Project a library row in the page's place: a section of it whole, or a definition's card
-   *  picked on the section it is drawn on. */
+  /** A library row, picked on its section's one drawing as a usage is on the page: a package's
+   *  box, or a definition's card on the section it is listed in. */
   const chart = (at: Pointed) => {
     if (!graph) return;
     setLayer(null);
-    if (at.of === "defs") { setCharting({ at }); pick([]); return; }
-    setCharting({ at: home_of(graph, at.id) });
+    if (at.of === "defs") {
+      const box = pack_box(graph, at);
+      setCharting({ at: chart_of(at) });
+      pick(box ? [box] : []);
+      return;
+    }
+    setCharting({ at: home_of(graph, at.id, at.only) });
     pick([`${DEFINED}${at.id}`]);
   };
 
@@ -227,16 +232,15 @@ export function App() {
     pick(ids);
   };
 
-  /** Open a card, what is picked by default: on a chart, a package's box as its own chart, a
-   *  definition opened, and a usage on the page; on the page, a card that holds anything — a
+  /** Open a card, what is picked by default: on `packages`, a definition to its box on
+   *  `definitions`; on a chart, a usage to the page; on the page, a card that holds anything — a
    *  folder — as the layer, its first block picked. */
   const enter = (id = picked.length === 1 ? picked[0] : undefined) => {
     const held = id && (view?.blocks[id]?.of ?? id);
     if (!view || !graph || !id || !held) return;
-    const pack = charting ? boxed_pack(graph, id) : null;
-    if (pack) { setCharting({ at: pack }); pick([]); return; }
     if (charting && graph.defs[held]) {
-      setCharting({ ...charting, local: held });
+      if (charting.at.only !== "packages" || !projects(graph, held)) return;
+      setCharting({ at: definitions() });
       pick([`${DEFINED}${held}`]);
       return;
     }
@@ -251,21 +255,9 @@ export function App() {
     pick(first ? [first] : []);
   };
 
-  /** Leave the open layer, its card picked; on a chart, leave a definition opened for its card, a
-   *  package for `packages`, and a section for the page. */
+  /** Leave the open layer, its card picked; on a chart, leave for the page. */
   const leave = () => {
-    const local = charting?.local;
-    if (charting && local) {
-      setCharting({ at: charting.at });
-      pick([`${DEFINED}${local}`]);
-      return;
-    }
-    if (charting) {
-      const up = up_of(charting.at);
-      setCharting(up ? { at: up } : null);
-      pick([]);
-      return;
-    }
+    if (charting) { setCharting(null); pick([]); return; }
     if (!view || !layer) return;
     const up = view.blocks[layer]?.parent ?? view.root;
     setLayer(up === view.root ? null : up);
@@ -328,15 +320,16 @@ export function App() {
     if (name === "move" && args?.parent && Array.isArray(args.ids)) {
       const parent = String(args.parent) as Id;
       if (!graph.blocks[parent]) return;
-      const before = typeof args.before === "string" ? args.before : null;
-      const kin = children(graph, parent).map((block) => block.id);
-      for (const moveId of args.ids as Id[]) {
-        const siblings = kin.filter((each) => each !== moveId && !(args.ids as Id[]).includes(each));
-        const at = before ? siblings.indexOf(before) : -1;
-        // It joins the group of the block it lands before, or of the last where it lands last.
-        const group = graph.blocks[before ?? siblings.at(-1) ?? ""]?.group ?? null;
-        edit({ do: "move", id: moveId, parent, group, ...(at >= 0 ? { at } : {}) });
-      }
+      const ids = args.ids as Id[];
+      // Landing before a head is landing before the group it heads.
+      const said = typeof args.before === "string" ? args.before : null;
+      const before = said && (headed_group(graph, said) ?? said);
+      const kin = children(graph, parent).map((block) => block.id).filter((id) => !ids.includes(id));
+      const at = before && kin.includes(before) ? kin.indexOf(before) : kin.length;
+      // They join the group of the row they land under — the group it heads, where it heads one.
+      const above = kin[at - 1];
+      const group = above ? headed_group(graph, above) ?? graph.blocks[above]?.group ?? null : null;
+      edit({ do: "move", ids, parent, group, at });
     }
   }, [edit, graph, page, layer]);
 
@@ -367,13 +360,19 @@ export function App() {
   }
 
   const blocks = Math.max(0, Object.keys(graph.blocks).length - 1);
+  /** The explorer row lit for the pick: on a chart, a picked definition's row in the section drawn,
+   *  a package's for its box, else the section; on the page, whatever the tray holds. */
+  const def = charting && graph.defs[real[0] ?? ""] ? real[0]! : null;
+  const lit_row: Pointed | null = !charting ? tray.section(graph.root)
+    : def ? { of: "def", id: def, only: charting.at.only }
+    : boxed_pack(graph, picked[0] ?? "") ?? charting.at;
   /** What the tray is about: the pick, or else the open layer. */
   const about = graph.blocks[real[0] ?? ""] ?? graph.blocks[layer ?? graph.root];
   const kind = about?.type ? graph.defs[about.type]?.name ?? about.type : "block";
   /** The crumbs: one per layer, from the section drawn — a library section and a definition
    *  opened on it, or the page and a folder opened on it. Picking one goes there; going up one is
    *  leaving. */
-  const opened = charting ? graph.defs[charting.local ?? ""]?.name : graph.blocks[layer ?? ""]?.name;
+  const opened = charting ? null : graph.blocks[layer ?? ""]?.name;
   const trail = [
     { id: TOP, label: charting ? label_of(charting.at) : "usages" },
     ...(opened ? [{ id: OPENED, label: opened }] : []),
@@ -418,8 +417,7 @@ export function App() {
             title="open a markdown document — shift+click for a folder"
             onClick={(event) => void add(event.shiftKey)}><Icon name="add" /></button>
         }
-        section={tray.section(graph.root) ?? (charting && !charting.local
-          && !real.some((id) => graph.defs[id]) ? charting.at : null)}
+        section={lit_row}
         onSection={(at) => { tray.onSection(at); chart(at); }}
         onAct={act}
         onFold={(id, shut) => setFolded((held) =>
@@ -430,11 +428,11 @@ export function App() {
         <div className="mm-canvas" ref={setCanvas}>
           {/* One per drawing — the page, a chart, a definition opened — so each is framed afresh.
               Each reads as many cards across as the canvas holds, at their own size at most. */}
-          <Viewer key={charting ? charting.local ?? JSON.stringify(charting.at) : "page"}
+          <Viewer key={charting ? JSON.stringify(charting.at) : "page"}
             graph={view ?? graph}
             layer={layer} picked={cards} lit={pointed ? [pointed] : []}
             card={display.card} full={full} scroll
-            focus={charting?.local ? null : cards[0] ?? null}
+            focus={cards[0] ?? null}
             reach={charting ? chart_width(across) : null} most={ACTUAL}
             chrome={{ crumbs: true, lattice: display.lattice ?? true, legend: display.legend,
                       corner: display.corner, frame: false }}

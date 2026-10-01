@@ -65,12 +65,23 @@ default cards, so rows stay on the lattice.
 | **prose merges** | consecutive paragraphs and quotes are one `text` block; a table, list, fence or image is its own |
 | **groups aren't rows** | the explorer lists a layer's blocks in reading order through its groups — headings among them; group holders are not listed, in any section |
 | **flow lines** | directed `md.flow`: to each heading from its parent's or the sibling's before it, and from a heading through its content. Drawn, never stored. *Replaces "no flow or member lines"* |
-| **the backbone** | headings down the page, each section's content in rows beside its heading, its own sections boxed inside it a column right — the staircase. Placed by hand: a section group is drawn `arrangement: free`, which the kit reads as *members keep their places* |
-| **membership is truth** | `group` is stored; `Block.tags` are derived from it on read — a block's sections and its content group |
-| **definitions are kinds** | the definitions section holds group kinds (`section`, and the content groups), not one per heading |
+| **the backbone** | headings down the page, each section's content in rows beside its heading, its own sections boxed inside it, stepped `INDENT` (2 units) right — the staircase. A box is labelled `section (N blocks)`, counting the content beside its heading. Placed by hand: a section group is drawn `arrangement: free`, which the kit reads as *members keep their places* |
+| **membership is truth** | `group` is stored; `Block.tags` are derived — a block is tagged with each kind that takes its definition as a member |
+| **kinds take members** | a kind is a workspace group definition whose `allows.members` names the package definitions it takes: `structure` takes section, heading and frontmatter. No `section` kind: `structure` covers sections |
+| **definitions are kinds** | the definitions section holds the content kinds, not one per heading. The explorer lists a group definition's members under it (kit, any group): `definitions > prose > text, list, code`. Usages are drawn, never rows |
 | **one set of content groups** | the package's groups (`structure`, `prose`, `data`, `media`) are the content groups |
 | **relations group on their own** | a package's relation definitions sit in a group of their own on its layer: `flow` in markdown's, `line` and `tie` in base's |
 | **packages nest** | the `packages` chart boxes each package, and inside it a box per group it files |
+| **groups may have a head** | a holder's `allows.heads` names what may head it; its head is its first member when that member is one. Derived, never stored. `md.section` is headed by `md.heading` (kit `group_head`, `headed_group`) |
+| **heads are handles** | the explorer steps a headed group's other members in under the head's row, folds them there, and drags the whole group with it. Groups are still not rows |
+| **a move lands by the row above** | moved blocks join the group of the row above where they land — the group it heads, where it heads one; landing before a head is landing before its group. What a move carries keeps its own grouping |
+| **arrows read in order** | ↑ and ← go to the row before, ↓ and → to the row after, through the whole tree; the way opens as they walk |
+| **every section folds** | a section of plain rows offers its fold toggle too, folding itself |
+| **kind names** | a list is named `list (N items)`, a table `table (RxC items)`, a section box `section (N blocks)` |
+| **one drawing per library section** | `packages` and `definitions` are each one drawing, as the page is for usages: a package row picks its box, a definition row its card, and the camera follows. No per-package charts |
+| **definitions projects usages** | `definitions` draws the usages by kind as the page draws them by section, with the same backbone (`backbone.ts` `staircase`): a box per kind headed by its card, a box per definition it takes headed by that one's card, its usages flowing beside it in reading order |
+| **packages jumps to definitions** | Enter or double-click on a definition in `packages` goes to its box on `definitions`. The definition-in-context view is gone |
+| **one row lit** | a definition listed twice lights only its row in the section drawn, and the arrows walk from there |
 | **span and cap sizing** | as above; no masonry, so reading order holds |
 
 
@@ -78,13 +89,11 @@ default cards, so rows stay on the lattice.
 
 | Item | Notes |
 |---|---|
-| **two `section` definitions** | `md.section` (vocabulary) and `kind.section` (group kind) share a name |
-| **`section` tag is noise** | every block under a heading carries it; per-section tags would make it filterable |
 | **collection groups** | not built: a single document's root stands in for it |
 | **picked blocks don't grow** | the `TALL` cut lifts only under `full content` |
-| **heading and box label repeat** | a section box's label and its heading card both say the heading |
 | **span-2 heights** | measured at one card wide, so wide prose and lists run tall |
-| **edits and groups** | a drag joins the group it lands beside; delete and rename of a section are unreachable (sections are not rows) and leave members ungrouped if reached |
+| **edits and groups** | a section can't follow its last subsection as a sibling by drag (it nests under the row above); deleting a head leaves its group headless |
 | **folder layers** | `laid` places the root layer only; an opened folder's blocks are unplaced |
 | **library folders in mndflow** | the explorer no longer lists shelf folders, so mndflow's app loses folder filing in its tree |
-| **README** | still describes terms, focus blocks and the flat page |
+| **wrapped rows flow back** | a row that wraps draws its flow line back across to the next row's start |
+| **README** | still describes terms, focus blocks, the flat page and the old arrow keys |
