@@ -1,23 +1,22 @@
-/** The shell over one held graph.
+/** The shell over one held collection.
  *
- *  One markdown document is read into a graph of content blocks — a section group per heading,
- *  and a block per run of prose, list, fence, table and image. A folder is filed by path instead,
- *  one block per file. The explorer, the canvas and the tray are the kit's, and so is what they
- *  share: the tray's state and how the drawing looks. What is mndmap's is reading, the document
- *  laid out as it reads, the library's projections, the markdown tab, and reorganizing — edits
- *  apply to the held graph, and undo is the stack of graphs behind it. */
+ *  A folder is read into a collection — a block per folder and file — and each markdown file is a
+ *  document, read into content blocks the first time it is opened: a section group per heading,
+ *  and a block per run of prose, list, fence, table and image. The explorer's two sections are a
+ *  chain: `collection` holds a folder or document, and `document` lists what it holds. The canvas
+ *  draws the section in focus — the collection as cards, a document as its page. The explorer,
+ *  canvas and tray are the kit's; reading, the page, the markdown tab and reorganizing are
+ *  mndmap's — edits apply to the held graph, and undo is the stack of graphs behind it. */
 
-import { Explorer, Icon, TrayFrame, Viewer, WorkspaceHeader, tree_of, useDisplay,
-         useTray, type Pointed } from "@mnd/kit/react";
-import { CARD, UNITS, children, headed_group, is_container, open, write, type Graph, type Id }
+import { Explorer, Icon, TrayFrame, Viewer, WorkspaceHeader, domain_listing, structure_listing,
+         useChain, useDisplay, useTray, type Slice } from "@mnd/kit/react";
+import { CARD, UNITS, children, headed_group, open, path, write, type Graph, type Id }
   from "@mnd/kit";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apply, Stack, type Edit } from "../edits.js";
-import { boxed_pack, charted, chart_width, chart_of, DEFINED, definitions, home_of, label_of,
-         pack_box, projects, type Chart } from "../library.js";
-import { laid, read, tagged } from "../read.js";
-import { dev_sample, drop_folder, pick_file, pick_folder, save, scan, type SourceFile } from "../scan.js";
-import { MD } from "../packages/markdown.js";
+import { laid, read, unread } from "../read.js";
+import { dev_sample, drop_folder, first_document, is_document, pick_file, pick_folder, save, scan,
+         PACKAGES, type SourceFile } from "../scan.js";
 import { covered, section_of } from "../series.js";
 import { Document, Preview } from "./Preview.js";
 
@@ -44,10 +43,6 @@ const ACTUAL = 1;
 
 const BLANK = "Drop a markdown document or a folder, or pick one below.";
 
-/** The crumbs' two steps: the layer drawn, and a definition or folder opened on it. */
-const TOP = "top";
-const OPENED = "opened";
-
 /** The tray's one tab. */
 const TABS = ["markdown"] as const;
 
@@ -56,11 +51,22 @@ const ENTER = "Enter";
 const CLEAR = "Escape";
 const LEAVE = "Backspace";
 
+/** The sections: the collection — the workspace's domain, its folders and documents — then the
+ *  document held, its own row with its content under it. */
+const AT_COLLECTION = 0;
+const AT_DOCUMENT = 1;
+const SLICES: Slice[] = [
+  { id: "collection", label: "collection", mark: "folder",
+    list: (graph) => domain_listing(graph, graph.root),
+    first: (graph) => first_document(graph) },
+  { id: "document", label: "document", mark: "usages",
+    list: (_, [held]) => structure_listing(held ?? null),
+    first: (_, [held]) => held ?? null },
+];
+
 
 export function App() {
   const [graph, setGraph] = useState<Graph | null>(null);
-  /** The open layer; `null` is the root, as the kit names it. */
-  const [layer, setLayer] = useState<Id | null>(null);
   const [picked, setPicked] = useState<Id[]>([]);
   const [folded, setFolded] = useState<Id[]>([]);
   const [note, setNote] = useState(BLANK);
@@ -72,27 +78,33 @@ export function App() {
   const [big, setBig] = useState(false);
   const { display } = useDisplay({ card: CONTENT_CARD, range: CARD, full: false });
   const full = display.full ?? false;
-  /** The definitions charted in the page's place, while a library section is picked. */
-  const [charting, setCharting] = useState<Chart | null>(null);
+  const chain = useChain(graph, SLICES);
   /** How wide the canvas is, and how many of a step it holds across at their own size. */
   const [canvas, setCanvas] = useState<HTMLDivElement | null>(null);
   const room = useWidth(canvas);
   /** How many cards a row sets across: a card and the air after it are its step. */
   const across = Math.min(ACROSS.most, Math.max(ACROSS.least,
     Math.floor(room / Math.max(1, (display.card.w + UNITS.gap) * UNITS.unit))));
-  /** The document laid out as it reads: its sections boxed, `across` cards to a row. */
-  const page = useMemo(() => graph && laid(graph, display.card, full, across),
-    [graph, display.card, full, across]);
-  const view = useMemo(() => graph && charting
-    ? charted(graph, charting, display.card, full, across) : page,
-    [graph, charting, page, display.card, full, across]);
-  /** What of the pick the canvas draws: the open layer's own block is the whole of it, no card. */
-  const cards = picked.filter((id) => id !== (layer ?? view?.root));
-  /** What the pick stands for: a chart's card picks what it stands for. */
-  const real = picked.map((id) => view?.blocks[id]?.of ?? id);
+  /** What the collection holds, and the layer the canvas draws: in the collection, the layer
+   *  that holds it, with it picked; in the document, it — a document as its page — or, where the
+   *  document section holds something deeper in a folder, the layer that sits on. */
+  const home = graph ? chain.held[AT_COLLECTION] ?? graph.root : null;
+  const held = chain.held[AT_DOCUMENT];
+  const deep = graph && chain.at === AT_DOCUMENT && held ? graph.blocks[held]?.parent : null;
+  const layer = !graph || !home ? null
+    : chain.at === AT_COLLECTION ? graph.blocks[home]?.parent ?? home
+    : is_document(graph, home) ? home : deep ?? home;
+  /** The document drawn as a page, where the layer is one. */
+  const doc = graph && layer && is_document(graph, layer) ? layer : null;
+  const page = useMemo(() => (graph && doc ? laid(graph, doc, display.card, full, across) : null),
+    [graph, doc, display.card, full, across]);
+  const view = page ?? graph;
+  /** What the canvas lights: the collection's pick on its layer, else the pick. */
+  const cards = chain.at === AT_COLLECTION && home && home !== layer ? [home]
+    : picked.filter((id) => id !== layer);
   /** What the tray lights: the section the pick sits in, whole. */
-  const lit = useMemo(() => (graph && !charting ? covered(graph, [section_of(graph, real[0])
-    ?? real[0] ?? ""]) : new Set<Id>()), [graph, charting, real[0]]);
+  const lit = useMemo(() => (graph && doc ? covered(graph, [section_of(graph, picked[0])
+    ?? picked[0] ?? ""]) : new Set<Id>()), [graph, doc, picked[0]]);
   const stack = useRef(new Stack());
   /** A block just made or moved, revealed once the page is laid out with it. */
   const follow = useRef<Id | null>(null);
@@ -105,17 +117,33 @@ export function App() {
     try { localStorage.setItem("mnd.theme", theme); } catch { /* a private window */ }
   }, [theme]);
 
-  const settle = (next: Graph, name: string, said: string) => {
+  /** A document opened for the first time is read, and its sections fold under their headings.
+   *  Reading is not an edit: it says what was always there. */
+  const opened = (held: Graph, id: Id): Graph => {
+    if (!is_document(held, id) || !unread(held, id)) return held;
+    const next = read(held, id);
+    const heads = children(next, id).filter((block) => headed_group(next, block.id))
+      .map((block) => `${SLICES[AT_DOCUMENT]!.id}/${block.id}`);
+    setFolded((was) => [...new Set([...was, ...heads])]);
+    return next;
+  };
+
+  /** Whatever the sections hold that is still unread is read as it is reached. */
+  useEffect(() => {
+    if (!graph) return;
+    const next = chain.held.reduce<Graph>((held, id) => (id ? opened(held, id) : held), graph);
+    if (next !== graph) setGraph(next);
+  }, [graph, chain.held.join("|")]);
+
+  const settle = (found: Graph, name: string, said: string) => {
     stack.current = new Stack();
-    setGraph(next);
-    setLayer(null);
+    const next = found;
+    const first = first_document(next);
+    setFolded([]);
+    setGraph(first ? opened(next, first) : next);
     setPicked([]);
-    setCharting(null);
     tray.release();
-    // Every branch inside a section shut but the document's root; the sections stay open, so a
-    // section of plain rows, which offers no fold of its own, still shows them.
-    setFolded(tree_of(next, [], true).filter((row) => row.kids && row.depth)
-      .map((row) => row.id).filter((id) => id !== next.root));
+    chain.onTrace(first ? [first, null] : [null]);
     setNote(`${name}: ${said}.`);
   };
 
@@ -127,7 +155,7 @@ export function App() {
       stack.current.push(held);
       follow.current = result.made ?? follow.current;
       setNote("");
-      return tagged(result.graph);
+      return result.graph;
     });
   }, []);
 
@@ -141,18 +169,13 @@ export function App() {
     });
   }, []);
 
-  /** One markdown file is read into content blocks — the case being designed
-   *  against. Anything else is filed by path, one block per file and folder. */
+  /** A folder, or one markdown document, read into a collection. */
   const open_source = (found: { name: string; files: SourceFile[] } | null) => {
     if (!found) return;
-    const [only] = found.files;
-    if (!only) { setNote("Nothing to read there."); return; }
-    if (found.files.length === 1 && /\.(md|mdx)$/i.test(only.path)) {
-      const graph = read(found.name, only.text);
-      settle(graph, found.name, `${Object.keys(graph.blocks).length - 1} blocks`);
-      return;
-    }
-    settle(scan(found.name, found.files), found.name, `${found.files.length} files`);
+    if (!found.files.length) { setNote("Nothing to read there."); return; }
+    const collection = scan(found.name, found.files);
+    const docs = Object.keys(collection.blocks).filter((id) => is_document(collection, id));
+    settle(collection, found.name, `${found.files.length} files, ${docs.length} documents`);
   };
 
   /** A notification, not a status line: it says its piece and goes. The blank
@@ -201,71 +224,67 @@ export function App() {
 
   const from_file = async (file: File) => {
     try {
-      const opened = open(await file.text());
-      if (opened.faults.length) { setNote(opened.faults.map((f) => f.what).join("\n")); return; }
-      settle(opened.graph, file.name, `${Object.keys(opened.graph.blocks).length - 1} blocks`);
+      const imported = open(await file.text(), PACKAGES);
+      if (imported.faults.length) { setNote(imported.faults.map((f) => f.what).join("\n")); return; }
+      settle(imported.graph, file.name, `${Object.keys(imported.graph.blocks).length - 1} blocks`);
     } catch (error: unknown) { setNote(say(error)); }
   };
 
-  /** A pick anywhere but the tray gives the tray back to the canvas. */
-  const pick = (ids: Id[]) => { setPicked(ids); tray.release(); };
+  /** Where a block sits in the sections: a folder or document is the collection's to hold; any
+   *  other block is held in the document it sits in. */
+  const trail_of = (held: Graph, id: Id): (Id | null)[] => {
+    const up = path(held, id).map((block) => block.id).reverse();
+    const at = up.find((each) => is_document(held, each));
+    return !at || at === id ? [id] : [at, id];
+  };
 
-  /** A library row, picked on its section's one drawing as a usage is on the page: a package's
-   *  box, or a definition's card on the section it is listed in. */
-  const chart = (at: Pointed) => {
+  /** Hold this block where it sits, and pick it; the tray goes back to the canvas. */
+  const reveal = (id: Id) => {
     if (!graph) return;
-    setLayer(null);
-    if (at.of === "defs") {
-      const box = pack_box(graph, at);
-      setCharting({ at: chart_of(at) });
-      pick(box ? [box] : []);
-      return;
-    }
-    setCharting({ at: home_of(graph, at.id, at.only) });
-    pick([`${DEFINED}${at.id}`]);
+    const at = trail_of(graph, id);
+    chain.onTrace(at);
+    setPicked(id === graph.root ? [] : [id]);
+    tray.release();
   };
 
-  /** A pick from the tree, lit where it is drawn. Nothing picked there is the workspace: the page,
-   *  whole. */
-  const pick_shown = (ids: Id[]) => {
-    if (!ids.length) { setCharting(null); setLayer(null); }
-    pick(ids);
+  /** A row chosen in the explorer is held in its section: in the collection, picked on the layer
+   *  that holds it; in the document, picked — its header picks nothing. */
+  const choose = (at: number, id: Id | null) => {
+    chain.onChoose(at, id);
+    tray.release();
+    setPicked(id && !(at === AT_DOCUMENT && id === home) ? [id] : []);
   };
 
-  /** Open a card, what is picked by default: on `packages`, a definition to its box on
-   *  `definitions`; on a chart, a usage to the page; on the page, a card that holds anything — a
-   *  folder — as the layer, its first block picked. */
-  const enter = (id = picked.length === 1 ? picked[0] : undefined) => {
-    const held = id && (view?.blocks[id]?.of ?? id);
-    if (!view || !graph || !id || !held) return;
-    if (charting && graph.defs[held]) {
-      if (charting.at.only !== "packages" || !projects(graph, held)) return;
-      setCharting({ at: definitions() });
-      pick([`${DEFINED}${held}`]);
-      return;
-    }
-    if (charting && graph.blocks[held]) {
-      setCharting(null);
-      pick([held]);
-      return;
-    }
-    if (charting || !is_container(view, id)) return;
-    const first = children(view, id)[0]?.id;
-    setLayer(id === view.root ? null : id);
-    pick(first ? [first] : []);
+  /** A pick on the canvas holds what it picked; picking nothing keeps the focus. */
+  const pick = (ids: Id[]) => {
+    tray.release();
+    if (ids.length === 1) { reveal(ids[0]!); return; }
+    setPicked(ids);
   };
 
-  /** Leave the open layer, its card picked; on a chart, leave for the page. */
+  /** Open a folder or document — what is picked, by default: the document section holds it,
+   *  drawn as its contents, a document as its page. */
+  const enter = (id = picked.length === 1 ? picked[0] : chain.at === AT_COLLECTION ? home : null) => {
+    if (!graph || !id || !graph.blocks[id]) return;
+    if (!is_document(graph, id) && !children(graph, id).length) return;
+    chain.onTrace([id, null]);
+    setPicked([]);
+  };
+
+  /** Leave for the collection, what was open picked there; in the collection, go up a folder. */
   const leave = () => {
-    if (charting) { setCharting(null); pick([]); return; }
-    if (!view || !layer) return;
-    const up = view.blocks[layer]?.parent ?? view.root;
-    setLayer(up === view.root ? null : up);
-    pick([layer]);
+    if (!graph || !home) return;
+    if (chain.at === AT_DOCUMENT) { chain.onTrace([home]); setPicked([home]); return; }
+    const up = graph.blocks[home]?.parent;
+    if (up) { chain.onTrace([up]); setPicked([up]); }
   };
 
-  /** Clear the pick; with nothing picked, leave the layer. */
-  const clear = () => (picked.length ? pick([]) : leave());
+  /** Clear the pick; with nothing picked, leave. */
+  const clear = () => {
+    if (!picked.length) { leave(); return; }
+    if (chain.at === AT_DOCUMENT) chain.onChoose(AT_DOCUMENT, null);
+    setPicked([]);
+  };
 
   /** Enter opens, escape clears and backspace leaves — unless something is typed. The arrows are
    *  the explorer's. */
@@ -284,21 +303,11 @@ export function App() {
   });
 
   /** Explorer intents: reveal / rename / move / create / delete. */
-  const act = useCallback((name: string, args?: Record<string, unknown>) => {
+  const act = (name: string, args?: Record<string, unknown>) => {
     if (!graph) return;
     const id = args?.id === undefined ? null : String(args.id) as Id;
-    /** The root layer is `null`, whatever id the graph gives it. */
-    const layer_of = (at: Id | null | undefined) => (!at || at === graph.root ? null : at);
 
-    if (name === "reveal" && id && page) {
-      setCharting(null);
-      /** Lit on its layer, the page or a folder; a folder opens as the layer. */
-      if (is_container(page, id)) { setLayer(layer_of(id)); setPicked([]); return; }
-      const home = page.blocks[id]?.parent;
-      if (home !== (layer ?? page.root)) setLayer(layer_of(home));
-      setPicked([id]);
-      return;
-    }
+    if (name === "reveal" && id && graph.blocks[id]) { reveal(id); return; }
     if (name === "rename" && id && typeof args?.name === "string") {
       edit({ do: "rename", id, name: args.name });
       return;
@@ -331,17 +340,17 @@ export function App() {
       const group = above ? headed_group(graph, above) ?? graph.blocks[above]?.group ?? null : null;
       edit({ do: "move", ids, parent, group, at });
     }
-  }, [edit, graph, page, layer]);
+  };
 
   /** What was made or moved becomes the context: revealed, so the camera centers on it. */
   useEffect(() => {
     const id = follow.current;
-    if (!id || !page?.blocks[id]) return;
+    if (!id || !graph?.blocks[id]) return;
     follow.current = null;
-    act("reveal", { id });
-  }, [page, act]);
+    reveal(id);
+  }, [graph]);
 
-  if (!graph) {
+  if (!graph || !home) {
     return (
       <main className={`app blank${over ? " over" : ""}`}
         onDragOver={(event) => { event.preventDefault(); setOver(true); }}
@@ -359,31 +368,19 @@ export function App() {
     );
   }
 
-  const blocks = Math.max(0, Object.keys(graph.blocks).length - 1);
-  /** The explorer row lit for the pick: on a chart, a picked definition's row in the section drawn,
-   *  a package's for its box, else the section; on the page, whatever the tray holds. */
-  const def = charting && graph.defs[real[0] ?? ""] ? real[0]! : null;
-  const lit_row: Pointed | null = !charting ? tray.section(graph.root)
-    : def ? { of: "def", id: def, only: charting.at.only }
-    : boxed_pack(graph, picked[0] ?? "") ?? charting.at;
-  /** What the tray is about: the pick, or else the open layer. */
-  const about = graph.blocks[real[0] ?? ""] ?? graph.blocks[layer ?? graph.root];
-  const kind = about?.type ? graph.defs[about.type]?.name ?? about.type : "block";
-  /** The crumbs: one per layer, from the section drawn — a library section and a definition
-   *  opened on it, or the page and a folder opened on it. Picking one goes there; going up one is
-   *  leaving. */
-  const opened = charting ? null : graph.blocks[layer ?? ""]?.name;
-  const trail = [
-    { id: TOP, label: charting ? label_of(charting.at) : "usages" },
-    ...(opened ? [{ id: OPENED, label: opened }] : []),
-  ];
-  const walk = (id: string | null) => {
-    if (id === null) { leave(); return; }
-    if (id !== TOP) return;
-    if (charting) setCharting({ at: charting.at });
-    else setLayer(null);
-    pick([]);
-  };
+  /** What the collection holds and what its documents read into, never a package's. */
+  const blocks = Object.values(graph.blocks).filter((block) => path(graph, block.id)[0]?.id === graph.root)
+    .length - 1;
+  /** What the tray is about: the pick, or else what the collection holds. */
+  const about = graph.blocks[picked[0] ?? ""] ?? graph.blocks[home];
+  const kind = about?.type ? graph.blocks[about.type]?.name ?? about.type : "block";
+  /** The document the tray reads whole: the one drawn, or a read one picked in the collection. */
+  const shown = doc ?? (about && is_document(graph, about.id) && !unread(graph, about.id)
+    ? about.id : null);
+  /** The crumbs: the collection's folders down to the layer drawn. Picking one opens it. */
+  const trail = path(graph, layer ?? graph.root)
+    .map((block) => ({ id: block.id, label: block.name ?? "" }));
+  const walk = (id: string | null) => (id === null ? leave() : enter(id));
 
   return (
     <div className={`app${over ? " over" : ""}`}
@@ -410,42 +407,42 @@ export function App() {
           }} />
       </WorkspaceHeader>
 
-      <Explorer graph={graph} open={layer} picked={real} folded={folded} menu keys
+      <Explorer graph={graph} open={layer} picked={picked} folded={folded} menu keys
         tools={{ block: false }}
         extra={
           <button type="button" aria-label="Open a document"
             title="open a markdown document — shift+click for a folder"
             onClick={(event) => void add(event.shiftKey)}><Icon name="add" /></button>
         }
-        section={lit_row}
-        onSection={(at) => { tray.onSection(at); chart(at); }}
+        chain={{ ...chain, onChoose: choose }}
         onAct={act}
         onFold={(id, shut) => setFolded((held) =>
           shut ? [...new Set([...held, id])] : held.filter((each) => each !== id))}
-        onPick={pick_shown} />
+        onPick={pick} />
 
       <main>
         <div className="mm-canvas" ref={setCanvas}>
-          {/* One per drawing — the page, a chart, a definition opened — so each is framed afresh.
-              Each reads as many cards across as the canvas holds, at their own size at most. */}
-          <Viewer key={charting ? JSON.stringify(charting.at) : "page"}
+          {/* One per drawing, so each is framed afresh. Each reads as many cards across as the
+              canvas holds, at their own size at most. */}
+          <Viewer key={`${chain.at}:${layer ?? ""}`}
             graph={view ?? graph}
-            layer={layer} picked={cards} lit={pointed ? [pointed] : []}
+            layer={layer === graph.root ? null : layer} picked={cards}
+            lit={pointed ? [pointed] : []}
             card={display.card} full={full} scroll
             focus={cards[0] ?? null}
-            reach={charting ? chart_width(across) : null} most={ACTUAL}
+            most={ACTUAL}
             chrome={{ crumbs: true, lattice: display.lattice ?? true, legend: display.legend,
                       corner: display.corner, frame: false }}
             trail={trail} onTrail={walk}
-            onLook={setLayer} onPick={pick} onOpen={enter} />
+            onLook={() => leave()} onPick={pick} onOpen={enter} />
           {note ? (
             <p className="strip mm-strip" onClick={() => setNote("")}>{note}</p>
           ) : null}
         </div>
         <TrayFrame open={tray.open} onOpen={tray.onOpen} big={big} onBig={setBig}
           word={kind} name={about?.name ?? ""} tabs={TABS} tab="markdown" onTab={() => {}}>
-          {graph.packages[MD]
-            ? <Document graph={graph} lit={lit} picked={real}
+          {shown
+            ? <Document graph={graph} doc={shown} lit={lit} picked={picked}
                 onPick={(id) => act("reveal", { id })} onPoint={setPointed} />
             : <Preview graph={graph} picked={about?.id ?? null} />}
         </TrayFrame>

@@ -1,10 +1,13 @@
-/** A directory on disk, read into a graph of one block per file and folder.
+/** A folder or a file on disk, read into a collection: the workspace's domain, a definition per
+ *  folder and file.
  *
- *  Nothing is parsed: a markdown file's text is carried on the block's `body`
- *  and its path on `source`. Folders are `folder` blocks, files are `block`
- *  blocks, and the kit lays both out on its own. */
+ *  Nothing is parsed here. A markdown file is a `document` definition, carrying its text on its
+ *  `body` until it is first opened and read into its structure (`read.ts`); any other file is a
+ *  plain block definition. Folders are `folder` definitions organizing the rest. The workspace's
+ *  root is the folder; one file picked on its own sits in a root named after it. */
 
-import { base_graph, type Graph, type Id } from "@mnd/kit";
+import { children, FLOOR, ROOT, type Block, type Graph, type Id } from "@mnd/kit";
+import { DOCUMENT, MARKDOWN } from "./packages/markdown.js";
 
 /** One file as it was read: its path from the picked folder, and its text. */
 export interface SourceFile {
@@ -12,15 +15,20 @@ export interface SourceFile {
   text: string;
 }
 
+/** The packages every collection reads over: the kit's base and markdown. */
+export const PACKAGES = [...FLOOR, ...MARKDOWN];
+
 /** Extensions read as text; everything else is listed but left empty. */
 const TEXT = /\.(md|mdx|txt)$/i;
 
 
-/** A graph holding the picked folder, its subfolders, and its files. */
+/** A collection: the picked folder, its subfolders and its files — or one document. */
 export function scan(name: string, files: SourceFile[]): Graph {
-  const graph = base_graph();
-  const root = graph.root;
-  graph.blocks[root] = { ...graph.blocks[root]!, name };
+  const root = ROOT;
+  const graph: Graph = { root, edges: {}, blocks: {
+    ...Object.fromEntries(PACKAGES.map((block) => [block.id, block])),
+    [root]: { id: root, parent: null, name: name.replace(/\.(md|mdx)$/i, "") },
+  } };
   const orders = new Map<Id, number>();
 
   // Each path segment becomes a folder block; the last becomes the file.
@@ -36,7 +44,7 @@ export function scan(name: string, files: SourceFile[]): Graph {
       const id = `dir:${at}`;
       if (!graph.blocks[id]) {
         graph.blocks[id] = {
-          id, parent, type: "folder", name: part, source: at, order: next(parent),
+          id, parent, type: "folder", def: {}, name: part, source: at, order: next(parent),
         };
       }
       parent = id;
@@ -44,8 +52,8 @@ export function scan(name: string, files: SourceFile[]): Graph {
 
     const id = `file:${file.path}`;
     graph.blocks[id] = {
-      id, parent, type: "block", name: leaf, source: file.path, order: next(parent),
-      ...(file.text ? { body: file.text } : {}),
+      id, parent, type: is_markdown(file.path) ? DOCUMENT : "block", def: {}, name: leaf,
+      source: file.path, order: next(parent), ...(file.text ? { body: file.text } : {}),
     };
   }
 
@@ -56,6 +64,21 @@ export function scan(name: string, files: SourceFile[]): Graph {
     orders.set(parent, order);
     return order;
   }
+}
+
+/** Whether a block is a document: a root structure its contents are read under. */
+export function is_document(graph: Graph, id: Id): boolean {
+  return graph.blocks[id]?.type === DOCUMENT;
+}
+
+/** The first document in a collection, in reading order: what it opens on. */
+export function first_document(graph: Graph, at: Id = graph.root): Id | null {
+  if (is_document(graph, at)) return at;
+  for (const kid of children(graph, at).filter((block: Block) => block.def)) {
+    const found = first_document(graph, kid.id);
+    if (found) return found;
+  }
+  return null;
 }
 
 /** Whether a block's content is markdown the tray can show. */
@@ -78,7 +101,7 @@ export function save(blob: Blob, name: string): void {
  *  Dev only — the built page starts empty and waits for a real folder. */
 export async function dev_sample(): Promise<{ name: string; files: SourceFile[] } | null> {
   if (!import.meta.env.DEV) return null;
-  const response = await fetch("/sample.json");
+  const response = await fetch(`/sample.json${window.location.search}`);
   if (!response.ok) return null;
   return response.json() as Promise<{ name: string; files: SourceFile[] }>;
 }

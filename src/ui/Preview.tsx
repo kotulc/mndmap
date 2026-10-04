@@ -2,12 +2,12 @@
  *
  *  What a block is, carries and holds are the kit tray's own tabs; this is the one thing they do
  *  not show — the markdown read as markdown. mndmap hands it to the tray as its first tab. While
- *  reading, it is the whole document instead, with the section being read lit. */
+ *  a document is in focus, it is the whole document instead, with the section being read lit. */
 
 import { useEffect, useMemo, useRef } from "react";
 import { Inline, Markdown } from "@mnd/kit/react";
 import { children, type Block, type Graph, type Id } from "@mnd/kit";
-import { FRONT, IMAGE, TABLE } from "../packages/markdown.js";
+import { DOCUMENT, FRONT, IMAGE, TABLE } from "../packages/markdown.js";
 import { is_markdown } from "../scan.js";
 import { covered, segments, type Segment } from "../series.js";
 
@@ -34,11 +34,11 @@ export function Preview({ graph, picked }: { graph: Graph; picked: Id | null }) 
 
 /** The whole document, as the graph now orders it: the section being read lit, what the canvas
  *  picked outlined as one group, and both kept in view. */
-export function Document({ graph, lit, picked, onPick, onPoint }: {
-  graph: Graph; lit: ReadonlySet<Id>; picked: readonly Id[];
+export function Document({ graph, doc, lit, picked, onPick, onPoint }: {
+  graph: Graph; doc: Id; lit: ReadonlySet<Id>; picked: readonly Id[];
   onPick: (id: Id) => void; onPoint: (id: Id | null) => void;
 }) {
-  const parts = useMemo(() => segments(graph), [graph]);
+  const parts = useMemo(() => segments(graph, doc), [graph, doc]);
   const chosen = useMemo(() => covered(graph, picked), [graph, picked]);
   /** What is lit and picked, as one key: the view scrolls only when it changes, never on a
    *  re-render alone, such as a section pointed at. */
@@ -106,8 +106,8 @@ function Table({ className, cells }: { className: string; cells: string[][] }) {
 
 /** What the block is, in a few words: its kind, and what qualifies it. */
 function about(graph: Graph, block: Block): string {
-  const kind = block.type ? graph.defs[block.type]?.name ?? block.type : "block";
-  const key = block.fields?.find((each) => each.key)?.name;
+  const kind = block.type ? graph.blocks[block.type]?.name ?? block.type : "block";
+  const key = block.values?.find((each) => each.key)?.name;
   const held = children(graph, block.id).length;
   const parts = [kind];
   if (key) parts.push(`keyed by ${key}`);
@@ -120,7 +120,7 @@ function about(graph: Graph, block: Block): string {
 function markdown_of(block: Block | undefined): string {
   if (!block) return "";
   // A file block carries the whole file; a content block carries its element, as written.
-  const text = block.type === undefined || block.type === "block" || block.type === "folder"
+  const text = [undefined, "block", "folder", DOCUMENT].includes(block.type)
     ? (is_markdown(block.source) ? without_front(block.body ?? "") : "")
     : block.type === TABLE
       ? ""

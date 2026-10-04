@@ -1,99 +1,149 @@
 # Sections plan
 
-**Explorer sections set a document's full context, and every section keeps mndflow's 1:1
-alignment: one explorer row is one canvas layer, and a layer's `group` holders organize it locally,
-never as folders.** Spans mndmap (the reader) and mndflow (the shell).
+**Everything is a block, and a package is a graph.** A package's top-level blocks are its definitions; what a definition holds is its structure. The explorer's sections are depth in that one tree: packages → definitions → structure in the editor, collection → document in the reader. Spans mndflow (the kit and the editor) and mndmap (the reader).
 
-**Status: step 1 built** (kit half unreleased: mndflow working tree only).
+**Status:** step 3 built in both repos, uncommitted. mndflow typechecks and passes 352 tests; mndmap typechecks against the rebuilt kit; both apps driven in a browser on the extended sample and `samples/docs`.
 
 
-## Vision
+## Model
 
-| Section | Role | Groups it sets |
-|---|---|---|
-| **packages** | the vocabularies imported and active for the content being read | — |
-| **definitions** | grouping and pattern behavior: block sets | **collection** (folders, documents), **document** (sections, by heading), **content** (text, code, tables, …) |
-| **usages** | the content's actual block structure | — |
+| Term | What it is |
+|---|---|
+| **package** | a graph's root block (`parent: null`). `base` is shipped; the workspace's is editable; any other is frozen and loaded from an exported `.json` |
+| **workspace** | everything the user can edit: the workspace package and all it holds |
+| **definition** | a block carrying `def` — explicit. Abstract: never allocated or linked as an instance. Every block in a package's domain is one, organizing groups and folders included |
+| **structure** | what a definition holds that is not a definition: its usages, nested to any depth |
+| **usage** | a block in a structure. Its `type` is the definition it uses; it reads that definition through and stores only its own overrides |
+| **subtype** | a definition whose `type` is the definition it extends. Settings and tags inherit; structure does not (yet) |
+| **base** | a definition in the `base` package with no `type`: `block`, `folder`, `reference`, `interface`, `group`, `grid`, `note`, `tag`, `line`, `tie`. Each has a description |
 
 | Rule | |
 |---|---|
-| **a package is vocabulary and projection** | the markdown package sets both the active vocabulary *and* how that vocabulary is drawn. Room to grow: other packages, other projections |
-| **one row, one layer** | a row of the explorer is a layer on the canvas; its child rows are what that layer holds. No folder rows that are not layers |
-| **references aren't rows** | a layer of references to blocks that live elsewhere (a definition's usages) opens on the canvas but lists nothing in the tree |
-| **groups are local** | a group boxes blocks on its layer. It is membership, not parenthood |
-| **groups are tags** | a block's groups are its `Block.tags` — the only tags. The explorer's filter will key off them |
-| **no terms** | shared columns, tags and values go; groups are how blocks are organized across a document |
-| **sections filter** | together the sections are the filter over content and views: vocabulary (packages), grouping (definitions), structure (usages) |
-| **order is the user's** | dragging a section, group or block reorders it, and the explorer follows |
+| **one chain** | `type` is both *extends* (on a definition) and *is a* (on a usage). Anything resolves its own value first, then up the chain, nearest wins |
+| **own values only** | a definition stores what it says; inherited values are resolved on read, never copied |
+| **one id space** | `base` keeps bare ids (`block`, `line`); other packages namespace theirs (`md.heading`) |
+| **parent is a block** | always. A package root holds its domain; a definition holds its structure |
+| **domain** | a definition's domain (block or relation) is read off its base, never stored |
+| **frozen** | a block under any package root other than the workspace's is read only |
+| **no links between definitions** | relations between definitions are fields (`type`, `tags`); a tie may still join a definition to a note |
+| **a new workspace** | the `workspace` package holding groups `blocks`, `relations`, `tags`, and one plain definition `main` in `blocks`, picked by default |
 
 
-## Step 1: align the reader with mndflow
+## Schema
 
-| Projection | Section | Shape |
+| Block key | Holds | Was |
 |---|---|---|
-| **group membership** | packages | flat: `markdown > {definition}`, the base package its own row under `packages`. The package layer boxes its definitions by group, drawn as now |
-| **relationship tree** | definitions | a definition's child layer: what it extends over it, its usages under it. A leaf in the tree |
-| **document chains** | usages | the document is one flat layer: blocks grouped by section (heading) and split at content-type boundaries |
+| `def` | `{ schema? }`: the definition marker, and its field definitions | `Definition` record, `Definition.fields` |
+| `type` | the definition it extends or uses | `Definition.extends`, `Block.type` |
+| `name`, `body`, `tags` | name; body (a definition's description); tag definition ids | `Definition.name`, `.about`, `.tags` |
+| `settings` | how it draws and what it may do, by component (`card`, `style`, `allows`, …) | `Definition.components`, `Block.looks`, `Relation.looks` |
+| `values` | a usage's field values | `Block.fields` |
+| `uses` | on a package root: the packages it depends on | `Package.extends` |
 
-| Change | Where |
+| Removed | Why it existed |
 |---|---|
-| shelf entries are tagged with a group instead of filed `in` a folder; a package's base lists as its own package | mndflow `core` `shelf`, `explorer` |
-| terms removed | mndmap `terms.ts`, `read.ts` `defined`/`filed`, `packages/markdown.ts` `COLUMN`/`VALUE`/`TAG` |
-| one flat document layer: section groups, merged content blocks, tables, lists and fences inline | mndmap `read.ts`, `series.ts` |
-| focus blocks, previews and cutouts removed | mndmap `read.ts` (`paged`, `beside`, `around`), `ui/App.tsx` |
+| `Graph.defs`, `Graph.packages`, `Definition`, `Package` | definitions and packages lived apart from blocks |
+| `default`, `stands_in_for`, a word about a base | editing a frozen definition; subtype it instead |
+| shelf, `Shelved`, `set_shelf` | definitions had no place of their own |
+| `ROOT_DEF`, `OLD_ROOT`, the root rename and the door's missing-root repair | the old migrations; samples are re-saved instead |
+| trait tags (`trait.*`) | a readout of settings; shown as badges instead |
+| `set_def`, `drop_def`, `set_package`, `drop_package`, `set_about` | definitions and packages are blocks: `add_block`, `delete_block`, `set_body`, `set_schema` |
+| tags dropped at zero usages | simplicity: a tag stays until removed |
 
 
-## Sizing inline blocks
-
-Proposed: a section lays its blocks on a grid of card columns. A block's size is a whole number of
-default cards, so rows stay on the lattice.
+## Usages read through
 
 | Rule | |
 |---|---|
-| **small blocks share a row** | text, a short list, a short fence: one card wide, `across` to a row |
-| **big blocks take spans** | a table spans one column per ~2 of its columns, a long fence or list 2; never wider than the row |
-| **a height cap** | a block is at most `TALL` default heights (e.g. 3); past it, it is cut with `…`. Picked or under `full content`, it grows |
-| **a row is its tallest** | blocks in a row top-align; the section box grows to its rows |
-| **a wide block breaks the row** | a block wider than what is left of a row starts the next one, so order is kept |
+| **read, not copied** | a usage shows its definition's structure; it stores only its own overrides |
+| **parts by path** | an edge end may name a part of a usage: `{ from, fromPart }` is the part `fromPart` of the definition `from` uses |
+| **edits go home** | changing what a usage shows of its definition's structure edits the definition |
+| **ports too** | a usage wears its definition's interfaces on its walls |
 
 
-## Decisions
+## Sections
 
-| | |
+| Rule | |
 |---|---|
-| **a heading is a section group and a heading block** | `md.section` extends `group`, named by the heading as written; `md.heading` is its first member, the backbone card. Nested headings are nested groups |
-| **prose merges** | consecutive paragraphs and quotes are one `text` block; a table, list, fence or image is its own |
-| **groups aren't rows** | the explorer lists a layer's blocks in reading order through its groups — headings among them; group holders are not listed, in any section |
-| **flow lines** | directed `md.flow`: to each heading from its parent's or the sibling's before it, and from a heading through its content. Drawn, never stored. *Replaces "no flow or member lines"* |
-| **the backbone** | headings down the page, each section's content in rows beside its heading, its own sections boxed inside it, stepped `INDENT` (2 units) right — the staircase. A box is labelled `section (N blocks)`, counting the content beside its heading. Placed by hand: a section group is drawn `arrangement: free`, which the kit reads as *members keep their places* |
-| **membership is truth** | `group` is stored; `Block.tags` are derived — a block is tagged with each kind that takes its definition as a member |
-| **kinds take members** | a kind is a workspace group definition whose `allows.members` names the package definitions it takes: `structure` takes section, heading and frontmatter. No `section` kind: `structure` covers sections |
-| **definitions are kinds** | the definitions section holds the content kinds, not one per heading. The explorer lists a group definition's members under it (kit, any group): `definitions > prose > text, list, code`. Usages are drawn, never rows |
-| **one set of content groups** | the package's groups (`structure`, `prose`, `data`, `media`) are the content groups |
-| **relations group on their own** | a package's relation definitions sit in a group of their own on its layer: `flow` in markdown's, `line` and `tie` in base's |
-| **packages nest** | the `packages` chart boxes each package, and inside it a box per group it files |
-| **groups may have a head** | a holder's `allows.heads` names what may head it; its head is its first member when that member is one. Derived, never stored. `md.section` is headed by `md.heading` (kit `group_head`, `headed_group`) |
-| **heads are handles** | the explorer steps a headed group's other members in under the head's row, folds them there, and drags the whole group with it. Groups are still not rows |
-| **a move lands by the row above** | moved blocks join the group of the row above where they land — the group it heads, where it heads one; landing before a head is landing before its group. What a move carries keeps its own grouping |
-| **arrows read in order** | ↑ and ← go to the row before, ↓ and → to the row after, through the whole tree; the way opens as they walk |
-| **every section folds** | a section of plain rows offers its fold toggle too, folding itself |
-| **kind names** | a list is named `list (N items)`, a table `table (RxC items)`, a section box `section (N blocks)` |
-| **one drawing per library section** | `packages` and `definitions` are each one drawing, as the page is for usages: a package row picks its box, a definition row its card, and the camera follows. No per-package charts |
-| **definitions projects usages** | `definitions` draws the usages by kind as the page draws them by section, with the same backbone (`backbone.ts` `staircase`): a box per kind headed by its card, a box per definition it takes headed by that one's card, its usages flowing beside it in reading order |
-| **packages jumps to definitions** | Enter or double-click on a definition in `packages` goes to its box on `definitions`. The definition-in-context view is gone |
-| **one row lit** | a definition listed twice lights only its row in the section drawn, and the arrows walk from there |
-| **span and cap sizing** | as above; no masonry, so reading order holds |
+| **depth** | each section lists one level of the tree: what the section above holds |
+| **host defined** | each app declares its sections: label, listing, default |
+| **remembered** | a section remembers its pick per pick above; session state, never logged |
+| **headers are labels** | clicking one folds its section |
+| **two cues** | the focus lit strongly, each section's pick subtly |
+| **arrows** | ↑ ↓ walk the rows of the section in focus; ← to the section above, → to the one below, each landing on what that section holds |
+| **one row, one layer** | a row's children are what its layer holds; picking a row draws the layer it sits on |
+
+| App | Sections | Lists |
+|---|---|---|
+| **mndflow** | packages → definitions → structure | package roots → the package's definitions, nested under the groups and folders that organize them → the definition's own row with its structure under it |
+| **mndmap** | collection → document | the workspace's folders and documents (definitions) → the document's own row with its content (structure) under it |
+
+| Section in focus | The canvas draws |
+|---|---|
+| packages | every package top down: a box per package holding its definitions in their groups |
+| definitions | the package's top layer: its definitions in their groups |
+| structure | the layer the picked block sits on |
+
+
+## Packages view (regressed in step 3)
+
+**What was lost:** the packages chart drew every package as a box, its definitions inside grouped as its domain organizes them, so the whole vocabulary read top down on one page. Step 3 replaced it with a card per package (`views/packages.ts`), which shows nothing inside. That was a mistake: this view is the one the definitions section drills into.
+
+| Why it went | |
+|---|---|
+| **no layer holds the packages** | each package's domain is now a real layer (its root's), but package roots sit under nothing, and the null layer is the workspace's own domain. Drawing every package at once needs a layer above them, which no block is |
+| **the old chart was synthetic** | `chart()` built its boxes and stand-in cards by hand, outside the block model. It was deleted with the `Definition` record rather than reworked, and a card per package was the shortest stand-in |
+
+| Option | How | Cost |
+|---|---|---|
+| **A. view-only layer, real ids** (recommended) | `packages_graph` lays a drawn layer `@packages` with a box per package root, and lays each package's definitions on it in the view only — re-parented to the layer, a member of their package's box, organizing groups nested as groups in it. Drawn as `read_through` is: nothing stored | small: one view transform. Cards keep their ids, so a pick is the definition itself — held as the definitions section's pick, and opening one goes to its structure |
+| B. stand-ins in boxes | as the old chart: a stand-in (`of`) per definition inside a box per package | ids are the stand-ins', mapped back on every pick; a second drawing of each definition |
+| C. a real root above packages | a block every package root sits under | a schema change for a drawing; the workspace stops being a root |
+
+| Rule kept from the old chart | |
+|---|---|
+| **drawn once** | each definition appears once, in its package's box |
+| **rows pick cards** | a package row picks its box, a definition row its card |
+| **a page** | laid as many cards across as the canvas holds; the camera follows the pick |
+| **read only** | a package is picked and opened here, never edited |
+
+
+## The reader
+
+| Concept | Is |
+|---|---|
+| collection | the workspace package's domain |
+| folder | an organizing definition on the `folder` base |
+| document | a definition on `md.document`, read into structure when first opened |
+| document content | usages of `md.*` definitions |
+| `markdown` | a frozen package; the reader lists no packages or definitions sections |
+
+
+## Step 3: blocks all the way (this step)
+
+| Phase | Scope |
+|---|---|
+| **1. core** | schema above; resolution through blocks; door and fold without migrations; actions on blocks; samples and fixtures re-saved |
+| **2. kit surfaces** | `defs` as a package; views, stage, tray, options, terminal on the block model; traits as badges; a definition's JSON in the tray (own and resolved) |
+| **3. sections** | the three listings as block trees; organizing groups as branch rows; ← → across sections; charts replaced by drawing the package layer |
+| **4. read through** | usages draw their definition's structure and ports; edges to parts |
+| **5. mndmap** | markdown as a package; the collection as the workspace domain; documents as definitions |
 
 
 ## Open
 
 | Item | Notes |
 |---|---|
-| **collection groups** | not built: a single document's root stands in for it |
-| **picked blocks don't grow** | the `TALL` cut lifts only under `full content` |
-| **span-2 heights** | measured at one card wide, so wide prose and lists run tall |
-| **edits and groups** | a section can't follow its last subsection as a sibling by drag (it nests under the row above); deleting a head leaves its group headless |
-| **folder layers** | `laid` places the root layer only; an opened folder's blocks are unplaced |
-| **library folders in mndflow** | the explorer no longer lists shelf folders, so mndflow's app loses folder filing in its tree |
-| **wrapped rows flow back** | a row that wraps draws its flow line back across to the next row's start |
-| **README** | still describes terms, focus blocks, the flat page and the old arrow keys |
+| **structure inheritance** | subtypes inheriting structure; deferred |
+| **self-references and loops** | a definition's structure using itself |
+| **relation and tag structure** | whether either may hold structure; `holds` decides, off by default |
+| **content layouts** | the reader's backbone is app code; packages need a way to declare a layer's layout |
+| **lazy collections** | every file's text is still read up front |
+| **release the kit** | mndmap pins `vendor/`; re-pin once step 3 settles |
+| **read-through in the explorer** | a usage's read-through parts draw on its layer but are not listed under its row; two usages of one definition in a layer would share row keys |
+| **organizing groups as types** | `blocks`, `relations`, `tags` are group definitions, so they are offered as types for a block |
+| **an unread document's text** | it rides on the document's `body` until read, which is otherwise a definition's description |
+| **membership scans** | an empty definition is no holder, so `shape_of` scans for members; fine at package sizes, worth an index for large collections |
+| **the no-sections explorer** | still supported and tested, though both hosts declare sections; drop it or keep it |
+| **markdown as a file** | the markdown package is built in code; the base package ships as code too. Packages a user imports are `.json` |
+| **mndflow's docs** | `docs/` and the package docs still describe the old record, the shelf and defaults |

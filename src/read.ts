@@ -1,28 +1,22 @@
-/** One markdown document, read into blocks, and laid out as it reads.
+/** One markdown document, read into blocks under its own, and laid out as it reads.
  *
  *  Deliberately general: it walks `marked`'s tokens and files each one under the definition that
  *  describes it. What a block *means* is the markdown package's business, not this reader's — so
  *  a new element is a definition there plus one line here, and nothing else moves.
  *
- *  A document is one flat layer. A heading is a section group holding what follows it, and a
- *  section under it is a group inside it: membership, never parenthood. Content is split where its
- *  kind changes — a run of paragraphs and quotes is one text block, and each list, fence, table
- *  and image its own — and read in order. A block's tags are derived from its groups. */
+ *  A document is one flat layer under its document block. A heading is a section group holding
+ *  what follows it, and a section under it is a group inside it: membership, never parenthood.
+ *  Content is split where its kind changes — a run of paragraphs and quotes is one text block, and
+ *  each list, fence, table and image its own — and read in order. */
 
 import { marked, type Token, type Tokens } from "marked";
-import { UNITS, allows_of, base_graph, children, set_card, set_full, size_of, type Block,
-         type Graph, type Id } from "@mnd/kit";
-import { CODE, FLOW, FRONT, GROUPS, HEADING, IMAGE, LIST, SECTION, TABLE, TEXT, with_markdown }
+import { UNITS, children, set_card, set_full, size_of, type Block, type Graph, type Id }
+  from "@mnd/kit";
+import { CODE, FLOW, FRONT, HEADING, IMAGE, LIST, SECTION, TABLE, TEXT }
   from "./packages/markdown.js";
 import { staircase } from "./backbone.js";
 import { form_of } from "./forms.js";
 import { plain } from "./names.js";
-
-/** One entry on the workspace's shelf of definitions: one filed, or a group. */
-type Shelved = NonNullable<Block["shelf"]>[number];
-
-/** What names a group kind's definition. */
-const KIND = "kind.";
 
 /** How many lines make a fence or list long, so it spans two columns. */
 const LONG = 12;
@@ -36,23 +30,23 @@ const CELL_H = 2;
 /** The fewest lines a table shows before it is cut: a table is read by its rows. */
 const LINES = 6;
 
+/** What reads as prose, a run of it one text block. */
+const PROSE: readonly string[] = ["paragraph", "blockquote", "html", "def"];
 
-/** A document as a graph: the file as the root, one block per element, each in its section. */
-export function read(name: string, text: string): Graph {
-  const graph = with_markdown(base_graph());
-  const root = graph.root;
-  // The workspace's kinds: a group definition per content group of the package, taking the
-  // definitions filed in it as members. A block is tagged with the kind that takes its own.
-  const shelf: Shelved[] = [];
-  for (const [kind, members] of GROUPS) {
-    const id = `${KIND}${kind}`;
-    graph.defs[id] = { id, group: "block", extends: "group", name: kind,
-                       about: `What the package files as ${kind}.`,
-                       components: { allows: { members } } };
-    shelf.push({ id, group: "block" });
-  }
-  graph.blocks[root] = { ...graph.blocks[root]!, name, source: name, shelf };
 
+/** Whether a document still waits to be read: its text is still on its body, which reading
+ *  moves into its blocks. */
+export function unread(graph: Graph, doc: Id): boolean {
+  return graph.blocks[doc]?.body !== undefined;
+}
+
+/** The graph with a document's text read into blocks under it, one per element, each in its
+ *  section; the text leaves its body, as its blocks now hold it. Ids are the document's own, so a
+ *  document reads the same blocks every time. */
+export function read(source: Graph, doc: Id): Graph {
+  const graph: Graph = { ...source, blocks: { ...source.blocks } };
+  const { body: text = "", ...rest } = graph.blocks[doc]!;
+  graph.blocks[doc] = rest;
   /** The sections still open, outermost first. A heading holds what follows it until one of the
    *  same level or higher closes it. */
   const open: { id: Id; depth: number }[] = [];
@@ -63,13 +57,14 @@ export function read(name: string, text: string): Graph {
   const mint = (kind: string): Id => {
     const n = (seen.get(kind) ?? 0) + 1;
     seen.set(kind, n);
-    return `${kind}:${n}`;
+    return `${doc}#${kind}:${n}`;
   };
 
-  let order = 0;
+  // After anything already put under it before it was read.
+  let order = Math.max(0, ...children(graph, doc).map((block) => block.order ?? 0));
   const put = (block: Omit<Block, "id" | "parent" | "order">, kind: string): Block => {
     const group = open[open.length - 1]?.id;
-    const held = { ...block, id: mint(kind), parent: root, order: ++order,
+    const held = { ...block, id: mint(kind), parent: doc, order: ++order,
                    ...(group ? { group } : {}) } as Block;
     graph.blocks[held.id] = held;
     return held;
@@ -78,13 +73,13 @@ export function read(name: string, text: string): Graph {
   const { front, body } = split_front(text);
   if (front) put({ type: FRONT, name: "frontmatter", body: front }, "front");
   for (const token of marked.lexer(body)) walk(token);
-  return tagged(graph);
+  return graph;
 
   /** One token, put in whichever section is open. */
   function walk(token: Token): void {
     if (token.type === "space") return;
     const image = token.type === "paragraph" ? only_image(token as Tokens.Paragraph) : null;
-    if (image || !["paragraph", "blockquote"].includes(token.type)) prose = null;
+    if (image || !PROSE.includes(token.type)) prose = null;
     const raw = token.raw.trim();
     switch (token.type) {
       case "heading": {
@@ -98,7 +93,9 @@ export function read(name: string, text: string): Graph {
         return;
       }
       case "paragraph":
-      case "blockquote": {
+      case "blockquote":
+      case "html":
+      case "def": {
         if (image) {
           put({ type: IMAGE, name: plain(image.text) || "image", source: image.href, body: raw },
               "image");
@@ -107,8 +104,8 @@ export function read(name: string, text: string): Graph {
         // A run of prose is one block: each paragraph or quote joins the one before it.
         const joined = prose ? graph.blocks[prose] : null;
         if (joined) { joined.body = `${joined.body}\n\n${raw}`; return; }
-        prose = put({ type: TEXT, name: plain((token as Tokens.Paragraph).text), body: raw },
-                    "text").id;
+        const said = (token as { text?: string }).text ?? raw;
+        prose = put({ type: TEXT, name: plain(said), body: raw }, "text").id;
         return;
       }
       case "code": {
@@ -131,7 +128,7 @@ export function read(name: string, text: string): Graph {
         const forms = headers.map((_, n) => form_of(table.rows.map((row) => row[n]?.text ?? "")));
         put({
           type: TABLE, body: raw, name: `table (${table.rows.length}x${headers.length} items)`,
-          fields: headers.map((name, n) => ({
+          values: headers.map((name, n) => ({
             name, form: forms[n] ?? "text", ...(n === 0 ? { key: true } : {}),
           })),
           grid: {
@@ -142,25 +139,11 @@ export function read(name: string, text: string): Graph {
         return;
       }
       default:
-        // A rule, html, a link definition and anything else carry no block of their own.
+        // A rule and anything else carry no block of their own. Html and a link definition are
+        // prose, as written, so nothing the page says is lost.
         return;
     }
   }
-}
-
-/** The graph with every block tagged with the workspace's kinds that take its definition as a
- *  member. Membership is the truth; tags only follow it. */
-export function tagged(graph: Graph): Graph {
-  const kinds = Object.values(graph.defs).filter((def) => !def.from)
-    .map((def) => ({ id: def.id, members: allows_of(graph, def.id).members }));
-  const blocks: Record<Id, Block> = {};
-  for (const block of Object.values(graph.blocks)) {
-    const { tags: _was, ...rest } = block;
-    const tags = kinds.filter((kind) => Array.isArray(kind.members)
-      && kind.members.includes(block.type ?? "")).map((kind) => kind.id);
-    blocks[block.id] = tags.length ? { ...rest, tags } : rest;
-  }
-  return { ...graph, blocks };
 }
 
 /** The document laid out as it reads: a backbone of headings down the page, each section's content
@@ -169,7 +152,7 @@ export function tagged(graph: Graph): Graph {
  *  A small block is one card; a table spans a column for every two of its own, a long fence or
  *  list two. A block is cut at `TALL` cards high, unless `full` shows all of it. Drawn, never
  *  stored: the held graph keeps no sizes, places or lines. */
-export function laid(graph: Graph, card: { w: number; h: number }, full: boolean,
+export function laid(graph: Graph, doc: Id, card: { w: number; h: number }, full: boolean,
                      across: number): Graph {
   set_card(card.w, card.h);
   const air = UNITS.unit;
@@ -177,7 +160,7 @@ export function laid(graph: Graph, card: { w: number; h: number }, full: boolean
   const one = { w: UNITS.block.w * air, h: UNITS.block.h * air };
   const wide = (span: number) => span * one.w + (span - 1) * gap;
   const blocks = { ...graph.blocks };
-  const kin = children(graph, graph.root);
+  const kin = children(graph, doc);
 
   /** How tall a block would be, shown whole. */
   const whole = (id: Id) => {
@@ -196,10 +179,10 @@ export function laid(graph: Graph, card: { w: number; h: number }, full: boolean
       blocks[block.id] = { ...block, grid: { ...block.grid, values, rows: values.length, size } };
     } else if ([TEXT, LIST, CODE].includes(block.type ?? "")) {
       const h = full ? whole(block.id) : Math.min(whole(block.id), TALL * one.h);
-      blocks[block.id] = { ...block, w: wide(span), h, looks: { card: { height: "free" } } };
+      blocks[block.id] = { ...block, w: wide(span), h, settings: { card: { height: "free" } } };
     }
   }
-  return staircase({ ...graph, blocks }, across, FLOW,
+  return staircase({ ...graph, blocks }, doc, across, FLOW,
                    (_, n) => `section (${n} ${n === 1 ? "block" : "blocks"})`);
 }
 

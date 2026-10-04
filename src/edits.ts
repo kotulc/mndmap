@@ -47,9 +47,15 @@ function run(graph: Graph, edit: Edit): string | null {
     case "move": {
       if (!graph.blocks[edit.parent]) return `there is nowhere called ${edit.parent}`;
       if (edit.group && edit.ids.includes(edit.group)) return "a group cannot hold itself";
+      const collected = in_collection(graph, edit.parent);
       for (const id of edit.ids) {
         if (!graph.blocks[id]) return `nothing here is called ${id}`;
         if (holds(graph, id, edit.parent)) return `${name_of(graph, id)} cannot hold itself`;
+        /** A file or folder stays in the collection, and content in a document. */
+        if (!!graph.blocks[id]!.def !== collected) {
+          return graph.blocks[id]!.def ? `${name_of(graph, id)} belongs in the collection`
+            : `${name_of(graph, id)} belongs in a document`;
+        }
       }
       // What the moved blocks group among themselves stays so; the rest join where they land.
       const top = edit.ids.filter((id) => !edit.ids.includes(graph.blocks[id]!.group ?? ""));
@@ -86,6 +92,8 @@ function run(graph: Graph, edit: Edit): string | null {
       const folder = edit.type === "folder";
       const source = parent.source ? `${parent.source}/${name}` : name;
       const id = mint(graph, `${folder ? "dir" : "file"}:${source}`);
+      /** In the collection a file or folder is a definition; inside a document, content. */
+      const collected = in_collection(graph, edit.parent);
       graph.blocks[id] = {
         id,
         parent: edit.parent,
@@ -93,6 +101,7 @@ function run(graph: Graph, edit: Edit): string | null {
         name,
         source,
         order: children(graph, edit.parent).length + 1,
+        ...(collected ? { def: {} } : {}),
       };
       return null;
     }
@@ -119,6 +128,12 @@ function seat(graph: Graph, parent: Id, id: Id, at?: number): void {
   const landing = at === undefined || at < 0 || at > held.length ? held.length : at;
   held.splice(landing, 0, id);
   held.forEach((each, index) => { graph.blocks[each]!.order = index + 1; });
+}
+
+/** Whether a place is the collection's — its root or a folder in it — rather than a document's. */
+function in_collection(graph: Graph, at: Id): boolean {
+  const block = graph.blocks[at];
+  return block?.parent === null || (!!block?.def && block.type === "folder");
 }
 
 /** Whether moving into `parent` would put a block inside itself. */
@@ -151,8 +166,6 @@ function clone(graph: Graph): Graph {
     root: graph.root,
     blocks: copied(graph.blocks),
     edges: copied(graph.edges),
-    defs: graph.defs,
-    packages: graph.packages,
   };
 }
 

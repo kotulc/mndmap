@@ -67,7 +67,7 @@ function depth(graph: Graph, id: Id): number {
 /** A table's cells: its header as the page wrote it, a line per row of its grid's values. */
 function cells_of(block: Block): string[][] | null {
   const grid = block.grid;
-  const fields = block.fields ?? [];
+  const fields = block.values ?? [];
   if (!grid || !fields.length) return null;
   const values = (grid.values ?? []).slice(1).map((row) => fields.map((_, n) => row[n] ?? ""));
   return [head_of(block.body, fields.map((field) => field.name)), ...values];

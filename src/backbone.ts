@@ -3,8 +3,8 @@
  *  Each group is a box holding its head, its other members in rows `across` cards wide beside the
  *  head, and under them its own groups, stepped `INDENT` right. A flow line runs to each head from
  *  its parent's or the sibling's before it, and from a head through its members in order. What
- *  sits in no group reads in a row at the top. The page draws the document so, and the definitions
- *  diagram its usages by kind; neither stores a place or a line. */
+ *  sits in no group reads in a row at the top. The page draws a document so, and stores neither a
+ *  place nor a line. */
 
 import { UNITS, children, group_head, headed_group, is_group, size_of, type Block, type Graph,
          type Id } from "@mnd/kit";
@@ -13,9 +13,9 @@ import { UNITS, children, group_head, headed_group, is_group, size_of, type Bloc
 const INDENT = 2;
 
 
-/** The layer at the root placed as a backbone, its blocks already sized; `line` is the relation its
- *  flow lines are, and `label` names each group's box by how many members sit beside its head. */
-export function staircase(graph: Graph, across: number, line: Id,
+/** A layer placed as a backbone, its blocks already sized; `line` is the relation its flow lines
+ *  are, and `label` names each group's box by how many members sit beside its head. */
+export function staircase(graph: Graph, layer: Id, across: number, line: Id,
                           label: (group: Block, n: number) => string): Graph {
   const air = UNITS.unit;
   const gap = UNITS.gap * air;
@@ -25,7 +25,7 @@ export function staircase(graph: Graph, across: number, line: Id,
   const lane = one.w + air * 2;
   const blocks = { ...graph.blocks };
   const edges = { ...graph.edges };
-  const kin = children(graph, graph.root);
+  const kin = children(graph, layer);
   const size = (id: Id) => size_of(graph, id);
   const put = (id: Id, x: number, y: number) => { blocks[id] = { ...blocks[id]!, x, y }; };
   /** A directed flow line, from one block to the next it reads to. */
