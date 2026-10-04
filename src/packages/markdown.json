@@ -1,0 +1,296 @@
+{
+  "schema": "1.0",
+  "id": "md",
+  "graph": {
+    "root": "md",
+    "blocks": {
+      "md": {
+        "id": "md",
+        "parent": null,
+        "name": "markdown"
+      },
+      "md.blocks": {
+        "id": "md.blocks",
+        "parent": "md",
+        "name": "blocks",
+        "type": "group",
+        "order": 1
+      },
+      "md.relations": {
+        "id": "md.relations",
+        "parent": "md",
+        "name": "relations",
+        "type": "group",
+        "order": 2
+      },
+      "md.tags": {
+        "id": "md.tags",
+        "parent": "md",
+        "name": "tags",
+        "type": "group",
+        "order": 3
+      },
+      "md.document": {
+        "id": "md.document",
+        "parent": "md.blocks",
+        "type": "block",
+        "def": {},
+        "name": "document",
+        "tags": [
+          "md.structure"
+        ],
+        "body": "A markdown file: a root structure whose contents are read under it, as the page writes them. Read when it is first opened.",
+        "settings": {
+          "card": {
+            "icon": "content_lead"
+          },
+          "style": {
+            "hue": 235,
+            "intensity": 0.5
+          }
+        },
+        "order": 4
+      },
+      "md.section": {
+        "id": "md.section",
+        "parent": "md.blocks",
+        "type": "group",
+        "def": {},
+        "name": "section",
+        "tags": [
+          "md.structure"
+        ],
+        "body": "A heading and what it heads, until a heading as high: a group of its heading, its content and its own sections, headed by its heading. Named by the heading as written.",
+        "settings": {
+          "card": {
+            "icon": "content_heading"
+          },
+          "style": {
+            "hue": 235,
+            "intensity": 0.9
+          },
+          "allows": {
+            "heads": [
+              "md.heading"
+            ]
+          }
+        },
+        "order": 5
+      },
+      "md.heading": {
+        "id": "md.heading",
+        "parent": "md.blocks",
+        "type": "block",
+        "def": {},
+        "name": "heading",
+        "tags": [
+          "md.structure"
+        ],
+        "body": "A section's heading, first in its section: the backbone the document reads down. Its level is how deep its section sits.",
+        "settings": {
+          "card": {
+            "icon": "content_heading",
+            "align": "center"
+          },
+          "style": {
+            "hue": 235,
+            "intensity": 0.9
+          }
+        },
+        "order": 6
+      },
+      "md.text": {
+        "id": "md.text",
+        "parent": "md.blocks",
+        "type": "block",
+        "def": {},
+        "name": "text",
+        "tags": [
+          "md.prose"
+        ],
+        "body": "Prose: a run of paragraphs and quotes, held whole on the block's body.",
+        "settings": {
+          "card": {
+            "icon": "content_text",
+            "name": "hide",
+            "body": "show",
+            "height": "fit"
+          },
+          "style": {
+            "hue": 350,
+            "intensity": 0.6
+          }
+        },
+        "order": 7
+      },
+      "md.list": {
+        "id": "md.list",
+        "parent": "md.blocks",
+        "type": "block",
+        "def": {},
+        "name": "list",
+        "tags": [
+          "md.prose"
+        ],
+        "body": "An ordered, unordered or task list. Its items are its body, as written.",
+        "settings": {
+          "card": {
+            "icon": "content_list",
+            "body": "show",
+            "height": "fit"
+          },
+          "style": {
+            "hue": 5,
+            "intensity": 0.8
+          }
+        },
+        "order": 8
+      },
+      "md.code": {
+        "id": "md.code",
+        "parent": "md.blocks",
+        "type": "block",
+        "def": {},
+        "name": "code",
+        "tags": [
+          "md.prose"
+        ],
+        "body": "A fenced block, fence and all. Its language names it.",
+        "settings": {
+          "card": {
+            "icon": "content_code",
+            "body": "show",
+            "height": "fit"
+          },
+          "style": {
+            "hue": 340,
+            "intensity": 0.95
+          }
+        },
+        "order": 9
+      },
+      "md.table": {
+        "id": "md.table",
+        "parent": "md.blocks",
+        "type": "grid",
+        "def": {},
+        "name": "table",
+        "tags": [
+          "md.data"
+        ],
+        "body": "A table. One grid of its rows' values, headed by their schema; its key column names each row.",
+        "settings": {
+          "card": {
+            "icon": "role_table",
+            "fields": "show",
+            "height": "free"
+          },
+          "style": {
+            "hue": 285,
+            "intensity": 0.95,
+            "name_contrast": "strong",
+            "border_contrast": "soft"
+          }
+        },
+        "order": 10
+      },
+      "md.image": {
+        "id": "md.image",
+        "parent": "md.blocks",
+        "type": "block",
+        "def": {},
+        "name": "image",
+        "tags": [
+          "md.media"
+        ],
+        "body": "An image. Its source is where it lives, previewed on its card; its alt text names it.",
+        "settings": {
+          "card": {
+            "icon": "content_image",
+            "preview": "show"
+          },
+          "style": {
+            "hue": 90,
+            "intensity": 0.85
+          }
+        },
+        "order": 11
+      },
+      "md.front": {
+        "id": "md.front",
+        "parent": "md.blocks",
+        "type": "note",
+        "def": {},
+        "name": "frontmatter",
+        "tags": [
+          "md.structure"
+        ],
+        "body": "The document's own metadata, as it was written.",
+        "settings": {
+          "card": {
+            "icon": "content_front"
+          },
+          "style": {
+            "hue": 220,
+            "intensity": 0.6,
+            "fill": "solid",
+            "opacity": 1,
+            "name_contrast": "strong"
+          }
+        },
+        "order": 12
+      },
+      "md.flow": {
+        "id": "md.flow",
+        "parent": "md.relations",
+        "type": "line",
+        "def": {},
+        "name": "flow",
+        "body": "The order a document reads in: section to section, and block to block inside one.",
+        "settings": {
+          "line": {
+            "name": "hide"
+          }
+        },
+        "order": 13
+      },
+      "md.structure": {
+        "id": "md.structure",
+        "parent": "md.tags",
+        "type": "tag",
+        "def": {},
+        "name": "structure",
+        "body": "What a document is built of: the document, its sections and headings, its front matter.",
+        "order": 14
+      },
+      "md.prose": {
+        "id": "md.prose",
+        "parent": "md.tags",
+        "type": "tag",
+        "def": {},
+        "name": "prose",
+        "body": "What a document says: its text, lists and fences, read in order.",
+        "order": 15
+      },
+      "md.data": {
+        "id": "md.data",
+        "parent": "md.tags",
+        "type": "tag",
+        "def": {},
+        "name": "data",
+        "body": "What a document holds as values: its tables.",
+        "order": 16
+      },
+      "md.media": {
+        "id": "md.media",
+        "parent": "md.tags",
+        "type": "tag",
+        "def": {},
+        "name": "media",
+        "body": "What a document shows: its images.",
+        "order": 17
+      }
+    },
+    "edges": {}
+  }
+}

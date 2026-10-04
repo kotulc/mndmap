@@ -4,17 +4,16 @@
  *  describes it. What a block *means* is the markdown package's business, not this reader's — so
  *  a new element is a definition there plus one line here, and nothing else moves.
  *
- *  A document is one flat layer under its document block. A heading is a section group holding
- *  what follows it, and a section under it is a group inside it: membership, never parenthood.
+ *  A document is one layer under its document block. A heading is a section group holding what
+ *  follows it, and a section under it is a group inside it: each held by `parent`.
  *  Content is split where its kind changes — a run of paragraphs and quotes is one text block, and
  *  each list, fence, table and image its own — and read in order. */
 
 import { marked, type Token, type Tokens } from "marked";
-import { UNITS, children, set_card, set_full, size_of, type Block, type Graph, type Id }
-  from "@mnd/kit";
+import { UNITS, children, outline_graph, set_card, set_full, size_of, subtree, type Block,
+         type Graph, type Id } from "@mnd/kit";
 import { CODE, FLOW, FRONT, HEADING, IMAGE, LIST, SECTION, TABLE, TEXT }
   from "./packages/markdown.js";
-import { staircase } from "./backbone.js";
 import { form_of } from "./forms.js";
 import { plain } from "./names.js";
 
@@ -34,19 +33,12 @@ const LINES = 6;
 const PROSE: readonly string[] = ["paragraph", "blockquote", "html", "def"];
 
 
-/** Whether a document still waits to be read: its text is still on its body, which reading
- *  moves into its blocks. */
-export function unread(graph: Graph, doc: Id): boolean {
-  return graph.blocks[doc]?.body !== undefined;
-}
-
-/** The graph with a document's text read into blocks under it, one per element, each in its
- *  section; the text leaves its body, as its blocks now hold it. Ids are the document's own, so a
- *  document reads the same blocks every time. */
-export function read(source: Graph, doc: Id): Graph {
+/** The graph with a document's text — read from its file when it is opened — put into blocks
+ *  under it, one per element, each in its section. Ids are the document's own, so a document
+ *  reads the same blocks every time; what it held before is read again. */
+export function read(source: Graph, doc: Id, text: string): Graph {
   const graph: Graph = { ...source, blocks: { ...source.blocks } };
-  const { body: text = "", ...rest } = graph.blocks[doc]!;
-  graph.blocks[doc] = rest;
+  for (const id of subtree(graph, doc)) if (id !== doc) delete graph.blocks[id];
   /** The sections still open, outermost first. A heading holds what follows it until one of the
    *  same level or higher closes it. */
   const open: { id: Id; depth: number }[] = [];
@@ -63,9 +55,8 @@ export function read(source: Graph, doc: Id): Graph {
   // After anything already put under it before it was read.
   let order = Math.max(0, ...children(graph, doc).map((block) => block.order ?? 0));
   const put = (block: Omit<Block, "id" | "parent" | "order">, kind: string): Block => {
-    const group = open[open.length - 1]?.id;
-    const held = { ...block, id: mint(kind), parent: doc, order: ++order,
-                   ...(group ? { group } : {}) } as Block;
+    const parent = open[open.length - 1]?.id ?? doc;
+    const held = { ...block, id: mint(kind), parent, order: ++order } as Block;
     graph.blocks[held.id] = held;
     return held;
   };
@@ -147,7 +138,7 @@ export function read(source: Graph, doc: Id): Graph {
 }
 
 /** The document laid out as it reads: a backbone of headings down the page, each section's content
- *  beside its heading, its own sections boxed under it (see `staircase`).
+ *  beside its heading, its own sections boxed under it — the kit's `outline` layout.
  *
  *  A small block is one card; a table spans a column for every two of its own, a long fence or
  *  list two. A block is cut at `TALL` cards high, unless `full` shows all of it. Drawn, never
@@ -160,7 +151,7 @@ export function laid(graph: Graph, doc: Id, card: { w: number; h: number }, full
   const one = { w: UNITS.block.w * air, h: UNITS.block.h * air };
   const wide = (span: number) => span * one.w + (span - 1) * gap;
   const blocks = { ...graph.blocks };
-  const kin = children(graph, doc);
+  const kin = subtree(graph, doc).filter((id) => id !== doc).map((id) => graph.blocks[id]!);
 
   /** How tall a block would be, shown whole. */
   const whole = (id: Id) => {
@@ -182,8 +173,11 @@ export function laid(graph: Graph, doc: Id, card: { w: number; h: number }, full
       blocks[block.id] = { ...block, w: wide(span), h, settings: { card: { height: "free" } } };
     }
   }
-  return staircase({ ...graph, blocks }, doc, across, FLOW,
-                   (_, n) => `section (${n} ${n === 1 ? "block" : "blocks"})`);
+  const page = blocks[doc]!;
+  blocks[doc] = { ...page, settings: { ...page.settings,
+                                       layout: { kind: "outline", across, line: FLOW } } };
+  return outline_graph({ ...graph, blocks }, doc,
+                       (_, n) => `section (${n} ${n === 1 ? "block" : "blocks"})`);
 }
 
 

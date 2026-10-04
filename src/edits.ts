@@ -7,9 +7,9 @@
 import { children, type Block, type Graph, type Id } from "@mnd/kit";
 
 export type Edit =
-  /** Re-parent, and land together, in order, at a place among the new siblings. What is not
-   *  grouped by another of them joins the group named, or none. */
-  | { do: "move"; ids: Id[]; parent: Id; at?: number; group?: Id | null }
+  /** Re-parent, and land together, in order, at a place among the new siblings: a section is a
+   *  parent like any other. */
+  | { do: "move"; ids: Id[]; parent: Id; at?: number }
   /** Re-order among the siblings it already has. */
   | { do: "order"; id: Id; at: number }
   | { do: "rename"; id: Id; name: string }
@@ -46,28 +46,23 @@ function run(graph: Graph, edit: Edit): string | null {
   switch (edit.do) {
     case "move": {
       if (!graph.blocks[edit.parent]) return `there is nowhere called ${edit.parent}`;
-      if (edit.group && edit.ids.includes(edit.group)) return "a group cannot hold itself";
       const collected = in_collection(graph, edit.parent);
       for (const id of edit.ids) {
         if (!graph.blocks[id]) return `nothing here is called ${id}`;
         if (holds(graph, id, edit.parent)) return `${name_of(graph, id)} cannot hold itself`;
         /** A file or folder stays in the collection, and content in a document. */
-        if (!!graph.blocks[id]!.def !== collected) {
-          return graph.blocks[id]!.def ? `${name_of(graph, id)} belongs in the collection`
+        if (filed(graph, id) !== collected) {
+          return filed(graph, id) ? `${name_of(graph, id)} belongs in the collection`
             : `${name_of(graph, id)} belongs in a document`;
         }
       }
-      // What the moved blocks group among themselves stays so; the rest join where they land.
-      const top = edit.ids.filter((id) => !edit.ids.includes(graph.blocks[id]!.group ?? ""));
-      for (const id of edit.ids) graph.blocks[id]!.parent = edit.parent;
-      for (const id of top) {
-        if (edit.group) graph.blocks[id]!.group = edit.group;
-        else if (edit.group === null) delete graph.blocks[id]!.group;
-      }
+      // What the moved blocks hold among themselves stays so; the rest land where they were put.
+      const top = edit.ids.filter((id) => !edit.ids.includes(graph.blocks[id]!.parent ?? ""));
+      for (const id of top) graph.blocks[id]!.parent = edit.parent;
       const held = children(graph, edit.parent).map((block) => block.id)
         .filter((id) => !edit.ids.includes(id));
       const at = edit.at === undefined || edit.at < 0 || edit.at > held.length ? held.length : edit.at;
-      held.splice(at, 0, ...edit.ids);
+      held.splice(at, 0, ...top);
       held.forEach((id, n) => { graph.blocks[id]!.order = n + 1; });
       return null;
     }
@@ -133,7 +128,13 @@ function seat(graph: Graph, parent: Id, id: Id, at?: number): void {
 /** Whether a place is the collection's — its root or a folder in it — rather than a document's. */
 function in_collection(graph: Graph, at: Id): boolean {
   const block = graph.blocks[at];
-  return block?.parent === null || (!!block?.def && block.type === "folder");
+  return block?.parent === null || (!block?.def && block?.type === "folder");
+}
+
+/** Whether a block is the collection's own: a file (a definition) or a folder. */
+function filed(graph: Graph, id: Id): boolean {
+  const block = graph.blocks[id];
+  return !!block?.def || block?.type === "folder";
 }
 
 /** Whether moving into `parent` would put a block inside itself. */

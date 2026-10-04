@@ -29,8 +29,8 @@ export function covered(graph: Graph, picked: readonly Id[]): Set<Id> {
 
 /** The section a block sits in, where it sits in one. */
 export function section_of(graph: Graph, id: Id | undefined): Id | null {
-  const group = graph.blocks[id ?? ""]?.group;
-  return graph.blocks[group ?? ""]?.type === SECTION ? group! : null;
+  const up = graph.blocks[id ?? ""]?.parent;
+  return up && graph.blocks[up]?.type === SECTION ? up : null;
 }
 
 /** The document as markdown, one segment per block that writes any, in reading order. A heading's
@@ -38,7 +38,7 @@ export function section_of(graph: Graph, id: Id | undefined): Id | null {
  *  own. */
 export function segments(graph: Graph, layer: Id = graph.root): Segment[] {
   return children(graph, layer).flatMap((block): Segment[] => {
-    if (block.type === SECTION) return [];
+    if (block.type === SECTION) return segments(graph, block.id);
     const level = block.type === HEADING ? Math.min(depth(graph, block.id), LEVELS) : 0;
     const cells = block.type === TABLE ? cells_of(block) : null;
     const text = cells ? table_text(cells)
@@ -52,10 +52,9 @@ export function segments(graph: Graph, layer: Id = graph.root): Segment[] {
 }
 
 
-/** A block and every block grouped in it, however deep. */
+/** A block and every block it holds, however deep. */
 function members(graph: Graph, id: Id): Id[] {
-  const held = Object.values(graph.blocks).filter((block) => block.group === id);
-  return [id, ...held.flatMap((block) => members(graph, block.id))];
+  return [id, ...children(graph, id).flatMap((block) => members(graph, block.id))];
 }
 
 /** How many sections a block sits in. */

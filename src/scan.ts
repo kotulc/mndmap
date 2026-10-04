@@ -1,18 +1,19 @@
-/** A folder or a file on disk, read into a collection: the workspace's domain, a definition per
- *  folder and file.
+/** A folder or a file on disk, listed into a collection: the workspace's domain, a folder per
+ *  folder and a definition per file.
  *
- *  Nothing is parsed here. A markdown file is a `document` definition, carrying its text on its
- *  `body` until it is first opened and read into its structure (`read.ts`); any other file is a
- *  plain block definition. Folders are `folder` definitions organizing the rest. The workspace's
- *  root is the folder; one file picked on its own sits in a root named after it. */
+ *  **Nothing is read here.** A file is listed by its path (`source`); its text is read from disk
+ *  when its document is first opened (`read.ts`), through the reader each file keeps. A markdown
+ *  file is a `document` definition, any other a plain block definition, and folders are holders
+ *  organizing them. The workspace's root is the folder; one file picked on its own sits in a root
+ *  named after it. */
 
 import { children, FLOOR, ROOT, type Block, type Graph, type Id } from "@mnd/kit";
 import { DOCUMENT, MARKDOWN } from "./packages/markdown.js";
 
-/** One file as it was read: its path from the picked folder, and its text. */
+/** One file as it was listed: its path from the picked folder, and how to read its text. */
 export interface SourceFile {
   path: string;
-  text: string;
+  read: () => Promise<string>;
 }
 
 /** The packages every collection reads over: the kit's base and markdown. */
@@ -44,7 +45,7 @@ export function scan(name: string, files: SourceFile[]): Graph {
       const id = `dir:${at}`;
       if (!graph.blocks[id]) {
         graph.blocks[id] = {
-          id, parent, type: "folder", def: {}, name: part, source: at, order: next(parent),
+          id, parent, type: "folder", name: part, source: at, order: next(parent),
         };
       }
       parent = id;
@@ -53,7 +54,7 @@ export function scan(name: string, files: SourceFile[]): Graph {
     const id = `file:${file.path}`;
     graph.blocks[id] = {
       id, parent, type: is_markdown(file.path) ? DOCUMENT : "block", def: {}, name: leaf,
-      source: file.path, order: next(parent), ...(file.text ? { body: file.text } : {}),
+      source: file.path, order: next(parent),
     };
   }
 
@@ -74,7 +75,7 @@ export function is_document(graph: Graph, id: Id): boolean {
 /** The first document in a collection, in reading order: what it opens on. */
 export function first_document(graph: Graph, at: Id = graph.root): Id | null {
   if (is_document(graph, at)) return at;
-  for (const kid of children(graph, at).filter((block: Block) => block.def)) {
+  for (const kid of children(graph, at).filter((block: Block) => !block.of)) {
     const found = first_document(graph, kid.id);
     if (found) return found;
   }
@@ -103,7 +104,9 @@ export async function dev_sample(): Promise<{ name: string; files: SourceFile[] 
   if (!import.meta.env.DEV) return null;
   const response = await fetch(`/sample.json${window.location.search}`);
   if (!response.ok) return null;
-  return response.json() as Promise<{ name: string; files: SourceFile[] }>;
+  const said = await response.json() as { name: string; files: { path: string; text: string }[] };
+  return { name: said.name,
+           files: said.files.map((f) => ({ path: f.path, read: async () => f.text })) };
 }
 
 /** Ask for one markdown file. The single-document case, which is the one
@@ -122,8 +125,8 @@ export async function pick_file(): Promise<{ name: string; files: SourceFile[] }
       types: [{ description: "Markdown", accept: { "text/markdown": [".md", ".mdx"] } }],
     });
     if (!handle) return null;
-    const file = await handle.getFile();
-    return { name: handle.name, files: [{ path: handle.name, text: await file.text() }] };
+    return { name: handle.name,
+             files: [{ path: handle.name, read: async () => (await handle.getFile()).text() }] };
   } catch (error: unknown) {
     if (error instanceof DOMException && error.name === "AbortError") return null;
     throw error;
@@ -171,8 +174,8 @@ async function gather(handle: FileSystemDirectoryHandle, prefix: string): Promis
       out.push(...await gather(entry as FileSystemDirectoryHandle, path));
       continue;
     }
-    const file = await (entry as FileSystemFileHandle).getFile();
-    out.push({ path, text: TEXT.test(name) ? await file.text() : "" });
+    const file = entry as FileSystemFileHandle;
+    out.push({ path, read: async () => (TEXT.test(name) ? (await file.getFile()).text() : "") });
   }
   return out;
 }
@@ -194,7 +197,7 @@ function pick_via_input(folder = true): Promise<{ name: string; files: SourceFil
         const parts = full.split("/");
         if (parts.length > 1) name = parts[0]!;
         const path = parts.length > 1 ? parts.slice(1).join("/") : full;
-        files.push({ path, text: TEXT.test(path) ? await file.text() : "" });
+        files.push({ path, read: async () => (TEXT.test(path) ? file.text() : "") });
       }
       resolve({ name, files });
     });

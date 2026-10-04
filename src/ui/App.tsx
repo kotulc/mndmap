@@ -1,20 +1,21 @@
 /** The shell over one held collection.
  *
- *  A folder is read into a collection — a block per folder and file — and each markdown file is a
- *  document, read into content blocks the first time it is opened: a section group per heading,
- *  and a block per run of prose, list, fence, table and image. The explorer's two sections are a
- *  chain: `collection` holds a folder or document, and `document` lists what it holds. The canvas
- *  draws the section in focus — the collection as cards, a document as its page. The explorer,
- *  canvas and tray are the kit's; reading, the page, the markdown tab and reorganizing are
- *  mndmap's — edits apply to the held graph, and undo is the stack of graphs behind it. */
+ *  A folder is listed into a collection — a holder per folder, a definition per file — and each
+ *  markdown file is a document, read from disk into content blocks the first time it is reached: a
+ *  section group per heading, and a block per run of prose, list, fence, table and image. The
+ *  explorer's two sections are a chain: `collection` holds a folder or document, and `document`
+ *  lists what it holds. **The explorer browses; the canvas draws what was opened** — a folder's
+ *  cards, a document as its page. The explorer, canvas and tray are the kit's; reading, the page,
+ *  the markdown tab and reorganizing are mndmap's — edits apply to the held graph, and undo is the
+ *  stack of graphs behind it. */
 
 import { Explorer, Icon, TrayFrame, Viewer, WorkspaceHeader, domain_listing, structure_listing,
          useChain, useDisplay, useTray, type Slice } from "@mnd/kit/react";
-import { CARD, UNITS, children, headed_group, open, path, write, type Graph, type Id }
-  from "@mnd/kit";
+import { CARD, UNITS, children, headed_group, layer_of, open, path, write, type Graph,
+         type Id } from "@mnd/kit";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apply, Stack, type Edit } from "../edits.js";
-import { laid, read, unread } from "../read.js";
+import { laid, read } from "../read.js";
 import { dev_sample, drop_folder, first_document, is_document, pick_file, pick_folder, save, scan,
          PACKAGES, type SourceFile } from "../scan.js";
 import { covered, section_of } from "../series.js";
@@ -46,10 +47,8 @@ const BLANK = "Drop a markdown document or a folder, or pick one below.";
 /** The tray's one tab. */
 const TABS = ["markdown"] as const;
 
-/** Keys beside the explorer's arrows: open what is picked, clear it, and leave the layer. */
-const ENTER = "Enter";
+/** The key beside the explorer's own: clear the pick, and with nothing picked, leave. */
 const CLEAR = "Escape";
-const LEAVE = "Backspace";
 
 /** The sections: the collection — the workspace's domain, its folders and documents — then the
  *  document held, its own row with its content under it. */
@@ -85,23 +84,22 @@ export function App() {
   /** How many cards a row sets across: a card and the air after it are its step. */
   const across = Math.min(ACROSS.most, Math.max(ACROSS.least,
     Math.floor(room / Math.max(1, (display.card.w + UNITS.gap) * UNITS.unit))));
-  /** What the collection holds, and the layer the canvas draws: in the collection, the layer
-   *  that holds it, with it picked; in the document, it — a document as its page — or, where the
-   *  document section holds something deeper in a folder, the layer that sits on. */
+  /** What the collection holds, and the layer the canvas draws: **what was last opened**, never
+   *  what is browsed — a folder's cards, or a document as its page. */
   const home = graph ? chain.held[AT_COLLECTION] ?? graph.root : null;
-  const held = chain.held[AT_DOCUMENT];
-  const deep = graph && chain.at === AT_DOCUMENT && held ? graph.blocks[held]?.parent : null;
-  const layer = !graph || !home ? null
-    : chain.at === AT_COLLECTION ? graph.blocks[home]?.parent ?? home
-    : is_document(graph, home) ? home : deep ?? home;
+  const [opened_at, setOpened] = useState<Id | null>(null);
+  const layer = graph ? (opened_at && graph.blocks[opened_at] ? opened_at : graph.root) : null;
+  /** Each file's reader, by its path, for the session: a document is read when it is reached. */
+  const sources = useRef(new Map<string, () => Promise<string>>());
+  /** Which documents were read this session. Session state, never in the graph. */
+  const reading = useRef(new Set<Id>());
   /** The document drawn as a page, where the layer is one. */
   const doc = graph && layer && is_document(graph, layer) ? layer : null;
   const page = useMemo(() => (graph && doc ? laid(graph, doc, display.card, full, across) : null),
     [graph, doc, display.card, full, across]);
   const view = page ?? graph;
-  /** What the canvas lights: the collection's pick on its layer, else the pick. */
-  const cards = chain.at === AT_COLLECTION && home && home !== layer ? [home]
-    : picked.filter((id) => id !== layer);
+  /** What the canvas lights: the pick, where it is drawn. */
+  const cards = picked.filter((id) => id !== layer);
   /** What the tray lights: the section the pick sits in, whole. */
   const lit = useMemo(() => (graph && doc ? covered(graph, [section_of(graph, picked[0])
     ?? picked[0] ?? ""]) : new Set<Id>()), [graph, doc, picked[0]]);
@@ -117,31 +115,38 @@ export function App() {
     try { localStorage.setItem("mnd.theme", theme); } catch { /* a private window */ }
   }, [theme]);
 
-  /** A document opened for the first time is read, and its sections fold under their headings.
-   *  Reading is not an edit: it says what was always there. */
-  const opened = (held: Graph, id: Id): Graph => {
-    if (!is_document(held, id) || !unread(held, id)) return held;
-    const next = read(held, id);
-    const heads = children(next, id).filter((block) => headed_group(next, block.id))
-      .map((block) => `${SLICES[AT_DOCUMENT]!.id}/${block.id}`);
-    setFolded((was) => [...new Set([...was, ...heads])]);
-    return next;
+  /** A document reached for the first time is read from its file — the text it has on disk now —
+   *  and its sections fold under their headings. Reading is not an edit: it says what was always
+   *  there. A document that came in a workspace file already holds what it read. */
+  const reach = (held: Graph, id: Id) => {
+    if (!is_document(held, id) || reading.current.has(id) || children(held, id).length) return;
+    const get = sources.current.get(held.blocks[id]?.source ?? "");
+    if (!get) return;
+    reading.current.add(id);
+    void get().then((text) => setGraph((was) => {
+      if (!was?.blocks[id]) return was;
+      const next = read(was, id, text);
+      const heads = Object.values(next.blocks).filter((block) => headed_group(next, block.id))
+        .map((block) => `${SLICES[AT_DOCUMENT]!.id}/${route(next, id, block.id)}`);
+      setFolded((folds) => [...new Set([...folds, ...heads])]);
+      return next;
+    }));
   };
 
-  /** Whatever the sections hold that is still unread is read as it is reached. */
+  /** Whatever the sections hold, or the canvas has open, is read as it is reached. */
   useEffect(() => {
     if (!graph) return;
-    const next = chain.held.reduce<Graph>((held, id) => (id ? opened(held, id) : held), graph);
-    if (next !== graph) setGraph(next);
-  }, [graph, chain.held.join("|")]);
+    for (const id of [...chain.held, layer]) if (id) reach(graph, id);
+  }, [graph, chain.held.join("|"), layer]);
 
   const settle = (found: Graph, name: string, said: string) => {
     stack.current = new Stack();
-    const next = found;
-    const first = first_document(next);
+    reading.current = new Set();
+    const first = first_document(found);
     setFolded([]);
-    setGraph(first ? opened(next, first) : next);
+    setGraph(found);
     setPicked([]);
+    setOpened(first);
     tray.release();
     chain.onTrace(first ? [first, null] : [null]);
     setNote(`${name}: ${said}.`);
@@ -174,6 +179,7 @@ export function App() {
     if (!found) return;
     if (!found.files.length) { setNote("Nothing to read there."); return; }
     const collection = scan(found.name, found.files);
+    sources.current = new Map(found.files.map((f) => [f.path, f.read]));
     const docs = Object.keys(collection.blocks).filter((id) => is_document(collection, id));
     settle(collection, found.name, `${found.files.length} files, ${docs.length} documents`);
   };
@@ -238,17 +244,22 @@ export function App() {
     return !at || at === id ? [id] : [at, id];
   };
 
-  /** Hold this block where it sits, and pick it; the tray goes back to the canvas. */
+  /** Hold this block where it sits, and pick it; the tray goes back to the canvas. A pick inside
+   *  the open document may move the canvas to the layer it is drawn on. */
   const reveal = (id: Id) => {
     if (!graph) return;
     const at = trail_of(graph, id);
     chain.onTrace(at);
     setPicked(id === graph.root ? [] : [id]);
+    const doc = at.length > 1 ? at[0] : null;
+    if (doc && layer && (layer === doc || path(graph, layer).some((b) => b.id === doc))) {
+      setOpened(layer_of(graph, id) ?? doc);
+    }
     tray.release();
   };
 
-  /** A row chosen in the explorer is held in its section: in the collection, picked on the layer
-   *  that holds it; in the document, picked — its header picks nothing. */
+  /** **A row chosen in the explorer is browsed**: held in its section and picked, so the tray
+   *  shows it, while the canvas stays where it was opened. */
   const choose = (at: number, id: Id | null) => {
     chain.onChoose(at, id);
     tray.release();
@@ -262,21 +273,25 @@ export function App() {
     setPicked(ids);
   };
 
-  /** Open a folder or document — what is picked, by default: the document section holds it,
-   *  drawn as its contents, a document as its page. */
+  /** Open a folder or document — what is picked, by default — for the canvas to draw: a folder's
+   *  cards, a document as its page, or a block holding content as its own layer. */
   const enter = (id = picked.length === 1 ? picked[0] : chain.at === AT_COLLECTION ? home : null) => {
     if (!graph || !id || !graph.blocks[id]) return;
     if (!is_document(graph, id) && !children(graph, id).length) return;
-    chain.onTrace([id, null]);
+    const doc = path(graph, id).map((b) => b.id).find((each) => is_document(graph, each));
+    chain.onTrace(doc && doc !== id ? [doc, id] : [id, null]);
+    setOpened(id);
     setPicked([]);
   };
 
-  /** Leave for the collection, what was open picked there; in the collection, go up a folder. */
+  /** Leave for the layer the open one is drawn on, what was open picked there. */
   const leave = () => {
-    if (!graph || !home) return;
-    if (chain.at === AT_DOCUMENT) { chain.onTrace([home]); setPicked([home]); return; }
-    const up = graph.blocks[home]?.parent;
-    if (up) { chain.onTrace([up]); setPicked([up]); }
+    if (!graph || !layer || layer === graph.root) return;
+    const up = layer_of(graph, layer) ?? graph.root;
+    const doc = path(graph, up).map((b) => b.id).find((each) => is_document(graph, each));
+    chain.onTrace(doc ? [doc, up] : [up]);
+    setOpened(up);
+    setPicked([layer]);
   };
 
   /** Clear the pick; with nothing picked, leave. */
@@ -292,7 +307,7 @@ export function App() {
     const key = (event: KeyboardEvent) => {
       const typing = event.target instanceof HTMLElement
         && event.target.closest("input, textarea, select, button, [contenteditable='true']");
-      const does: Record<string, () => void> = { [ENTER]: () => enter(), [CLEAR]: clear, [LEAVE]: leave };
+      const does: Record<string, () => void> = { [CLEAR]: clear };
       const act = does[event.key];
       if (typing || event.defaultPrevented || !act) return;
       event.preventDefault();
@@ -335,10 +350,11 @@ export function App() {
       const before = said && (headed_group(graph, said) ?? said);
       const kin = children(graph, parent).map((block) => block.id).filter((id) => !ids.includes(id));
       const at = before && kin.includes(before) ? kin.indexOf(before) : kin.length;
-      // They join the group of the row they land under — the group it heads, where it heads one.
+      // Under a row that heads a section, they land in that section, after its head.
       const above = kin[at - 1];
-      const group = above ? headed_group(graph, above) ?? graph.blocks[above]?.group ?? null : null;
-      edit({ do: "move", ids, parent, group, at });
+      const into = above ? headed_group(graph, above) : null;
+      if (into) edit({ do: "move", ids, parent: into, at: children(graph, into).length });
+      else edit({ do: "move", ids, parent, at });
     }
   };
 
@@ -375,7 +391,7 @@ export function App() {
   const about = graph.blocks[picked[0] ?? ""] ?? graph.blocks[home];
   const kind = about?.type ? graph.blocks[about.type]?.name ?? about.type : "block";
   /** The document the tray reads whole: the one drawn, or a read one picked in the collection. */
-  const shown = doc ?? (about && is_document(graph, about.id) && !unread(graph, about.id)
+  const shown = doc ?? (about && is_document(graph, about.id) && children(graph, about.id).length
     ? about.id : null);
   /** The crumbs: the collection's folders down to the layer drawn. Picking one opens it. */
   const trail = path(graph, layer ?? graph.root)
@@ -415,6 +431,8 @@ export function App() {
             onClick={(event) => void add(event.shiftKey)}><Icon name="add" /></button>
         }
         chain={{ ...chain, onChoose: choose }}
+        onOpen={({ id }) => enter(id)}
+        onLeave={leave}
         onAct={act}
         onFold={(id, shut) => setFolded((held) =>
           shut ? [...new Set([...held, id])] : held.filter((each) => each !== id))}
@@ -424,9 +442,9 @@ export function App() {
         <div className="mm-canvas" ref={setCanvas}>
           {/* One per drawing, so each is framed afresh. Each reads as many cards across as the
               canvas holds, at their own size at most. */}
-          <Viewer key={`${chain.at}:${layer ?? ""}`}
+          <Viewer key={layer ?? ""}
             graph={view ?? graph}
-            layer={layer === graph.root ? null : layer} picked={cards}
+            layer={layer} picked={cards}
             lit={pointed ? [pointed] : []}
             card={display.card} full={full} scroll
             focus={cards[0] ?? null}
@@ -453,6 +471,12 @@ export function App() {
 
 
 /** How wide an element is, in pixels, as it is resized; nothing until there is one. */
+/** A block's route under a tree, as the explorer keys its rows: the tree, then each block down. */
+function route(graph: Graph, tree: Id, id: Id): string {
+  const ids = path(graph, id).map((b) => b.id);
+  return ids.slice(Math.max(0, ids.indexOf(tree))).join("/");
+}
+
 function useWidth(element: HTMLElement | null): number {
   const [width, setWidth] = useState(0);
   useEffect(() => {

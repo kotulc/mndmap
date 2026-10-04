@@ -143,6 +143,11 @@ The model's rules, under review before the next refactor (holding by `parent`, o
 |---|---|
 | every package, `base` and `markdown` included, is defined, imported and exported as `.json`; hosts keep only the id constants their code reads | decided |
 | a package is the smallest unit of export; no subtree files | decided |
+| graft goes: importing a package file adds it, frozen, beside the workspace | decided |
+| a package's dependencies are worked out from the types it names, never stored (`uses` goes) | decided |
+| a workspace file carries the packages it uses (all but `base`), so it is whole; a file naming a definition it does not carry is refused | decided |
+| a package's ids are prefixed with its root's id; importing a package whose ids clash with one loaded is refused | decided |
+| a relationship belongs to the package it is written in; an export keeps one with an end inside and the other in a package it uses | decided |
 | workspaces, settings and every element are definable as `.json` | decided |
 | the explorer always has sections; the single-tree mode goes | decided |
 
