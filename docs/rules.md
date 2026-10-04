@@ -1,6 +1,8 @@
 # Rules
 
-The model's rules, under review before the next refactor (holding by `parent`, organizers without `def`, flatten in projection). Each rule is **decided**, **open**, or **kept**. Spans mndflow (the kit and the editor) and mndmap (the reader).
+The model's rules for mndflow (the kit and the editor) and mndmap (the reader). Each rule is **decided**, **open**, **drop** (a rule removed) or **kept**.
+
+**Status (2026-10-04):** every decided rule here is built in both repos — kit 0.11.0, schema 1.0, samples and packages re-saved — and driven in both apps on the samples. Nothing below is open. The next step is simplification-plan.md, beside this file.
 
 
 ## Concepts (decided)
@@ -109,6 +111,12 @@ The model's rules, under review before the next refactor (holding by `parent`, o
 | context highlighting and breadcrumbs show the canvas's context, never what is browsed | decided |
 | a definition dragged from any package onto the canvas lands in the opened structure | decided |
 | picking within the opened tree may change the layer drawn (reveal); browsing outside it never does | decided |
+| **two canvas views**: the **overview** while nothing is open — every package top-down, in the explorer's order, each a full-width box with its groups and folders nested inside, flattened, definitions at their own size, the page scrolled down, never zoomed out — and the **structure** of the tree opened | decided |
+| the overview is 1:1 with the packages and definitions sections: the same packages in the same order, the same holders and trees | decided |
+| no package or folder canvas view: opening a package, folder or group focuses its box in the overview | decided |
+| selecting in the overview selects, and the sections follow; Enter or a double click on a tree opens its structure | decided |
+| leaving a tree's top returns to the overview, focused on it | decided |
+| mndmap's collection is the same overview: its one package, folders flattened | decided |
 
 ## Read-through in the explorer
 
@@ -126,7 +134,7 @@ The model's rules, under review before the next refactor (holding by `parent`, o
 | Rule | Status |
 |---|---|
 | a layer's layout is a setting, `layout: { kind, … }`, said by its definition and overridable by the block, inherited like any setting | decided |
-| the kit ships a small fixed set of named layouts: `free`, `auto`, `outline` (mndmap's backbone, moved in); an unknown kind draws as `auto` | decided |
+| the kit ships a small fixed set of named layouts: `free`, `auto`, `outline` (mndmap's backbone, moved in), `page` (full-width boxes, cards wrapping in rows, nested holders below; what the overview draws); an unknown kind draws as `auto` | decided |
 
 ## Collections (mndmap)
 
@@ -143,6 +151,7 @@ The model's rules, under review before the next refactor (holding by `parent`, o
 |---|---|
 | every package, `base` and `markdown` included, is defined, imported and exported as `.json`; hosts keep only the id constants their code reads | decided |
 | a package is the smallest unit of export; no subtree files | decided |
+| the `package` action goes; a package is authored as a workspace and exported as a package: its root and ids prefixed with the package's name | decided |
 | graft goes: importing a package file adds it, frozen, beside the workspace | decided |
 | a package's dependencies are worked out from the types it names, never stored (`uses` goes) | decided |
 | a workspace file carries the packages it uses (all but `base`), so it is whole; a file naming a definition it does not carry is refused | decided |
@@ -159,15 +168,15 @@ The model's rules, under review before the next refactor (holding by `parent`, o
 | organizers carry no `def` | `def: {}` on organizing groups |
 | a new workspace: root and `main`, nothing else; groupings are the user's, shown by samples | magic ids `workspace.blocks`, `.relations`, `.tags` |
 | the samples (the extended sample in both repos) re-saved under these rules, to inspect the results | with the refactor |
-| `layer: null` is the forest; the workspace is always `graph.root` | `@packages`, `packages_graph`, `package_card` |
+| `layer: null` is the overview; the workspace is always `graph.root` | `@packages`, `packages_graph`, `package_card` |
 | `traits`: a block's capability tags, apart from `tags` | new |
 | file schema reset to `1.0`, not incremented until the model settles | `SCHEMA = "4.0"` |
 | mndflow reads and writes only package and workspace files; a host's session state (mndmap's read documents) is the host's | |
 | `layout` setting | `Block.arrangement`, `set_arrangement` |
-| unchanged: `def`, `type`, `settings`, `values`, `tags`, `cell`, `grid`, `uses`, `of`, edges, `fromPart` / `toPart` | |
+| `uses` goes: what a package uses is worked out | `Block.uses` |
+| unchanged: `def`, `type`, `settings`, `values`, `tags`, `cell`, `grid`, `of`, edges, `fromPart` / `toPart` | |
 
 
 ## Open
 
-| Item | Notes |
-|---|---|
+Nothing. New questions go here, one row each, until decided.

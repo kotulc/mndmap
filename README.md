@@ -2,21 +2,21 @@
 
 A markdown reader built on the mndflow shell.
 
-A folder of markdown becomes a **collection**: a block per folder and file, each markdown file a
-**document** read into blocks the first time it is opened. What a heading, a table, a list or a
-fence *is* comes from a **markdown package** — a vocabulary of block definitions and tags — rather
-than from the parser's own opinion. The parser stays general and small; the package carries the
-meaning.
+A folder of markdown becomes a **collection**: a folder per folder and a block per file, each
+markdown file a **document** read from disk into blocks the first time it is reached. What a
+heading, a table, a list or a fence *is* comes from a **markdown package** — a vocabulary of block
+definitions and tags, defined as JSON — rather than from the parser's own opinion. The parser stays
+general and small; the package carries the meaning.
 
 Nothing is uploaded and nothing is kept between runs. The page is the whole of it.
 
 | Layer | What it holds |
 |---|---|
-| **collection** | folders and documents, one block each (`scan.ts`). One markdown file on its own sits in a root named after it |
-| **parser** | a document → content blocks under it, read when first opened (`read.ts`) |
-| **markdown package** | what a document, heading, table, list or fence *is*, as definitions; its tags `structure`, `prose`, `data`, `media` say what each kind of content is |
+| **collection** | folders (holders) and documents (definitions), listed by path, nothing read (`scan.ts`). One markdown file on its own sits in a root named after it |
+| **parser** | a document's file → content blocks under it, read when the document is first reached (`read.ts`) |
+| **markdown package** | what a document, heading, table, list or fence *is*, as definitions in `markdown.json`; its tags `structure`, `prose`, `data`, `media` say what each kind of content is |
 | **tables** | a table carries its own schema and its header as written; rows are values |
-| **page** | a document drawn as it reads: the backbone of headings down the page (`backbone.ts`) |
+| **page** | a document drawn as it reads: the kit's `outline` layout, headings down the page |
 | **shell** | explorer, canvas, tray, display — all from `@mnd/kit`. mndmap adds reading, the page, the `markdown` tab and reorganizing |
 
 ## Running it
@@ -63,15 +63,17 @@ Then re-pin with a real release when the kit change is settled: run
 
 | Path | What |
 |---|---|
-| `src/scan.ts` | a folder or file on disk → a collection of folders and documents |
-| `src/read.ts` | one document → content blocks under it, and the page it lays out as |
-| `src/backbone.ts` | a layer laid as a staircase: headings down the page, content beside them |
-| `src/packages/markdown.ts` | the markdown package: what each element is, as definitions and tags |
+| `src/scan.ts` | a folder or file on disk → a collection of folders and documents, each file keeping a reader |
+| `src/read.ts` | one document's text → content blocks under it, and the page it lays out as |
+| `src/packages/markdown.json` | the markdown package: what each element is, as definitions and tags |
+| `src/packages/markdown.ts` | reads it, and names the ids the reader's code keys off |
 | `src/edits.ts` | move / order / rename / create / delete, and the undo stack |
 | `src/series.ts` | a document back in reading order: what a pick covers, and its markdown |
 | `src/ui/App.tsx` | the shell, assembled from the kit: the sections, the canvas, the tray; Enter, Backspace and Escape |
 | `src/ui/Preview.tsx` | the tray's `markdown` tab — a block's markdown, or a whole document, rendered |
-| `docs/sections-plan.md` | the sections and tags work: vision, steps and decisions |
+| `docs/rules.md` | the agreed model rules for mndflow and mndmap, each decided, open, dropped or kept |
+| `docs/simplification-plan.md` | the next step: one rule, one home — what has been consolidated, how to find more, and the leads |
+| `docs/sections-plan.md` | the sections and blocks-all-the-way work that led here: history |
 | `scripts/dev.mjs` | runs the kit watcher, then the app once the kit's first build is written |
 | `samples/sample.md` | the document being designed against |
 | `samples/docs/` | a folder collection; `npm run dev` then `?folder` opens it |
@@ -80,31 +82,38 @@ Then re-pin with a real release when the kit change is settled: run
 ## Sections
 
 The explorer is a **section chain**: each section holds one context, and the next lists what it
-holds. The canvas draws the section in focus.
+holds. It is mndflow's chain with the packages section left out. **The explorer browses; the
+canvas draws what was opened.**
 
-| Section | Lists | Holds | The canvas draws |
-|---|---|---|---|
-| **collection** | the root folder's folders and documents, a document ending its branch | a folder or document (default the first document) | the layer it sits on, it picked |
-| **document** | what the collection holds: a document's outline, or a folder's contents | a block in it, or nothing — the whole | a document as its page; a folder as its cards |
+| Canvas | Draws |
+|---|---|
+| **overview** (nothing open) | the collection's one package, its folders flattened into boxes, documents at their own size, read down the page |
+| **a document** | its page, as the kit's `outline` lays it |
+
+| Section | Lists | Holds |
+|---|---|---|
+| **collection** | the folders and documents, nested | a folder or document (default the first document) |
+| **document** | the document held, its outline under it | a block in it, or nothing — the whole |
 
 | Rule | |
 |---|---|
-| **one selection** | a row chosen and a card picked are the same: either holds it in its section and puts that section in focus |
-| **two cues** | the focus lit strongly, the other section's context by an accent edge |
+| **browse, then open** | choosing a row holds it and picks it, and the canvas stays; Enter, a double click or → opens it |
+| **one navigation** | opening, leaving and revealing are the kit's (`open_at`, `leave_at`, `reveal_at`), and the sections follow by `held_at` |
+| **three cues** | the accent's edge on the row the canvas shows, the pick a strong wash, each section's pick a faint one |
 | **remembered** | a section remembers what it held for each context above |
-| **read on arrival** | a document is read the first time a section reaches it; reading is not an edit |
+| **read on arrival** | a document's file is read the first time a section or the canvas reaches it — the text on disk then; reading is not an edit |
 | **headers are labels** | a header folds its section; there are no root rows |
-| **headings fold** | a document's sections fold under their headings as it is read; what a section holds is always in view |
-| **the camera follows down** | the page holds still across; the camera follows the pick down it |
+| **headings fold** | a document's sections fold under their headings as it is read |
+| **scrolled into view** | the page holds still across and stops at its content's ends; a pick out of view is scrolled just into it |
 
 ## How a document is shaped
 
 1. Each heading is a **section group** holding what follows it, until a heading of the same level
    or higher, headed by its heading block. The explorer lists the outline, each section folded
    under its heading.
-2. The page draws one document as one flat layer: headings down the page, each section's content
-   in rows beside its heading, its own sections boxed and stepped right. A flow line runs to each
-   heading from its parent or the sibling before it.
+2. The page draws one document as one layer, sections held by `parent`: headings down the page,
+   each section's content in rows beside its heading, its own sections boxed and stepped right. A
+   flow line runs to each heading from its parent or the sibling before it.
 3. Consecutive paragraphs and quotes are one `text` block; a table, list, fence or image is its own.
    A block is a whole number of cards wide and at most three high, cut with `…` unless the display's
    `full content` is on.
@@ -120,9 +129,9 @@ holds. The canvas draws the section in focus.
 | Key | Does |
 |---|---|
 | ↑ ← / ↓ → | the row before / after, through every section |
-| Enter / double-click | open a folder or document: `document` holds it, drawn as its page or cards |
-| crumbs | the folders down to the layer drawn; picking one opens it |
-| Backspace | leave: from a document to the collection, it picked; in the collection, up a folder |
+| Enter / double-click / → | open: a document draws as its page; a folder is focused on the overview |
+| crumbs | the collection, then the document drawn; picking one opens it |
+| Backspace / ← | leave: from a document's page to the overview, it picked |
 | Escape | clear the pick; with nothing picked, leave |
 
 **Folding.** The arrows open each branch they step into, and a pick in a shut branch opens the way

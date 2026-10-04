@@ -4,15 +4,16 @@
  *  markdown file is a document, read from disk into content blocks the first time it is reached: a
  *  section group per heading, and a block per run of prose, list, fence, table and image. The
  *  explorer's two sections are a chain: `collection` holds a folder or document, and `document`
- *  lists what it holds. **The explorer browses; the canvas draws what was opened** — a folder's
- *  cards, a document as its page. The explorer, canvas and tray are the kit's; reading, the page,
+ *  lists what it holds. **The explorer browses; the canvas draws what was opened** — the
+ *  collection's overview, its folders flattened and its documents at their own size, or a document
+ *  as its page. The explorer, canvas and tray are the kit's; reading, the page,
  *  the markdown tab and reorganizing are mndmap's — edits apply to the held graph, and undo is the
  *  stack of graphs behind it. */
 
 import { Explorer, Icon, TrayFrame, Viewer, WorkspaceHeader, domain_listing, structure_listing,
          useChain, useDisplay, useTray, type Slice } from "@mnd/kit/react";
-import { CARD, UNITS, children, headed_group, layer_of, open, path, write, type Graph,
-         type Id } from "@mnd/kit";
+import { CARD, UNITS, children, headed_group, held_at, leave_at, open, open_at, path, reveal_at,
+         write, type Graph, type Id, type View } from "@mnd/kit";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apply, Stack, type Edit } from "../edits.js";
 import { laid, read } from "../read.js";
@@ -85,10 +86,10 @@ export function App() {
   const across = Math.min(ACROSS.most, Math.max(ACROSS.least,
     Math.floor(room / Math.max(1, (display.card.w + UNITS.gap) * UNITS.unit))));
   /** What the collection holds, and the layer the canvas draws: **what was last opened**, never
-   *  what is browsed — a folder's cards, or a document as its page. */
+   *  what is browsed — a document as its page, else the collection's overview (`null`). */
   const home = graph ? chain.held[AT_COLLECTION] ?? graph.root : null;
   const [opened_at, setOpened] = useState<Id | null>(null);
-  const layer = graph ? (opened_at && graph.blocks[opened_at] ? opened_at : graph.root) : null;
+  const layer = graph && opened_at && graph.blocks[opened_at] ? opened_at : null;
   /** Each file's reader, by its path, for the session: a document is read when it is reached. */
   const sources = useRef(new Map<string, () => Promise<string>>());
   /** Which documents were read this session. Session state, never in the graph. */
@@ -236,27 +237,19 @@ export function App() {
     } catch (error: unknown) { setNote(say(error)); }
   };
 
-  /** Where a block sits in the sections: a folder or document is the collection's to hold; any
-   *  other block is held in the document it sits in. */
-  const trail_of = (held: Graph, id: Id): (Id | null)[] => {
-    const up = path(held, id).map((block) => block.id).reverse();
-    const at = up.find((each) => is_document(held, each));
-    return !at || at === id ? [id] : [at, id];
-  };
-
-  /** Hold this block where it sits, and pick it; the tray goes back to the canvas. A pick inside
-   *  the open document may move the canvas to the layer it is drawn on. */
-  const reveal = (id: Id) => {
+  /** **The canvas moves by the kit's navigation** — `open_at`, `leave_at`, `reveal_at` — and the
+   *  sections follow it by `held_at`, less the packages section this host leaves out. */
+  const go = (to: View) => {
     if (!graph) return;
-    const at = trail_of(graph, id);
-    chain.onTrace(at);
-    setPicked(id === graph.root ? [] : [id]);
-    const doc = at.length > 1 ? at[0] : null;
-    if (doc && layer && (layer === doc || path(graph, layer).some((b) => b.id === doc))) {
-      setOpened(layer_of(graph, id) ?? doc);
-    }
+    setOpened(to.layer);
+    setPicked(to.pick && to.pick !== graph.root ? [to.pick] : []);
+    const held = held_at(graph, to.layer, to.pick);
+    if (held && held.at > 0) chain.onTrace(held.path.slice(1), held.at - 1);
     tray.release();
   };
+
+  /** Show this block where it is seen, picked. */
+  const reveal = (id: Id) => { if (graph) go(reveal_at(graph, id)); };
 
   /** **A row chosen in the explorer is browsed**: held in its section and picked, so the tray
    *  shows it, while the canvas stays where it was opened. */
@@ -273,26 +266,14 @@ export function App() {
     setPicked(ids);
   };
 
-  /** Open a folder or document — what is picked, by default — for the canvas to draw: a folder's
-   *  cards, a document as its page, or a block holding content as its own layer. */
+  /** Open what is picked, by default: a document draws as its page, a block holding content as its
+   *  own layer, and a folder is only focused on the overview. */
   const enter = (id = picked.length === 1 ? picked[0] : chain.at === AT_COLLECTION ? home : null) => {
-    if (!graph || !id || !graph.blocks[id]) return;
-    if (!is_document(graph, id) && !children(graph, id).length) return;
-    const doc = path(graph, id).map((b) => b.id).find((each) => is_document(graph, each));
-    chain.onTrace(doc && doc !== id ? [doc, id] : [id, null]);
-    setOpened(id);
-    setPicked([]);
+    if (graph && id && graph.blocks[id]) go(open_at(graph, id));
   };
 
-  /** Leave for the layer the open one is drawn on, what was open picked there. */
-  const leave = () => {
-    if (!graph || !layer || layer === graph.root) return;
-    const up = layer_of(graph, layer) ?? graph.root;
-    const doc = path(graph, up).map((b) => b.id).find((each) => is_document(graph, each));
-    chain.onTrace(doc ? [doc, up] : [up]);
-    setOpened(up);
-    setPicked([layer]);
-  };
+  /** Leave for the layer the open one is drawn on — from a document's page, the overview. */
+  const leave = () => { if (graph && layer) go(leave_at(graph, layer)); };
 
   /** Clear the pick; with nothing picked, leave. */
   const clear = () => {
@@ -393,10 +374,10 @@ export function App() {
   /** The document the tray reads whole: the one drawn, or a read one picked in the collection. */
   const shown = doc ?? (about && is_document(graph, about.id) && children(graph, about.id).length
     ? about.id : null);
-  /** The crumbs: the collection's folders down to the layer drawn. Picking one opens it. */
-  const trail = path(graph, layer ?? graph.root)
-    .map((block) => ({ id: block.id, label: block.name ?? "" }));
-  const walk = (id: string | null) => (id === null ? leave() : enter(id));
+  /** The crumbs: the collection, then the document drawn and what is open in it. */
+  const trail = layer ? path(graph, layer).map((block) => ({ id: block.id, label: block.name ?? "" }))
+    : [{ id: graph.root, label: graph.blocks[graph.root]?.name ?? "" }];
+  const walk = (id: string | null) => (id === null || id === graph.root ? leave() : enter(id));
 
   return (
     <div className={`app${over ? " over" : ""}`}
@@ -445,6 +426,7 @@ export function App() {
           <Viewer key={layer ?? ""}
             graph={view ?? graph}
             layer={layer} picked={cards}
+            config={{ packages: [graph.root], across }}
             lit={pointed ? [pointed] : []}
             card={display.card} full={full} scroll
             focus={cards[0] ?? null}

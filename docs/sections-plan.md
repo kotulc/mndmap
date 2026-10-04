@@ -2,7 +2,7 @@
 
 **Everything is a block, and a package is a graph.** A package's top-level blocks are its definitions; what a definition holds is its structure. The explorer's sections are depth in that one tree: packages → definitions → structure in the editor, collection → document in the reader. Spans mndflow (the kit and the editor) and mndmap (the reader).
 
-**Status:** step 3 built in both repos, uncommitted. mndflow typechecks and passes 352 tests; mndmap typechecks against the rebuilt kit; both apps driven in a browser on the extended sample and `samples/docs`.
+**Status: history.** Step 3 is built and committed in both repos, and its open items were all decided in rules.md and built on 2026-10-04 (resolutions below). The model's rules now live in rules.md; the next step is simplification-plan.md. Kept for the reasoning behind the decisions.
 
 
 ## Model
@@ -85,7 +85,9 @@
 | structure | the layer the picked block sits on |
 
 
-## Packages view (regressed in step 3)
+## Packages view (regressed in step 3; resolved as the overview)
+
+**Resolved:** the canvas has two views — the **overview** (`layer: null`: every package a full-width box of its domain, folders flattened, a `page` layout read down the page) and a tree's **structure**. There is no package or folder canvas view. See rules.md, *Canvas and sections*.
 
 **What was lost:** the packages chart drew every package as a box, its definitions inside grouped as its domain organizes them, so the whole vocabulary read top down on one page. Step 3 replaced it with a card per package (`views/packages.ts`), which shows nothing inside. That was a mistake: this view is the one the definitions section drills into.
 
@@ -119,7 +121,7 @@
 | `markdown` | a frozen package; the reader lists no packages or definitions sections |
 
 
-## Step 3: blocks all the way (this step)
+## Step 3: blocks all the way (built)
 
 | Phase | Scope |
 |---|---|
@@ -134,16 +136,16 @@
 
 | Item | Notes |
 |---|---|
-| **structure inheritance** | subtypes inheriting structure; deferred |
-| **self-references and loops** | a definition's structure using itself |
-| **relation and tag structure** | whether either may hold structure; `holds` decides, off by default |
-| **content layouts** | the reader's backbone is app code; packages need a way to declare a layer's layout |
-| **lazy collections** | every file's text is still read up front |
-| **release the kit** | mndmap pins `vendor/`; re-pin once step 3 settles |
-| **read-through in the explorer** | a usage's read-through parts draw on its layer but are not listed under its row; two usages of one definition in a layer would share row keys |
-| **organizing groups as types** | `blocks`, `relations`, `tags` are group definitions, so they are offered as types for a block |
-| **an unread document's text** | it rides on the document's `body` until read, which is otherwise a definition's description |
-| **membership scans** | an empty definition is no holder, so `shape_of` scans for members; fine at package sizes, worth an index for large collections |
-| **the no-sections explorer** | still supported and tested, though both hosts declare sections; drop it or keep it |
-| **markdown as a file** | the markdown package is built in code; the base package ships as code too. Packages a user imports are `.json` |
-| **mndflow's docs** | `docs/` and the package docs still describe the old record, the shelf and defaults |
+| **structure inheritance** | resolved: never inherited; a usage reads its type's structure one step |
+| **self-references and loops** | resolved: a definition never uses itself (direct check); `type` cycles refused |
+| **relation and tag structure** | resolved: neither holds structure |
+| **content layouts** | resolved: layout is a setting; the kit ships `free`, `auto`, `outline`, `page` |
+| **lazy collections** | resolved: files are listed, and read when a document is reached |
+| **release the kit** | resolved: kit 0.11.0, mndmap re-pinned, old tarballs deleted |
+| **read-through in the explorer** | resolved: parts listed under a usage, marked, keyed by route |
+| **organizing groups as types** | resolved: organizers carry no `def` |
+| **an unread document's text** | resolved: no text on `body`; read state is session state |
+| **membership scans** | resolved: holders hold by `parent`; membership is children |
+| **the no-sections explorer** | resolved: dropped |
+| **markdown as a file** | resolved: `base` and `markdown` are JSON |
+| **mndflow's docs** | resolved: rewritten to the current model |
