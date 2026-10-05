@@ -107,4 +107,4 @@ mndflow's section chain with the package fixed and hidden; browsing, opening and
 | Backspace / ← | leave: from a document's page to the overview, it picked |
 | Escape | clear the pick; with nothing picked, leave |
 
-**Folding.** The arrows open each branch they step into, and a pick in a shut branch opens the way to it. By default the tree stays open only along the way to the pick; the fold toggle at the right of the explorer's bar makes folds sticky. A section's own fold shuts or opens every branch in it.
+**Folding.** The arrows open each branch they step into, and a pick in a shut branch opens the way to it; nothing shuts on its own. A section's chevron shuts every branch in it, or opens them all, and never hides its top rows; its header hides or shows the whole section; the bar's fold shuts the lowest open layer under every branch, a layer a click, and with nothing left to shut opens everything again.
