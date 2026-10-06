@@ -10,9 +10,9 @@
  *  each list, fence, table and image its own — and read in order. */
 
 import { marked, type Token, type Tokens } from "marked";
-import { UNITS, children, outline_graph, set_card, set_full, size_of, subtree, type Block,
-         type Graph, type Id } from "@mnd/kit";
-import { CODE, FLOW, FRONT, HEADING, IMAGE, LIST, SECTION, TABLE, TEXT }
+import { UNITS, children, set_card, set_full, size_of, subtree, type Block, type Graph,
+         type Id } from "@mnd/kit";
+import { CODE, FRONT, HEADING, IMAGE, LIST, SECTION, TABLE, TEXT }
   from "./packages/markdown.js";
 import { form_of } from "./forms.js";
 import { plain } from "./names.js";
@@ -137,21 +137,20 @@ export function read(source: Graph, doc: Id, text: string): Graph {
   }
 }
 
-/** The document laid out as it reads: a backbone of headings down the page, each section's content
- *  beside its heading, its own sections boxed under it — the kit's `outline` layout.
+/** The collection sized to read: each content block read so far spans its columns and is cut at
+ *  its height, for a view of a whole section to lay out.
  *
  *  A small block is one card; a table spans a column for every two of its own, a long fence or
  *  list two. A block is cut at `TALL` cards high, unless `full` shows all of it. Drawn, never
  *  stored: the held graph keeps no sizes, places or lines. */
-export function laid(graph: Graph, doc: Id, card: { w: number; h: number }, full: boolean,
-                     across: number): Graph {
+export function sized(graph: Graph, card: { w: number; h: number }, full: boolean,
+                      across: number): Graph {
   set_card(card.w, card.h);
   const air = UNITS.unit;
   const gap = UNITS.gap * air;
   const one = { w: UNITS.block.w * air, h: UNITS.block.h * air };
   const wide = (span: number) => span * one.w + (span - 1) * gap;
   const blocks = { ...graph.blocks };
-  const kin = subtree(graph, doc).filter((id) => id !== doc).map((id) => graph.blocks[id]!);
 
   /** How tall a block would be, shown whole. */
   const whole = (id: Id) => {
@@ -161,7 +160,7 @@ export function laid(graph: Graph, doc: Id, card: { w: number; h: number }, full
     return h;
   };
   // Each content block spans its columns and is cut at its height.
-  for (const block of kin) {
+  for (const block of Object.values(graph.blocks)) {
     const span = spanned(block, across);
     if (block.type === TABLE && block.grid) {
       const most = Math.max(LINES, Math.floor((TALL * one.h) / (CELL_H * air)));
@@ -173,11 +172,7 @@ export function laid(graph: Graph, doc: Id, card: { w: number; h: number }, full
       blocks[block.id] = { ...block, w: wide(span), h, settings: { card: { height: "free" } } };
     }
   }
-  const page = blocks[doc]!;
-  blocks[doc] = { ...page, settings: { ...page.settings,
-                                       layout: { kind: "outline", across, line: FLOW } } };
-  return outline_graph({ ...graph, blocks }, doc,
-                       (_, n) => `section (${n} ${n === 1 ? "block" : "blocks"})`);
+  return { ...graph, blocks };
 }
 
 

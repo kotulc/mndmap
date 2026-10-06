@@ -10,13 +10,14 @@
  *  the markdown tab and reorganizing are mndmap's — edits apply to the held graph, and undo is the
  *  stack of graphs behind it. */
 
-import { Explorer, Icon, TrayFrame, Viewer, WorkspaceHeader, domain_listing, structure_listing,
-         useChain, useDisplay, useTray, type Slice } from "@mnd/kit/react";
-import { CARD, UNITS, children, headed_group, held_at, leave_at, open, open_at, path, reveal_at,
-         write, type Graph, type Id, type View } from "@mnd/kit";
+import { Explorer, Icon, TrayFrame, Viewer, WorkspaceHeader, useChain, useDisplay, useTray,
+         type Slice } from "@mnd/kit/react";
+import { CARD, UNITS, children, headed_group, held_at, leave_at, open, open_at, path,
+         reveal_at, view_on, write, type Graph, type Id, type Tiers, type View,
+         type Views } from "@mnd/kit";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apply, Stack, type Edit } from "../edits.js";
-import { laid, read } from "../read.js";
+import { read, sized } from "../read.js";
 import { dev_sample, drop_folder, first_document, is_document, pick_file, pick_folder, save, scan,
          PACKAGES, type SourceFile } from "../scan.js";
 import { covered, section_of } from "../series.js";
@@ -51,18 +52,21 @@ const TABS = ["markdown"] as const;
 /** The key beside the explorer's own: clear the pick, and with nothing picked, leave. */
 const CLEAR = "Escape";
 
-/** The sections: the collection — the workspace's domain, its folders and documents — then the
- *  document held, its own row with its content under it. */
+/** Each section in its first view: a reader's are the app's to say. */
+const VIEWS: Views = {};
+
+/** The sections, from the workspace's root: the collection — its folders and documents, cut at
+ *  each document — then the document held, its own row with its content under it. Both read as
+ *  an overview: the whole section in boxes down the page, the one held in sight. */
 const AT_COLLECTION = 0;
 const AT_DOCUMENT = 1;
 const SLICES: Slice[] = [
-  { id: "collection", label: "collection", mark: "folder",
-    list: (graph) => domain_listing(graph, graph.root),
-    first: (graph) => first_document(graph) },
-  { id: "document", label: "document", mark: "usages",
-    list: (_, [held]) => structure_listing(held ?? null),
-    first: (_, [held]) => held ?? null },
+  { id: "collection", label: "collection", mark: "folder", cut: "tree",
+    views: ["overview", "profile"], first: (graph) => first_document(graph) },
+  { id: "document", label: "document", mark: "usages", cut: null,
+    views: ["overview", "profile", "internal"] },
 ];
+const TIERS: Tiers = { top: "workspace", sections: SLICES };
 
 
 export function App() {
@@ -78,27 +82,32 @@ export function App() {
   const [big, setBig] = useState(false);
   const { display } = useDisplay({ card: CONTENT_CARD, range: CARD, full: false });
   const full = display.full ?? false;
-  const chain = useChain(graph, SLICES);
+  /** What the canvas draws, as navigation last left it. */
+  const [seen, setSeen] = useState<View | null>(null);
+  const chain = useChain(graph, SLICES, TIERS.top, seen);
   /** How wide the canvas is, and how many of a step it holds across at their own size. */
   const [canvas, setCanvas] = useState<HTMLDivElement | null>(null);
   const room = useWidth(canvas);
   /** How many cards a row sets across: a card and the air after it are its step. */
   const across = Math.min(ACROSS.most, Math.max(ACROSS.least,
     Math.floor(room / Math.max(1, (display.card.w + UNITS.gap) * UNITS.unit))));
-  /** What the collection holds, and the layer the canvas draws: **what was last opened**, never
-   *  what is browsed — a document as its page, else the collection's overview (`null`). */
+  /** What the collection holds, and what the canvas draws: **what was last opened**, never what
+   *  is browsed — a section in one of its views. */
   const home = graph ? chain.held[AT_COLLECTION] ?? graph.root : null;
-  const [opened_at, setOpened] = useState<Id | null>(null);
-  const layer = graph && opened_at && graph.blocks[opened_at] ? opened_at : null;
+
+  const view = graph && seen && (!seen.layer || graph.blocks[seen.layer]) ? seen
+    : graph ? view_on(graph, TIERS, VIEWS, null) : null;
+  const layer = view?.layer ?? null;
   /** Each file's reader, by its path, for the session: a document is read when it is reached. */
   const sources = useRef(new Map<string, () => Promise<string>>());
   /** Which documents were read this session. Session state, never in the graph. */
   const reading = useRef(new Set<Id>());
-  /** The document drawn as a page, where the layer is one. */
-  const doc = graph && layer && is_document(graph, layer) ? layer : null;
-  const page = useMemo(() => (graph && doc ? laid(graph, doc, display.card, full, across) : null),
-    [graph, doc, display.card, full, across]);
-  const view = page ?? graph;
+  /** The document the canvas reads, where it looks at the document section. */
+  const doc = view?.at === AT_DOCUMENT ? chain.roots[AT_DOCUMENT] ?? null : null;
+  /** The collection sized to read, where a whole section is drawn. */
+  const drawn = useMemo(() => (graph && view && view.kind !== "internal"
+    ? sized(graph, display.card, full, across) : graph), [graph, view?.kind, display.card, full,
+                                                          across]);
   /** What the canvas lights: the pick, where it is drawn. */
   const cards = picked.filter((id) => id !== layer);
   /** What the tray lights: the section the pick sits in, whole. */
@@ -147,9 +156,11 @@ export function App() {
     setFolded([]);
     setGraph(found);
     setPicked([]);
-    setOpened(first);
+    const to = first ? open_at(found, TIERS, VIEWS, first) : null;
+    setSeen(to);
     tray.release();
-    chain.onTrace(first ? [first, null] : [null]);
+    const held = to ? held_at(found, TIERS, to) : null;
+    chain.onTrace(held ? held.path : [null], held?.at);
     setNote(`${name}: ${said}.`);
   };
 
@@ -238,18 +249,18 @@ export function App() {
   };
 
   /** **The canvas moves by the kit's navigation** — `open_at`, `leave_at`, `reveal_at` — and the
-   *  sections follow it by `held_at`, less the packages section this host leaves out. */
-  const go = (to: View) => {
-    if (!graph) return;
-    setOpened(to.layer);
+   *  sections follow it by `held_at`. */
+  const go = (to: View | null) => {
+    if (!graph || !to) return;
+    setSeen(to);
     setPicked(to.pick && to.pick !== graph.root ? [to.pick] : []);
-    const held = held_at(graph, to.layer, to.pick);
-    if (held && held.at > 0) chain.onTrace(held.path.slice(1), held.at - 1);
+    const held = held_at(graph, TIERS, to);
+    if (held) chain.onTrace(held.path, held.at);
     tray.release();
   };
 
   /** Show this block where it is seen, picked. */
-  const reveal = (id: Id) => { if (graph) go(reveal_at(graph, id)); };
+  const reveal = (id: Id) => { if (graph) go(reveal_at(graph, TIERS, VIEWS, view, id)); };
 
   /** **A row chosen in the explorer is browsed**: held in its section and picked, so the tray
    *  shows it, while the canvas stays where it was opened. */
@@ -269,11 +280,11 @@ export function App() {
   /** Open what is picked, by default: a document draws as its page, a block holding content as its
    *  own layer, and a folder is only focused on the overview. */
   const enter = (id = picked.length === 1 ? picked[0] : chain.at === AT_COLLECTION ? home : null) => {
-    if (graph && id && graph.blocks[id]) go(open_at(graph, id));
+    if (graph && id && graph.blocks[id]) go(open_at(graph, TIERS, VIEWS, id));
   };
 
   /** Leave for the layer the open one is drawn on — from a document's page, the overview. */
-  const leave = () => { if (graph && layer) go(leave_at(graph, layer)); };
+  const leave = () => { if (graph && view) go(leave_at(graph, TIERS, VIEWS, view)); };
 
   /** Clear the pick; with nothing picked, leave. */
   const clear = () => {
@@ -374,8 +385,9 @@ export function App() {
   /** The document the tray reads whole: the one drawn, or a read one picked in the collection. */
   const shown = doc ?? (about && is_document(graph, about.id) && children(graph, about.id).length
     ? about.id : null);
-  /** The crumbs: the collection, then the document drawn and what is open in it. */
-  const trail = layer ? path(graph, layer).map((block) => ({ id: block.id, label: block.name ?? "" }))
+  /** The crumbs: the collection, then the document read and what is open in it. */
+  const crumb = view?.kind === "internal" ? layer : doc;
+  const trail = crumb ? path(graph, crumb).map((block) => ({ id: block.id, label: block.name ?? "" }))
     : [{ id: graph.root, label: graph.blocks[graph.root]?.name ?? "" }];
   const walk = (id: string | null) => (id === null || id === graph.root ? leave() : enter(id));
 
@@ -404,7 +416,7 @@ export function App() {
           }} />
       </WorkspaceHeader>
 
-      <Explorer graph={graph} open={layer} picked={picked} folded={folded} menu keys
+      <Explorer graph={graph} view={view!} picked={picked} folded={folded} menu keys
         tools={{ block: false }}
         extra={
           <button type="button" aria-label="Open a document"
@@ -423,13 +435,14 @@ export function App() {
         <div className="mm-canvas" ref={setCanvas}>
           {/* One per drawing, so each is framed afresh. Each reads as many cards across as the
               canvas holds, at their own size at most. */}
-          <Viewer key={layer ?? ""}
-            graph={view ?? graph}
+          <Viewer key={`${view!.at}:${view!.kind}:${layer ?? ""}`}
+            graph={drawn ?? graph}
             layer={layer} picked={cards}
-            config={{ packages: [graph.root], across }}
+            config={{ across, look: { kind: view!.kind, cut: SLICES[view!.at]!.cut, tiers: TIERS,
+                                      target: view!.pick ?? doc ?? home } }}
             lit={pointed ? [pointed] : []}
             card={display.card} full={full} scroll
-            focus={cards[0] ?? null}
+            focus={view!.kind === "internal" ? cards[0] ?? null : view!.pick}
             most={ACTUAL}
             chrome={{ crumbs: true, lattice: display.lattice ?? true, legend: display.legend,
                       corner: display.corner, frame: false }}
