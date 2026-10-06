@@ -13,21 +13,21 @@
         "id": "md.blocks",
         "parent": "md",
         "name": "blocks",
-        "type": "group",
+        "type": "folder",
         "order": 1
       },
       "md.relations": {
         "id": "md.relations",
         "parent": "md",
         "name": "relations",
-        "type": "group",
+        "type": "folder",
         "order": 2
       },
       "md.tags": {
         "id": "md.tags",
         "parent": "md",
         "name": "tags",
-        "type": "group",
+        "type": "folder",
         "order": 3
       },
       "md.document": {
@@ -54,13 +54,13 @@
       "md.section": {
         "id": "md.section",
         "parent": "md.blocks",
-        "type": "group",
+        "type": "block",
         "def": {},
         "name": "section",
         "tags": [
           "md.structure"
         ],
-        "body": "A heading and what it heads, until a heading as high: a group of its heading, its content and its own sections, headed by its heading. Named by the heading as written.",
+        "body": "A heading and what it heads, until a heading as high: a block holding its heading, its content and its own sections, headed by its heading. Named by the heading as written.",
         "settings": {
           "card": {
             "icon": "content_heading"

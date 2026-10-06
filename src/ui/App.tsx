@@ -12,7 +12,7 @@
 
 import { Explorer, Icon, TrayFrame, Viewer, WorkspaceHeader, useChain, useDisplay, useTray,
          type Slice } from "@mnd/kit/react";
-import { CARD, UNITS, children, headed_group, held_at, leave_at, open, open_at, path,
+import { CARD, UNITS, children, group_head, headed_group, held_at, leave_at, open, open_at, path,
          reveal_at, view_on, write, type Graph, type Id, type Tiers, type View,
          type Views } from "@mnd/kit";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -136,7 +136,7 @@ export function App() {
     void get().then((text) => setGraph((was) => {
       if (!was?.blocks[id]) return was;
       const next = read(was, id, text);
-      const heads = Object.values(next.blocks).filter((block) => headed_group(next, block.id))
+      const heads = Object.values(next.blocks).filter((block) => group_head(next, block.id))
         .map((block) => `${SLICES[AT_DOCUMENT]!.id}/${route(next, id, block.id)}`);
       setFolded((folds) => [...new Set([...folds, ...heads])]);
       return next;

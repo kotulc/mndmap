@@ -4,8 +4,8 @@
  *  describes it. What a block *means* is the markdown package's business, not this reader's — so
  *  a new element is a definition there plus one line here, and nothing else moves.
  *
- *  A document is one layer under its document block. A heading is a section group holding what
- *  follows it, and a section under it is a group inside it: each held by `parent`.
+ *  A document is one layer under its document block. A heading is a section holding what follows
+ *  it, and a section under it is a section inside it: each held by `parent`.
  *  Content is split where its kind changes — a run of paragraphs and quotes is one text block, and
  *  each list, fence, table and image its own — and read in order. */
 
@@ -76,7 +76,7 @@ export function read(source: Graph, doc: Id, text: string): Graph {
       case "heading": {
         const heading = token as Tokens.Heading;
         while (open.length && open[open.length - 1]!.depth >= heading.depth) open.pop();
-        // A section group, named as the page heads it, and its heading first inside it.
+        // A section, named as the page heads it, and its heading first inside it.
         const said = `${"#".repeat(heading.depth)} ${heading.text}`;
         const held = put({ type: SECTION, name: said }, "section");
         open.push({ id: held.id, depth: heading.depth });
