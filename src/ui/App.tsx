@@ -12,7 +12,7 @@
 
 import { Explorer, Icon, TrayFrame, Viewer, WorkspaceHeader, useChain, useDisplay, useTray,
          type Slice } from "@mnd/kit/react";
-import { CARD, UNITS, children, group_head, headed_group, held_at, leave_at, open, open_at, path,
+import { CARD, UNITS, children, group_head, held_at, leave_at, open, open_at, path,
          reveal_at, view_on, write, type Graph, type Id, type Tiers, type View,
          type Views } from "@mnd/kit";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -337,16 +337,11 @@ export function App() {
       const parent = String(args.parent) as Id;
       if (!graph.blocks[parent]) return;
       const ids = args.ids as Id[];
-      // Landing before a head is landing before the group it heads.
-      const said = typeof args.before === "string" ? args.before : null;
-      const before = said && (headed_group(graph, said) ?? said);
+      // Where it lands is the kit's; this places it among the siblings it lands before.
+      const before = typeof args.before === "string" ? args.before : null;
       const kin = children(graph, parent).map((block) => block.id).filter((id) => !ids.includes(id));
       const at = before && kin.includes(before) ? kin.indexOf(before) : kin.length;
-      // Under a row that heads a section, they land in that section, after its head.
-      const above = kin[at - 1];
-      const into = above ? headed_group(graph, above) : null;
-      if (into) edit({ do: "move", ids, parent: into, at: children(graph, into).length });
-      else edit({ do: "move", ids, parent, at });
+      edit({ do: "move", ids, parent, at });
     }
   };
 
