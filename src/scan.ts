@@ -1,10 +1,10 @@
 /** A folder or a file on disk, listed into a collection: the workspace's domain, a folder per
- *  folder and a definition per file.
+ *  folder and a usage per file.
  *
  *  **Nothing is read here.** A file is listed by its path (`source`); its text is read from disk
  *  when its document is first opened (`read.ts`), through the reader each file keeps. A markdown
- *  file is a `document` definition, any other a plain block definition, and folders are holders
- *  organizing them. The workspace's root is the folder; one file picked on its own sits in a root
+ *  file is a usage of `document`, any other a plain block, and folders are holders organizing
+ *  them. The workspace's root is the folder; one file picked on its own sits in a root
  *  named after it. */
 
 import { children, FLOOR, ROOT, type Block, type Graph, type Id } from "@mnd/kit";
@@ -53,7 +53,7 @@ export function scan(name: string, files: SourceFile[]): Graph {
 
     const id = `file:${file.path}`;
     graph.blocks[id] = {
-      id, parent, type: is_markdown(file.path) ? DOCUMENT : "block", def: {}, name: leaf,
+      id, parent, type: is_markdown(file.path) ? DOCUMENT : "block", name: leaf,
       source: file.path, order: next(parent),
     };
   }

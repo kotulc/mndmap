@@ -18,7 +18,6 @@ export const LIST = "md.list";
 export const CODE = "md.code";
 export const TABLE = "md.table";
 export const IMAGE = "md.image";
-export const FRONT = "md.front";
 export const FLOW = "md.flow";
 
 /** Every block of the package, ordered as it reads: what a host lays as its floor. */

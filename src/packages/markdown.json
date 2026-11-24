@@ -39,7 +39,7 @@
         "tags": [
           "md.structure"
         ],
-        "body": "A markdown file: a root structure whose contents are read under it, as the page writes them. Read when it is first opened.",
+        "body": "A markdown file: a usage in the collection whose contents are read under it, as the page writes them. Its frontmatter is its card source. Read when it is first opened; what it holds draws with the large face.",
         "settings": {
           "card": {
             "icon": "content_lead"
@@ -47,6 +47,9 @@
           "style": {
             "hue": 235,
             "intensity": 0.5
+          },
+          "layout": {
+            "face": "large"
           }
         },
         "order": 4
@@ -90,7 +93,12 @@
         "settings": {
           "card": {
             "icon": "content_heading",
-            "align": "center"
+            "align": "center",
+            "shows": [],
+            "size": {
+              "w": 12,
+              "h": 2
+            }
           },
           "style": {
             "hue": 235,
@@ -113,8 +121,13 @@
           "card": {
             "icon": "content_text",
             "name": "hide",
-            "body": "show",
-            "height": "fit"
+            "shows": [
+              "body"
+            ],
+            "size": {
+              "w": 12,
+              "h": 6
+            }
           },
           "style": {
             "hue": 350,
@@ -136,8 +149,13 @@
         "settings": {
           "card": {
             "icon": "content_list",
-            "body": "show",
-            "height": "fit"
+            "shows": [
+              "body"
+            ],
+            "size": {
+              "w": 12,
+              "h": 6
+            }
           },
           "style": {
             "hue": 5,
@@ -159,8 +177,13 @@
         "settings": {
           "card": {
             "icon": "content_code",
-            "body": "show",
-            "height": "fit"
+            "shows": [
+              "body"
+            ],
+            "size": {
+              "w": 12,
+              "h": 6
+            }
           },
           "style": {
             "hue": 340,
@@ -172,18 +195,23 @@
       "md.table": {
         "id": "md.table",
         "parent": "md.blocks",
-        "type": "grid",
+        "type": "block",
         "def": {},
         "name": "table",
         "tags": [
           "md.data"
         ],
-        "body": "A table. One grid of its rows' values, headed by their schema; its key column names each row.",
+        "body": "A table, as written: content, never parsed into values. Its body is the table.",
         "settings": {
           "card": {
             "icon": "role_table",
-            "fields": "show",
-            "height": "free"
+            "shows": [
+              "body"
+            ],
+            "size": {
+              "w": 16,
+              "h": 6
+            }
           },
           "style": {
             "hue": 285,
@@ -207,7 +235,13 @@
         "settings": {
           "card": {
             "icon": "content_image",
-            "preview": "show"
+            "shows": [
+              "preview"
+            ],
+            "size": {
+              "w": 8,
+              "h": 6
+            }
           },
           "style": {
             "hue": 90,
@@ -215,30 +249,6 @@
           }
         },
         "order": 11
-      },
-      "md.front": {
-        "id": "md.front",
-        "parent": "md.blocks",
-        "type": "note",
-        "def": {},
-        "name": "frontmatter",
-        "tags": [
-          "md.structure"
-        ],
-        "body": "The document's own metadata, as it was written.",
-        "settings": {
-          "card": {
-            "icon": "content_front"
-          },
-          "style": {
-            "hue": 220,
-            "intensity": 0.6,
-            "fill": "solid",
-            "opacity": 1,
-            "name_contrast": "strong"
-          }
-        },
-        "order": 12
       },
       "md.flow": {
         "id": "md.flow",

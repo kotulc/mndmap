@@ -6,22 +6,22 @@
  *  explorer's two sections are a chain: `collection` holds a folder or document, and `document`
  *  lists what it holds. **The explorer browses; the canvas draws what was opened** — the
  *  collection's overview, its folders flattened and its documents at their own size, or a document
- *  as its page. The explorer, canvas and tray are the kit's; reading, the page,
- *  the markdown tab and reorganizing are mndmap's — edits apply to the held graph, and undo is the
- *  stack of graphs behind it. */
+ *  as its page, drawn with the large face its package asks for. The explorer, canvas and tray are
+ *  the kit's; reading, the document tab and reorganizing are mndmap's — edits apply to the held
+ *  graph, and undo is the stack of graphs behind it. */
 
-import { Explorer, Icon, TrayFrame, Viewer, WorkspaceHeader, useChain, useDisplay, useTray,
+import { Explorer, Icon, Tray, Viewer, WorkspaceHeader, useChain, useDisplay, useTray,
          type Slice } from "@mnd/kit/react";
 import { CARD, UNITS, children, group_head, held_at, leave_at, open, open_at, path,
          reveal_at, view_on, write, type Graph, type Id, type Tiers, type View,
          type Views } from "@mnd/kit";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apply, Stack, type Edit } from "../edits.js";
-import { read, sized } from "../read.js";
+import { read } from "../read.js";
 import { dev_sample, drop_folder, first_document, is_document, pick_file, pick_folder, save, scan,
          PACKAGES, type SourceFile } from "../scan.js";
 import { covered, section_of } from "../series.js";
-import { Document, Preview } from "./Preview.js";
+import { Document } from "./Document.js";
 
 type ThemeName = "retro" | "modern" | "light";
 
@@ -33,9 +33,9 @@ const THEMES = [
   { name: "light", icon: "theme_light" },
 ] as const;
 
-/** Content is the point of a block here, so a card is wide enough to read a line of it and tall
- *  enough for two. */
-const CONTENT_CARD = { w: 10, h: 3 };
+/** The small face: a name and its marks. What a block says draws on its large face, at the size
+ *  the markdown package gives each kind. */
+const SMALL_CARD = { w: 6, h: 2 };
 
 /** How many cards a row reads at once: as many as the canvas holds at their own size, but never
  *  fewer than a portrait canvas holds, nor more than a row reads at a glance. */
@@ -45,9 +45,6 @@ const ACROSS = { least: 3, most: 8 };
 const ACTUAL = 1;
 
 const BLANK = "Drop a markdown document or a folder, or pick one below.";
-
-/** The tray's one tab. */
-const TABS = ["markdown"] as const;
 
 /** The key beside the explorer's own: clear the pick, and with nothing picked, leave. */
 const CLEAR = "Escape";
@@ -79,9 +76,7 @@ export function App() {
   /** The block the tray's pointer is over, lit on the canvas. */
   const [pointed, setPointed] = useState<Id | null>(null);
   const tray = useTray();
-  const [big, setBig] = useState(false);
-  const { display } = useDisplay({ card: CONTENT_CARD, range: CARD, full: false });
-  const full = display.full ?? false;
+  const { display, onDisplay } = useDisplay({ card: SMALL_CARD, range: CARD });
   /** What the canvas draws, as navigation last left it. */
   const [seen, setSeen] = useState<View | null>(null);
   const chain = useChain(graph, SLICES, TIERS.top, seen);
@@ -104,10 +99,6 @@ export function App() {
   const reading = useRef(new Set<Id>());
   /** The document the canvas reads, where it looks at the document section. */
   const doc = view?.at === AT_DOCUMENT ? chain.roots[AT_DOCUMENT] ?? null : null;
-  /** The collection sized to read, where a whole section is drawn. */
-  const drawn = useMemo(() => (graph && view && view.kind !== "internal"
-    ? sized(graph, display.card, full, across) : graph), [graph, view?.kind, display.card, full,
-                                                          across]);
   /** What the canvas lights: the pick, where it is drawn. */
   const cards = picked.filter((id) => id !== layer);
   /** What the tray lights: the section the pick sits in, whole. */
@@ -376,10 +367,9 @@ export function App() {
     .length - 1;
   /** What the tray is about: the pick, or else what the collection holds. */
   const about = graph.blocks[picked[0] ?? ""] ?? graph.blocks[home];
-  const kind = about?.type ? graph.blocks[about.type]?.name ?? about.type : "block";
-  /** The document the tray reads whole: the one drawn, or a read one picked in the collection. */
-  const shown = doc ?? (about && is_document(graph, about.id) && children(graph, about.id).length
-    ? about.id : null);
+  /** The document the tray reads whole: the one drawn, else the read one the block sits in. */
+  const reading_doc = (id: Id) => doc ?? path(graph, id).map((b) => b.id).reverse()
+    .find((at) => is_document(graph, at) && children(graph, at).length) ?? null;
   /** The crumbs: the collection, then the document read and what is open in it. */
   const crumb = view?.kind === "internal" ? layer : doc;
   const trail = crumb ? path(graph, crumb).map((block) => ({ id: block.id, label: block.name ?? "" }))
@@ -431,12 +421,12 @@ export function App() {
           {/* One per drawing, so each is framed afresh. Each reads as many cards across as the
               canvas holds, at their own size at most. */}
           <Viewer key={`${view!.at}:${view!.kind}:${layer ?? ""}`}
-            graph={drawn ?? graph}
+            graph={graph}
             layer={layer} picked={cards}
             config={{ across, look: { kind: view!.kind, cut: SLICES[view!.at]!.cut, tiers: TIERS,
                                       target: view!.pick ?? doc ?? home } }}
             lit={pointed ? [pointed] : []}
-            card={display.card} full={full} scroll
+            card={display.card} scroll
             focus={view!.kind === "internal" ? cards[0] ?? null : view!.pick}
             most={ACTUAL}
             chrome={{ crumbs: true, lattice: display.lattice ?? true, legend: display.legend,
@@ -447,13 +437,18 @@ export function App() {
             <p className="strip mm-strip" onClick={() => setNote("")}>{note}</p>
           ) : null}
         </div>
-        <TrayFrame open={tray.open} onOpen={tray.onOpen} big={big} onBig={setBig}
-          word={kind} name={about?.name ?? ""} tabs={TABS} tab="markdown" onTab={() => {}}>
-          {shown
-            ? <Document graph={graph} doc={shown} lit={lit} picked={picked}
-                onPick={(id) => act("reveal", { id })} onPoint={setPointed} />
-            : <Preview graph={graph} picked={about?.id ?? null} />}
-        </TrayFrame>
+        {/* The kit's tray, read only, and the document a block sits in as a tab of mndmap's own. */}
+        <Tray graph={graph} layer={layer} open={tray.open} onOpen={tray.onOpen}
+          picked={about ? [about.id] : []} hold={tray.hold} onHold={tray.onHold}
+          {...(tray.tab ? { tab: tray.tab } : {})} onTab={tray.onTab}
+          onHover={setPointed} display={display} onDisplay={onDisplay}
+          extras={[{ name: "document", draw: (id) => {
+            const shown = reading_doc(id);
+            return shown
+              ? <Document graph={graph} doc={shown} lit={lit} picked={picked}
+                  onPick={(at) => act("reveal", { id: at })} onPoint={setPointed} />
+              : <p className="mm-empty">Open a document to read it here.</p>;
+          } }]} />
       </main>
     </div>
   );

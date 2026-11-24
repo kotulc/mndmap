@@ -10,12 +10,13 @@ Nothing is uploaded and nothing is kept between runs. The page is the whole of i
 
 | Layer | What it holds |
 |---|---|
-| **collection** | folders (holders) and documents (definitions), listed by path, nothing read (`scan.ts`). One markdown file on its own sits in a root named after it |
+| **collection** | folders (holders) and documents (usages of `md.document`), listed by path, nothing read (`scan.ts`). One markdown file on its own sits in a root named after it |
 | **parser** | a document's file → content blocks under it, read when the document is first reached (`read.ts`) |
 | **markdown package** | what a document, heading, table, list or fence *is*, as definitions in `markdown.json`; its tags `structure`, `prose`, `data`, `media` say what each kind of content is |
-| **tables** | a table carries its own schema and its header as written; rows are values |
-| **page** | a document drawn as it reads: the kit's `outline` layout, headings down the page |
-| **shell** | explorer, canvas, tray, display — all from `@mnd/kit`. mndmap adds reading, the page, the `markdown` tab and reorganizing |
+| **frontmatter** | a document's card source: its name, what it is, its tags and its values. A type or tag word nothing loaded holds stays a value: a viewer makes no definitions |
+| **tables** | content, as written: a table block's body is the table, rendered as one |
+| **page** | a document drawn as it reads, its content on the **large face**: `md.document` says `layout.face: large`, and each kind's definition its `card.size` and `card.shows`. The kit's layouts place them; mndmap sizes nothing |
+| **shell** | explorer, canvas, tray, display — all from `@mnd/kit`, the tray read only. mndmap adds reading, the `document` tab and reorganizing |
 
 
 ## Running it
@@ -56,7 +57,7 @@ npm run dev
 | `src/edits.ts` | move / order / rename / create / delete, and the undo stack |
 | `src/series.ts` | a document back in reading order: what a pick covers, and its markdown |
 | `src/ui/App.tsx` | the shell, assembled from the kit: the sections, the canvas, the tray; Enter, Backspace and Escape |
-| `src/ui/Preview.tsx` | the tray's `markdown` tab — a block's markdown, or a whole document, rendered |
+| `src/ui/Document.tsx` | the tray's `document` tab — the whole document a block sits in, rendered by the kit's markdown, the section being read lit |
 | `scripts/dev.mjs` | runs the kit watcher, then the app once the kit's first build is written |
 | `samples/sample.md` | the document being designed against |
 | `samples/docs/` | a folder collection; `npm run dev` then `?folder` opens it |
@@ -91,9 +92,9 @@ mndflow's section chain with the package fixed and hidden; browsing, opening and
 
 1. Each heading is a **section group** holding what follows it, until a heading of the same level or higher, headed by its heading block. The explorer lists the outline, each section folded under its heading.
 2. The page draws one document as one layer, sections held by `parent`: headings down the page, each section's content in rows beside its heading, its own sections boxed and stepped right. A flow line runs to each heading from its parent or the sibling before it.
-3. Consecutive paragraphs and quotes are one `text` block; a table, list, fence or image is its own. A block is a whole number of cards wide and at most three high, cut with `…` unless the display's `full content` is on.
+3. Consecutive paragraphs and quotes are one `text` block; a table, list, fence or image is its own. Each draws its large face at its definition's size, what it says rendered as markdown and cut where it runs past.
 4. A block's body is its element as written: `## Title`, a fence with its language, `- [x] item`. A table is named `<rows>x<columns> items`, a list `list (<n> items)`, a section box `section (<n> blocks)`.
-5. A table carries its own **schema**: a field per column, with the form its cells read as. The first column is the **key** that names each row.
+5. A table is **content**: its body is the table as written, rendered as a table on its card and in the tray.
 6. Every block carries its definition's tag: markdown's `structure`, `prose`, `data` or `media`.
 
 

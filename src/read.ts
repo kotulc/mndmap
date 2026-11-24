@@ -1,36 +1,27 @@
-/** One markdown document, read into blocks under its own, and laid out as it reads.
+/** One markdown document, read into blocks under its own.
  *
  *  Deliberately general: it walks `marked`'s tokens and files each one under the definition that
  *  describes it. What a block *means* is the markdown package's business, not this reader's — so
- *  a new element is a definition there plus one line here, and nothing else moves.
+ *  a new element is a definition there plus one line here, and nothing else moves. How each draws
+ *  and how big is the package's too: the kit's faces and layouts place it.
  *
  *  A document is one layer under its document block. A heading is a section holding what follows
- *  it, and a section under it is a section inside it: each held by `parent`.
- *  Content is split where its kind changes — a run of paragraphs and quotes is one text block, and
- *  each list, fence, table and image its own — and read in order. */
+ *  it, and a section under it is a section inside it: each held by `parent`. Content is split where
+ *  its kind changes — a run of paragraphs and quotes is one text block, and each list, fence,
+ *  table and image its own — and read in order. Its frontmatter is its card source: what it is,
+ *  its tags and its values. */
 
 import { marked, type Token, type Tokens } from "marked";
-import { UNITS, children, set_card, set_full, size_of, subtree, type Block, type Graph,
-         type Id } from "@mnd/kit";
-import { CODE, FRONT, HEADING, IMAGE, LIST, SECTION, TABLE, TEXT }
-  from "./packages/markdown.js";
-import { form_of } from "./forms.js";
+import { all_defs, children, is_tag, names_in, read_card, said_as, subtree, type Block,
+         type Graph, type Id, type Value } from "@mnd/kit";
+import { CODE, HEADING, IMAGE, LIST, SECTION, TABLE, TEXT } from "./packages/markdown.js";
 import { plain } from "./names.js";
 
-/** How many lines make a fence or list long, so it spans two columns. */
-const LONG = 12;
-
-/** How many default card heights a block may grow to before it is cut. */
-const TALL = 3;
-
-/** A table's cells, in units: room for a short phrase over two lines. */
-const CELL_H = 2;
-
-/** The fewest lines a table shows before it is cut: a table is read by its rows. */
-const LINES = 6;
-
-/** What reads as prose, a run of it one text block. */
+/** What a paragraph-like token is: prose, a run of it one text block. */
 const PROSE: readonly string[] = ["paragraph", "blockquote", "html", "def"];
+
+/** The frontmatter keys a document says itself with; any other is a value. */
+const OWN = ["name", "type", "tags", "source"];
 
 
 /** The graph with a document's text — read from its file when it is opened — put into blocks
@@ -61,8 +52,8 @@ export function read(source: Graph, doc: Id, text: string): Graph {
     return held;
   };
 
-  const { front, body } = split_front(text);
-  if (front) put({ type: FRONT, name: "frontmatter", body: front }, "front");
+  const { front, body } = card(text);
+  graph.blocks[doc] = carded(graph, graph.blocks[doc]!, front);
   for (const token of marked.lexer(body)) walk(token);
   return graph;
 
@@ -111,22 +102,10 @@ export function read(source: Graph, doc: Id, text: string): Graph {
         return;
       }
       case "table": {
-        // Named by its rows by its columns; its first column is its key. Its schema is its own, a
-        // field per column. Its rows are values, not parts: it is one grid, headed by its
-        // columns' names. Its body is the table as written.
+        // Content, as written: named by its rows by its columns, its body the table.
         const table = token as Tokens.Table;
-        const headers = table.header.map((cell, n) => plain(cell.text) || `col ${n + 1}`);
-        const forms = headers.map((_, n) => form_of(table.rows.map((row) => row[n]?.text ?? "")));
-        put({
-          type: TABLE, body: raw, name: `table (${table.rows.length}x${headers.length} items)`,
-          values: headers.map((name, n) => ({
-            name, form: forms[n] ?? "text", ...(n === 0 ? { key: true } : {}),
-          })),
-          grid: {
-            rows: table.rows.length + 1, cols: headers.length, columns: headers.map(() => ""),
-            values: [headers, ...table.rows.map((row) => row.map((cell) => cell.text.trim()))],
-          },
-        }, "table");
+        put({ type: TABLE, body: raw,
+              name: `table (${table.rows.length}x${table.header.length} items)` }, "table");
         return;
       }
       default:
@@ -137,67 +116,30 @@ export function read(source: Graph, doc: Id, text: string): Graph {
   }
 }
 
-/** The collection sized to read: each content block read so far spans its columns and is cut at
- *  its height, for a view of a whole section to lay out.
- *
- *  A small block is one card; a table spans a column for every two of its own, a long fence or
- *  list two. A block is cut at `TALL` cards high, unless `full` shows all of it. Drawn, never
- *  stored: the held graph keeps no sizes, places or lines. */
-export function sized(graph: Graph, card: { w: number; h: number }, full: boolean,
-                      across: number): Graph {
-  set_card(card.w, card.h);
-  const air = UNITS.unit;
-  const gap = UNITS.gap * air;
-  const one = { w: UNITS.block.w * air, h: UNITS.block.h * air };
-  const wide = (span: number) => span * one.w + (span - 1) * gap;
-  const blocks = { ...graph.blocks };
 
-  /** How tall a block would be, shown whole. */
-  const whole = (id: Id) => {
-    set_full(true);
-    const h = size_of(graph, id).h;
-    set_full(full);
-    return h;
-  };
-  // Each content block spans its columns and is cut at its height.
-  for (const block of Object.values(graph.blocks)) {
-    const span = spanned(block, across);
-    if (block.type === TABLE && block.grid) {
-      const most = Math.max(LINES, Math.floor((TALL * one.h) / (CELL_H * air)));
-      const values = full ? block.grid.values ?? [] : cut(block.grid.values ?? [], most);
-      const size = { w: Math.max(2, Math.floor(wide(span) / air / block.grid.cols)), h: CELL_H };
-      blocks[block.id] = { ...block, grid: { ...block.grid, values, rows: values.length, size } };
-    } else if ([TEXT, LIST, CODE].includes(block.type ?? "")) {
-      const h = full ? whole(block.id) : Math.min(whole(block.id), TALL * one.h);
-      blocks[block.id] = { ...block, w: wide(span), h, settings: { card: { height: "free" } } };
-    }
-  }
-  return { ...graph, blocks };
+/** A document's text split into its card source and its body. Frontmatter that does not read is
+ *  left as the page wrote it. */
+function card(text: string): { front: Record<string, unknown>; body: string } {
+  try { return read_card(text); }
+  catch { return { front: {}, body: text }; }
 }
 
-
-/** How many columns a block spans: a table one for every two of its own, a long fence or list
- *  two, anything else one — never more than a row holds. */
-function spanned(block: Block, across: number): number {
-  const lines = (block.body ?? "").split("\n").length;
-  const span = block.type === TABLE ? Math.ceil((block.grid?.cols ?? 1) / 2)
-    : [CODE, LIST].includes(block.type ?? "") && lines >= LONG ? 2 : 1;
-  return Math.max(1, Math.min(span, across));
-}
-
-/** A table's lines cut to `most`, the last saying how many more there are. */
-function cut(values: string[][], most: number): string[][] {
-  if (values.length <= most) return values;
-  const kept = values.slice(0, most - 1);
-  const more = `… ${values.length - kept.length} more`;
-  return [...kept, values[0]!.map((_, n) => (n ? "" : more))];
-}
-
-/** The front matter, and the document without it. */
-function split_front(text: string): { front: string; body: string } {
-  const match = /^\s*---\r?\n([\s\S]*?)\r?\n---[ \t]*(\r?\n|$)/.exec(text);
-  if (!match) return { front: "", body: text };
-  return { front: match[1]!.trim(), body: text.slice(match[0].length) };
+/** A document as its frontmatter says: its name, what it is and its tags, where something loaded
+ *  holds them, and every other key a value. A word nothing holds stays a value, since a viewer
+ *  makes no definitions. */
+function carded(graph: Graph, doc: Block, front: Record<string, unknown>): Block {
+  const values: Value[] = Object.entries(front).filter(([k]) => !OWN.includes(k))
+    .map(([name, v]) => ({ name, value: said_as(v) }));
+  const word = said_as(front["type"]).trim();
+  const type = word ? all_defs(graph).find((d) => d.name === word && !is_tag(graph, d.id)) : null;
+  if (word && !type) values.unshift({ name: "type", value: word });
+  const words = names_in(front["tags"]);
+  const tags = words.map((t) => all_defs(graph).find((d) => d.name === t && is_tag(graph, d.id))?.id)
+    .filter((t): t is Id => !!t);
+  if (tags.length < words.length) values.push({ name: "tags", value: words.join(", ") });
+  const name = said_as(front["name"]).trim();
+  return { ...doc, ...(name ? { name } : {}), ...(type ? { type: type.id } : {}),
+           ...(tags.length ? { tags } : {}), ...(values.length ? { values } : {}) };
 }
 
 /** A paragraph that is one image and nothing else. */

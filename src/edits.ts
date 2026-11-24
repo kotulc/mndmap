@@ -87,16 +87,14 @@ function run(graph: Graph, edit: Edit): string | null {
       const folder = edit.type === "folder";
       const source = parent.source ? `${parent.source}/${name}` : name;
       const id = mint(graph, `${folder ? "dir" : "file"}:${source}`);
-      /** In the collection a file or folder is a definition; inside a document, content. */
-      const collected = in_collection(graph, edit.parent);
+      /** In the collection a file or folder is filed; inside a document, it is content. */
       graph.blocks[id] = {
         id,
         parent: edit.parent,
         type: folder ? "folder" : "block",
         name,
-        source,
+        ...(in_collection(graph, edit.parent) ? { source } : {}),
         order: children(graph, edit.parent).length + 1,
-        ...(collected ? { def: {} } : {}),
       };
       return null;
     }
@@ -128,13 +126,12 @@ function seat(graph: Graph, parent: Id, id: Id, at?: number): void {
 /** Whether a place is the collection's — its root or a folder in it — rather than a document's. */
 function in_collection(graph: Graph, at: Id): boolean {
   const block = graph.blocks[at];
-  return block?.parent === null || (!block?.def && block?.type === "folder");
+  return block?.parent === null || block?.type === "folder";
 }
 
-/** Whether a block is the collection's own: a file (a definition) or a folder. */
+/** Whether a block is the collection's own: a file or a folder, filed in the collection. */
 function filed(graph: Graph, id: Id): boolean {
-  const block = graph.blocks[id];
-  return !!block?.def || block?.type === "folder";
+  return in_collection(graph, graph.blocks[id]?.parent ?? "");
 }
 
 /** Whether moving into `parent` would put a block inside itself. */
