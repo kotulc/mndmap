@@ -1,111 +1,61 @@
 # mndmap
 
-**The viewer: a markdown collection read into blocks and explored**, built on the mndflow kit as shipped. The first translator of an existing system into mndflow's model.
+**Cards and diagrams for static documentation, drawn from the markdown it is published from.** mndmap is the test bed for micro-documentation: a page read as a deck of bite-sized cards that open to show their parts and relationships, with mndflow's look and motion, portable to any static site. Flowcharts and a site map are drawn the same way. The output is markdown again, for any static site builder (mndsite, or another) to publish unchanged.
 
-A folder of markdown becomes a **collection**: a folder per folder and a block per file, each markdown file a **document** read from disk into blocks the first time it is reached. What a heading, a table, a list or a fence *is* comes from a **markdown package** — block definitions and tags, as JSON — rather than from the parser's own opinion. The parser stays general and small; the package carries the meaning.
+[VISION.md](VISION.md) says where this is going; [PLAN.md](PLAN.md) says what comes next.
 
-Nothing is uploaded and nothing is kept between runs. The page is the whole of it.
+```
+markdown → mndmap build → markdown with diagrams + diagram pages → site builder → site
+```
 
-**The vision, the model and its rules live in mndflow's `docs/`** (design.md first), for both apps. This README covers only what the viewer adds.
-
-| Layer | What it holds |
+| Fence | Draws |
 |---|---|
-| **collection** | folders (holders) and documents (usages of `md.document`), listed by path, nothing read (`scan.ts`). One markdown file on its own sits in a root named after it |
-| **parser** | a document's file → content blocks under it, read when the document is first reached (`read.ts`) |
-| **markdown package** | what a document, heading, table, list or fence *is*, as definitions in `markdown.json`; its tags `structure`, `prose`, `data`, `media` say what each kind of content is |
-| **frontmatter** | a document's card source: its name, what it is, its tags and its values. A type or tag word nothing loaded holds stays a value: a viewer makes no definitions |
-| **tables** | content, as written: a table block's body is the table, rendered as one |
-| **page** | a document drawn as it reads, its content on the **large face**: `md.document` says `layout.face: large`, and each kind's definition its `card.size` and `card.shows`. The kit's layouts place them; mndmap sizes nothing |
-| **shell** | explorer, canvas, tray, display — all from `@mnd/kit`, the tray read only. mndmap adds reading, the `document` tab and reorganizing |
+| ```` ```cards ```` | its page as a deck: one card per heading, opening to show its parts, read one at a time |
+| ```` ```mermaid ```` (a flowchart) | the flow; `click Node "page/path"` links a node to a page |
+| ```` ```sitemap ```` | the whole site as a treemap: folders, pages, sections, all links |
+
+Each is placed **static** (inline SVG, no script) or **interactive** (a frame on its own page; decks are framed by default), and every one also gets a self-contained page of its own plus a gallery, for inspecting them one by one. The full guide is in [`docs/`](docs/index.md), itself drawn by mndmap.
 
 
 ## Running it
 
 ```
 npm install
-npm run dev
+npm run build
+node dist/cli.js build <content> --out build
+node dist/cli.js check <content>          # broken links, for CI
 ```
 
-`npm run build` writes the static page to `dist/ui`.
+`npm run demo` builds `docs/` into `dist/demo`; open `dist/demo/_assets/mndmap/index.html` for the gallery.
 
-
-## Working on mndflow at the same time
-
-`npm run dev` also **watches `../mndflow` and rebuilds the kit as you edit it.** Save a file there and the page updates in about two seconds — no pack, no copy, no `npm install`, no restart.
-
-| | |
-|---|---|
-| mndflow checked out at `../mndflow` | used automatically |
-| no mndflow beside this repo | falls back to `vendor/mnd-kit-*.tgz` |
-| `MNDMAP_KIT=pin npm run dev` | ignore mndflow, use the tarball |
-
-`package.json` always names the vendored tarball, so a clone, a build and CI are unaffected. Only the dev server looks sideways.
-
-**One dev server at a time.** Each kit build cleans the kit's `dist` first, so a second watcher (or `npm run kit:types`) can catch a running page mid-clean; its vite then keeps failing to resolve `@mnd/kit`. Restart `npm run dev` to recover.
-
-**Types lag on purpose.** The watch rebuilds only what the browser reads. If you change a kit *signature* and `tsc` disagrees with the page, run `npm run kit:types`. Re-pin with a real release when the kit change is settled: `npm run release:kit` in mndflow, copy the tarball into `vendor/`, and point `package.json` at it.
+`npm run try` builds mndsite's own docs (from `../mndsite`) with `samples/mndsite/` laid over them, the About page as a deck: open `dist/try/build/_assets/mndmap/about-1.html`.
 
 
 ## Layout
 
 | Path | What |
 |---|---|
-| `src/scan.ts` | a folder or file on disk → a collection of folders and documents, each file keeping a reader |
-| `src/read.ts` | one document's text → content blocks under it, and the page it lays out as |
-| `src/packages/markdown.json` | the markdown package: what each element is, as definitions and tags |
-| `src/packages/markdown.ts` | reads it, and names the ids the reader's code keys off |
-| `src/edits.ts` | move / order / rename / create / delete, and the undo stack |
-| `src/series.ts` | a document back in reading order: what a pick covers, and its markdown |
-| `src/ui/App.tsx` | the shell, assembled from the kit: the sections, the canvas, the tray; Enter, Backspace and Escape |
-| `src/ui/Document.tsx` | the tray's `document` tab — the whole document a block sits in, rendered by the kit's markdown, the section being read lit |
-| `scripts/dev.mjs` | runs the kit watcher, then the app once the kit's first build is written |
-| `samples/sample.md` | the document being designed against |
-| `samples/docs/` | a folder collection; `npm run dev` then `?folder` opens it |
-| `vendor/` | the pinned `@mnd/kit` release |
+| `src/cli.ts` | `mndmap build` / `check`: flags, report, exit codes |
+| `src/config.ts` | settings: defaults, `mndmap.yaml`, flags |
+| `src/build.ts` | copies content to `out`, swaps fences for drawings, writes diagram pages |
+| `src/site.ts` | the content folder as a site: pages, urls, titles, words, sections |
+| `src/fences.ts` | finding diagram fences in a page and swapping them out |
+| `src/diagrams.ts` | each fence as a diagram, drawable from wherever it lands |
+| `src/cards.ts` | a page's headings as a deck of cards, links between them as relationships |
+| `src/mermaid.ts` | flowcharts read with Mermaid's own parser (in a jsdom window) |
+| `src/links.ts` | references to pages: lookup, checking, relative hrefs |
+| `src/flow.ts` | a flow laid out by dagre, drawn as SVG |
+| `src/pages.ts`, `src/deck-style.ts` | each diagram's own page (a deck's stage and panel), and the gallery |
+| `src/render/` | shared by build and page script: deck layout, the treemap, the theme, text fitting, icons |
+| `src/runtime/` | the script inside each diagram page: the deck (camera, lines, panel), theme, map, flow |
+| `samples/mndsite/` | pages laid over mndsite's docs by `npm run try`: the About page as a deck |
+| `scripts/try.mjs` | builds mndsite's docs with the samples |
+| `docs/` | the guide, and the demo content |
 
 
-## Sections
+## Relationships
 
-mndflow's section chain with the package fixed and hidden; browsing, opening and navigation are the kit's.
-
-| Canvas | Draws |
+| Project | Role |
 |---|---|
-| **overview** (nothing open) | the collection's one package, its folders flattened into boxes, documents at their own size, read down the page |
-| **a document** | its page, as the kit's `outline` lays it |
-
-| Section | Lists | Holds |
-|---|---|---|
-| **collection** | the folders and documents, nested | a folder or document (default the first document) |
-| **document** | the document held, its outline under it | a block in it, or nothing — the whole |
-
-| Rule | |
-|---|---|
-| **three cues** | the accent's edge on the row the canvas shows, the pick a strong wash, each section's pick a faint one |
-| **remembered** | a section remembers what it held for each context above |
-| **read on arrival** | a document's file is read the first time a section or the canvas reaches it — the text on disk then; reading is not an edit |
-| **headers are labels** | a header folds its section; there are no root rows |
-| **headings fold** | a document's headings fold what follows them as it is read |
-| **scrolled into view** | the page holds still across and stops at its content's ends; a pick out of view is scrolled just into it |
-
-
-## How a document is shaped
-
-1. Each heading is a **section group** holding what follows it, until a heading of the same level or higher, headed by its heading block. The explorer lists the outline, each section folded under its heading.
-2. The page draws one document as one layer, sections held by `parent`: headings down the page, each section's content in rows beside its heading, its own sections boxed and stepped right. A flow line runs to each heading from its parent or the sibling before it.
-3. Consecutive paragraphs and quotes are one `text` block; a table, list, fence or image is its own. Each draws its large face at its definition's size, what it says rendered as markdown and cut where it runs past.
-4. A block's body is its element as written: `## Title`, a fence with its language, `- [x] item`. A table is named `<rows>x<columns> items`, a list `list (<n> items)`, a section box `section (<n> blocks)`.
-5. A table is **content**: its body is the table as written, rendered as a table on its card and in the tray.
-6. Every block carries its definition's tag: markdown's `structure`, `prose`, `data` or `media`.
-
-
-## Reading it
-
-| Key | Does |
-|---|---|
-| ↑ ← / ↓ → | the row before / after, through every section |
-| Enter / double-click / → | open: a document draws as its page; a folder is focused on the overview |
-| crumbs | the collection, then the document drawn; picking one opens it |
-| Backspace / ← | leave: from a document's page to the overview, it picked |
-| Escape | clear the pick; with nothing picked, leave |
-
-**Folding.** The arrows open each branch they step into, and a pick in a shut branch opens the way to it; nothing shuts on its own. A section's chevron shuts every branch in it, or opens them all, and never hides its top rows; its header hides or shows the whole section; the bar's fold shuts the lowest open layer under every branch, a layer a click, and with nothing left to shut opens everything again.
+| **mndflow** | the look: colour ramp, monospace type, chips, cards and boxes follow its design language |
+| **mndsite** | publishes mndmap's output as any other content; nothing in it changes |

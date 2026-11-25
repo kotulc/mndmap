@@ -1,101 +1,12 @@
-import { existsSync } from "node:fs";
-import { readdir, readFile } from "node:fs/promises";
-import { extname, join, relative, resolve } from "node:path";
-import react from "@vitejs/plugin-react";
-import { defineConfig, type Plugin } from "vite";
+/** Bundles the script every standalone diagram page carries inline: `dist/runtime.js`. */
 
-/** The sample, served in dev only.
- *
- *  `samples/sample.md` is the document being designed against, so the dev
- *  server opens on it. `?folder` serves `samples/docs` instead, for when the
- *  folder case needs looking at. An image the sample points at is served from
- *  beside it. The built page serves neither: there, an empty tab is the truth,
- *  and a run starts with a file or a folder. */
-function sample(): Plugin {
-  return {
-    name: "mndmap-sample",
-    apply: "serve",
-    configureServer(server) {
-      server.middlewares.use((request, response, next) => {
-        const [at, query] = (request.url ?? "").split("?");
-        const image = IMAGES[extname(at ?? "").toLowerCase()];
-        const file = resolve("samples", `.${at}`);
-        if (image && file.startsWith(resolve("samples")) && existsSync(file)) {
-          response.setHeader("content-type", image);
-          readFile(file).then((body) => response.end(body)).catch(() => next());
-          return;
-        }
-        if (at !== "/sample.json") return next();
-        const folder = new URLSearchParams(query ?? "").has("folder");
-        const held = folder
-          ? walk(resolve("samples/docs")).then((files) => ({ name: "docs", files }))
-          : readFile(resolve("samples/sample.md"), "utf8")
-            .then((text) => ({ name: "sample.md", files: [{ path: "sample.md", text }] }));
-        held
-          .then((body) => {
-            response.setHeader("content-type", "application/json");
-            response.end(JSON.stringify(body));
-          })
-          .catch(() => next());
-      });
-    },
-  };
-}
+import { defineConfig } from "vite";
 
-/** The images a sample may point at, by extension, and the type each is served as. */
-const IMAGES: Record<string, string> = {
-  ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
-  ".gif": "image/gif", ".webp": "image/webp",
-};
 
-/** Every file under a sample folder, by its path from it. */
-async function walk(dir: string, root = dir): Promise<{ path: string; text: string }[]> {
-  const out: { path: string; text: string }[] = [];
-  for (const entry of await readdir(dir, { withFileTypes: true })) {
-    const at = join(dir, entry.name);
-    if (entry.isDirectory()) out.push(...await walk(at, root));
-    else out.push({ path: relative(root, at).split(/[\\/]/).join("/"), text: await readFile(at, "utf8") });
-  }
-  return out;
-}
-
-/** The kit, read from a neighbouring mndflow checkout instead of the vendored
- *  tarball.
- *
- *  A build there writes `dist/`, this points at it, and the page reloads —
- *  so a kit change costs a save rather than a release. Dev only, and only
- *  where mndflow is actually there: `package.json` still names the tarball,
- *  so a build and a fresh clone are unaffected. `MNDMAP_KIT=pin` opts out;
- *  `MNDMAP_KIT=<dir>` reads a built kit from there instead, for when
- *  mndflow's working tree does not build. */
-const MODE = process.env.MNDMAP_KIT;
-const KIT = MODE && MODE !== "pin" ? resolve(MODE) : resolve("..", "mndflow", "packages", "kit");
-const linked = MODE !== "pin" && existsSync(join(KIT, "dist", "index.js"));
-
-const kit_alias = linked ? [
-  { find: /^@mnd\/kit$/, replacement: join(KIT, "dist/index.js") },
-  { find: /^@mnd\/kit\/react$/, replacement: join(KIT, "dist/react.js") },
-  { find: /^@mnd\/kit\/react\.css$/, replacement: join(KIT, "dist/react.css") },
-  { find: /^@mnd\/kit\/shell$/, replacement: join(KIT, "dist/shell.js") },
-  { find: /^@mnd\/kit\/shell\.css$/, replacement: join(KIT, "dist/shell.css") },
-] : [];
-
-/** The browser is the product: one page, no server. A run starts with a
- *  folder picked or dropped on the page, read where it is. */
 export default defineConfig({
-  plugins: [react(), sample()],
-  resolve: {
-    alias: kit_alias,
-    // The kit carries its own React, and a linked one resolves against
-    // mndflow's. One instance, so hooks resolve against this app's copy.
-    dedupe: ["react", "react-dom", "react/jsx-runtime"],
+  build: {
+    outDir: "dist",
+    emptyOutDir: false,
+    lib: { entry: "src/runtime/main.ts", name: "mndmap", formats: ["iife"], fileName: () => "runtime.js" },
   },
-  // A linked kit is outside the project, and its rebuilds must reach the page.
-  optimizeDeps: { exclude: linked ? ["@mnd/kit"] : [] },
-  server: {
-    port: 7342,
-    fs: { allow: [process.cwd(), ...(linked ? [KIT] : [])] },
-  },
-  build: { outDir: "dist/ui", emptyOutDir: true },
-  preview: { port: 7342 },
 });
