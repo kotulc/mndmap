@@ -58,6 +58,7 @@ text-transform:none;letter-spacing:normal;color:var(--mm-ink)}
 .mm-body code,.mm-lead code{padding:0 4px;border:1px solid var(--mm-line);border-radius:3px;font-size:.92em}
 .mm-body pre{margin:0 0 10px;font-size:11.5px}.mm-body pre code{padding:0;border:0}
 .mm-body table{margin:0 0 10px;font-size:12px}
+.mm-body img{max-width:100%;height:auto}
 .mm-panel h3{margin:22px 0 8px;font-size:11px;font-weight:400;letter-spacing:.14em;text-transform:uppercase;color:var(--mm-dim)}
 .mm-parts{display:flex;flex-wrap:wrap;gap:6px}
 .mm-part{padding:4px 10px;border:1px solid var(--mm-line);border-left:3px solid var(--mm-id);border-radius:3px;color:var(--mm-ink)}

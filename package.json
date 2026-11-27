@@ -12,7 +12,8 @@
   },
   "scripts": {
     "build": "vite build && tsc -p tsconfig.json",
-    "demo": "npm run build && node dist/cli.js build docs --out dist/demo",
+    "dev": "node scripts/dev.mjs",
+    "demo":"npm run build && node dist/cli.js build docs --out dist/demo",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "try": "node scripts/try.mjs"
   },
