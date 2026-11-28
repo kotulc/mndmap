@@ -140,11 +140,31 @@ export function deck(host: HTMLElement, data: Deck) {
     fly(world, v, from ?? to, to, through, ms).then(() => { if (focus === id) level(to.s); });
   };
 
+  // In a site deck, a link to a page that is a card moves the focus there; reading a page asks
+  // the host page to show it when the host said it would (`?host`), else the link is followed
+  const hosted = parent !== window && new URLSearchParams(location.search).has("host");
+  const pages = new Map(Object.entries(data.hrefs ?? {})
+    .map(([url, h]) => [new URL(h, location.href).pathname, url]));
+  const carded = (a: HTMLAnchorElement) => {
+    const to = new URL(a.href);
+    const url = to.origin === location.origin ? pages.get(to.pathname) : undefined;
+    const id = url !== undefined && to.hash ? `${url}#${decodeURIComponent(to.hash.slice(1))}` : url;
+    return id !== undefined && data.cards[id] ? id : url;
+  };
+
   // Moving: blocks and named cards focus; the ground goes up; keys step through reading order
   const named = (e: Event) => (e.target as Element).closest<HTMLElement>("[data-card]");
   host.addEventListener("click", (e) => {
     const go = named(e);
     if (go?.dataset.card) { e.preventDefault(); show(go.dataset.card); return; }
+    const a = (e.target as Element).closest<HTMLAnchorElement>("a[href]");
+    if (a?.dataset.read && hosted) {
+      e.preventDefault();
+      parent.postMessage({ mndmap: "read", id: a.dataset.read }, location.origin);
+      return;
+    }
+    const to = a && !a.dataset.read ? carded(a) : undefined;
+    if (to !== undefined && data.cards[to]) { e.preventDefault(); show(to); return; }
     const hit = (e.target as Element).closest<HTMLElement>(".mm-block");
     if (hit && viewport.contains(hit)) show(hit.dataset.id!);
     else if (viewport.contains(e.target as Node) && !(e.target as Element).closest("a")) up();
@@ -216,5 +236,5 @@ function block(deck: Deck, id: string): string {
   return `<div class="mm-block mm-leaf mm-h${hue}" data-id="${id}" hidden>`
     + `<div class="mm-block-head"><span class="mm-block-title">${esc(card.title)}</span>`
     + (parts ? `<span class="mm-block-count">${parts}</span>` : "") + "</div>"
-    + `<div class="mm-block-sum">${card.summary.replace(/<[^>]+>/g, "")}</div></div>`;
+    + `<div class="mm-block-sum">${card.face}</div></div>`;
 }

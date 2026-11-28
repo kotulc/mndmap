@@ -74,9 +74,11 @@ function named(slug: string): string {
   return slug.replace(/[-_]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-/** Inline markdown reduced to its words: no emphasis, code ticks or link targets. */
-function plain(text: string): string {
-  return text.replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/[`*_~]/g, "").trim();
+/** Inline markdown reduced to its words, as the site renders them: no emphasis marks, code ticks
+ *  or link targets, but a word's own underscores kept (so a heading slugs as its anchor does). */
+export function plain(text: string): string {
+  return text.replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/(\*\*|__|\*|~~)(.+?)\1/g, "$2")
+    .replace(/`/g, "").trim();
 }
 
 /** One page read: its url from its path, its title and sections from its text. */

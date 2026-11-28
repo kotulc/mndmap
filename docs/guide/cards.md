@@ -28,12 +28,18 @@ It hands [MDX pages](#build) to Build.
 |---|---|
 | `#`, or the page title | the root: what the whole thing is |
 | `##`, `###`, `####` | parts, and parts of parts, in reading order |
-| a section's first paragraph | the card's one-line meaning, shown on its block |
+| a list whose every item leads with a term: `**Term** — …` | a part per item |
+| a numbered list | a part per step, each leading to the next |
+| a bold label over a list: `**Phase 1**` then items | a part holding the list |
+| the first sentence, when a section opens with a paragraph | the card's one-line meaning |
 | the rest of the section | its detail, told in the panel when it is in focus |
 | a link to a heading in the page: `[MDX pages](#build)` | a relationship, labelled by the link's text |
+| a section naming another section's heading | a relationship, unlabelled |
 | a link to another page | a link in the panel, checked like any other |
 
-Write each section's first paragraph as the one sentence a reader needs, and link a section to the sections it hands things to.
+Pages are read as they are written: nothing needs reshaping. Only unambiguous structure becomes parts or lines; the rest stays as detail. Closed, a card says the page's `description` (at the root), else its meaning, else what it holds ("14 parts: …", "a table of 7 (Concern, Owner)").
+
+With `cards` set in [configuration](../reference/config.md), the whole site is also one deck: folders hold pages, pages hold their cards, and Esc zooms out from a section to its page, folder and the site. A card's address is its page's url and anchor (`/about#ingest`), so a host can switch between a page and its cards in place.
 
 ## Reading a deck
 

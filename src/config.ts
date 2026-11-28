@@ -13,6 +13,7 @@
  *  | `strict` | `false` | fail the build on a link that names no page |
  *  | `exclude` | none | pages (paths or folders under `content`) left off the map and out of links |
  *  | `map` | 800 × 520 | the size a sitemap is laid out at |
+ *  | `cards` | `false` | also write the whole site as one deck: `<assets>/site.html` |
  */
 
 import { existsSync, readFileSync } from "node:fs";
@@ -28,13 +29,14 @@ export type Mode = "static" | "interactive";
 /** Everything a build reads. */
 export type Config = {
   content: string; out: string; mode: Mode; urls: Urls; assets: string; title?: string;
-  dark: Dark; strict: boolean; exclude: string[]; map: { width: number; height: number };
+  dark: Dark; strict: boolean; exclude: string[]; map: { width: number; height: number }; cards: boolean;
 };
 
 /** Settings as written, in a file or as flags. */
 type Written = Partial<{
   content: string; out: string; mode: string; urls: string; base: string; assets: string;
   title: string; dark: string; strict: boolean; exclude: string[]; map: { width?: number; height?: number };
+  cards: boolean;
 }>;
 
 
@@ -70,5 +72,6 @@ export function config(flags: Written & { config?: string }): Config {
     strict: Boolean(flags.strict ?? file.strict ?? false),
     exclude: [...(file.exclude ?? []), ...(flags.exclude ?? [])].map((p) => p.replace(/^\.?\/|\/$/g, "")),
     map: { width: file.map?.width ?? 800, height: file.map?.height ?? 520 },
+    cards: Boolean(flags.cards ?? file.cards ?? false),
   };
 }

@@ -25,13 +25,20 @@ export function panel(deck: Deck, id: string): string {
   const into = coming.map((t) => row("←", t.id, t.label, id));
   const prev = deck.order[at - 1];
   const next = deck.order[at + 1];
+  // In a site deck, where the card is in the site's pages: its own heading, or the nearest above
+  let place = id;
+  while (deck.cards[place]!.part && deck.cards[place]!.parent) place = deck.cards[place]!.parent!;
+  const [url = "", anchor] = place.split("#");
+  const page = deck.hrefs?.[url];
+  const read = page === undefined ? "" : `<a class="mm-read" href="${page}${anchor ? `#${anchor}` : ""}"`
+    + ` data-read="${esc(place)}">Read the page ↗</a>`;
 
   return `<nav class="mm-crumbs">${trail.join('<span class="mm-sep">/</span>')}</nav>`
     + `<div class="mm-card-view">`
     + `<div class="mm-eyebrow">${card.parent ? `part ${deck.cards[card.parent]!.kids.indexOf(id) + 1} of ${deck.cards[card.parent]!.kids.length}` : "overview"}</div>`
     + `<h2 class="mm-card-title mm-h${card.hue <= 4 ? card.hue : 0}">${esc(card.title)}</h2>`
     + (card.summary ? `<div class="mm-lead">${card.summary}</div>` : "")
-    + (card.body.trim() ? `<div class="mm-body">${card.body}</div>` : "")
+    + read + (card.body.trim() ? `<div class="mm-body">${card.body}</div>` : "")
     + (card.kids.length ? `<h3>Parts</h3><div class="mm-parts">${card.kids.map((k) => go(k, undefined, " mm-part")).join("")}</div>` : "")
     + (out.length || into.length ? `<h3>Connects</h3><ul class="mm-rel">${[...out, ...into].join("")}</ul>` : "")
     + `</div><footer class="mm-steps">`

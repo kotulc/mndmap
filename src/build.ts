@@ -8,7 +8,8 @@ import type { Config } from "./config.js";
 import { diagrams, type Diagram, type Skipped } from "./diagrams.js";
 import { swap } from "./fences.js";
 import { href, published, type Link } from "./links.js";
-import { gallery, inline, page } from "./pages.js";
+import { gallery, inline, page, site_page } from "./pages.js";
+import { site_deck } from "./site-deck.js";
 import { scan, type Site } from "./site.js";
 
 
@@ -37,6 +38,8 @@ export async function build(config: Config): Promise<Report> {
   const report = await inspect(config);
   clear(config);
   cpSync(config.content, config.out, { recursive: true, filter: (from) => basename(from) !== ".git" });
+  // Marked first, so a build that fails part way still leaves a folder the next may replace
+  writeFileSync(join(config.out, MARK), "Built by mndmap: this folder is replaced on every build.\n");
 
   // Each page's fences swapped for their drawings, in the copy
   const by_page = Map.groupBy(report.found, (d) => d.page);
@@ -46,12 +49,15 @@ export async function build(config: Config): Promise<Report> {
     writeFileSync(join(config.out, at.path), swap(text, swaps));
   }
 
-  // Every diagram's own page, and the gallery over them all
+  // Every diagram's own page, the gallery over them all, and with `cards` the site as one deck
   const assets = join(config.out, ...config.assets.split("/"));
   mkdirSync(assets, { recursive: true });
   for (const d of report.found) writeFileSync(join(assets, `${d.id}.html`), page(d, config));
   writeFileSync(join(assets, "index.html"), gallery(report.found, config, report.site.title));
-  writeFileSync(join(config.out, MARK), "Built by mndmap: this folder is replaced on every build.\n");
+  if (config.cards) {
+    const at = `/${config.assets}/site.html`;
+    writeFileSync(join(assets, "site.html"), site_page(site_deck(report.site, config, at), config));
+  }
   return report;
 }
 
@@ -76,6 +82,7 @@ function clear(config: Config) {
   if (existsSync(config.out) && readdirSync(config.out).length && !existsSync(join(config.out, MARK))) {
     throw new Error(`out (${config.out}) holds files mndmap did not write; empty it or pick another folder`);
   }
-  rmSync(config.out, { recursive: true, force: true });
+  // Retried: on Windows a file another process has open briefly can fail the removal part way
+  rmSync(config.out, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   mkdirSync(dirname(config.out), { recursive: true });
 }

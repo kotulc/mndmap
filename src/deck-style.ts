@@ -53,6 +53,7 @@ border-left:1px solid var(--mm-line);background:var(--mm-fill)}
 text-transform:none;letter-spacing:normal;color:var(--mm-ink)}
 .mm-lead{font-size:14px;line-height:1.6;color:var(--mm-ink)}
 .mm-lead p,.mm-body p{margin:0 0 10px}
+.mm-read{display:inline-block;margin:0 0 12px;font-size:12px}
 .mm-body{font-size:13px;line-height:1.65;color:var(--mm-dim)}
 .mm-body ul,.mm-body ol{margin:0 0 10px;padding-left:20px}
 .mm-body code,.mm-lead code{padding:0 4px;border:1px solid var(--mm-line);border-radius:3px;font-size:.92em}

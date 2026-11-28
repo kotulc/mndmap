@@ -33,6 +33,8 @@ A deck's page is the deck itself: the stage the cards are drawn on and the panel
 | its links | each node's reference and where it goes, broken ones marked |
 | its source | the fence as written |
 
+The site deck (`site.html`, with `cards`) can be framed the same way, at any card: `site.html?embed#/about%23ingest`. A host that shows pages itself adds `&host`: the panel's "Read the page" then posts `{ mndmap: "read", id }` to it (the card's page url and anchor) instead of following the link.
+
 Pages are dark unless the reader chose otherwise. The toggle is mndsite's (system → light → dark) and shares its stored choice, so a reader's theme carries between the site and its diagrams.
 
 ## With mndsite

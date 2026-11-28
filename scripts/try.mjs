@@ -16,5 +16,5 @@ const exclude = ["updates/plans.md", "updates/roadmap.md"];
 rmSync(content, { recursive: true, force: true });
 cpSync(join(site, "docs"), content, { recursive: true });
 cpSync(resolve("samples/mndsite"), content, { recursive: true });
-execFileSync(process.execPath, ["dist/cli.js", "build", content, "--out", "dist/try/build", "--title", "MndSite",
+execFileSync(process.execPath, ["dist/cli.js", "build", content, "--out", "dist/try/build", "--title", "MndSite", "--cards",
   ...exclude.flatMap((path) => ["--exclude", path])], { stdio: "inherit" });

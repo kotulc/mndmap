@@ -5,16 +5,21 @@
 import { esc, fit } from "./text.js";
 
 
-/** One card: what it is called, its one-line meaning and its detail (both HTML), where it sits,
- *  its parts, and the cards it links to. */
+/** One card: what it is called, its one-line meaning and its detail (both HTML), what its block
+ *  says closed (escaped text), where it sits, its parts, and the cards it links to. A `part` was
+ *  read from a list, not a heading, so has no anchor of its own in the page. */
 export type Card = {
-  id: string; title: string; summary: string; body: string; depth: number;
+  id: string; title: string; summary: string; body: string; face: string; depth: number;
   parent: string | null; kids: string[]; to: { id: string; label: string }[];
-  hue: number;
+  hue: number; part?: boolean;
 };
 
-/** A deck: its cards by id, the root, and reading order. */
-export type Deck = { title: string; root: string; cards: Record<string, Card>; order: string[]; source: string };
+/** A deck: its cards by id, the root, and reading order. A site deck also carries each page's
+ *  href by url, its cards' ids being the pages' urls and anchors. */
+export type Deck = {
+  title: string; root: string; cards: Record<string, Card>; order: string[]; source: string;
+  hrefs?: Record<string, string>;
+};
 
 /** A card placed: its box in world units. */
 export type Box = { x: number; y: number; w: number; h: number };

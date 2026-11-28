@@ -31,3 +31,4 @@ map:
 | `exclude` | none | pages or folders, under `content`, left off the map and out of lookup |
 | `strict` | `false` | fail the build on a link that names no page |
 | `map.width`, `map.height` | 800, 520 | the size a site map is laid out at |
+| `cards` | `false` | also write the whole site as one deck, `<assets>/site.html`: folders, pages and their sections, zoomed through as cards; a card's address is its page's url and anchor |

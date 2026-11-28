@@ -45,6 +45,7 @@ Reads and reports as `build` does, writes nothing, and exits 1 on any broken lin
 | `--dark retro\|modern` | `dark` |
 | `--exclude <path>` | `exclude`, once per path |
 | `--strict` | `strict` |
+| `--cards` | `cards` |
 | `--config <file>` | the settings file; `mndmap.yaml` in the working folder when there is one |
 
 Each flag overrides the same key in the settings file: see [configuration](config.md).

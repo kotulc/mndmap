@@ -8,6 +8,7 @@ import type { Config } from "./config.js";
 import { DECK_CSS } from "./deck-style.js";
 import type { Diagram, Drawing } from "./diagrams.js";
 import { href, published } from "./links.js";
+import type { Deck } from "./render/blocks.js";
 import { theme } from "./render/theme.js";
 import { esc } from "./render/text.js";
 
@@ -105,6 +106,15 @@ function deck(d: Diagram, config: Config, at: string): string {
     + `<div class="mm-hint">← → step · Esc out · click a card</div></div><aside class="mm-panel" aria-live="polite"></aside></div>`;
   const nav = `<a href="index.html">gallery</a> · <a href="${source}">read the page</a>`;
   return shell(`${d.title} · mndmap`, config, nav, body, { kind: "deck", deck: d.deck!.read(at) }, "mm-deck-page");
+}
+
+/** The site deck's page: the stage and panel, drawn by the script alone (a poster of every card in
+ *  the site would be too large to help). */
+export function site_page(deck: Deck, config: Config): string {
+  const body = `<div class="mm-deck"><div class="mm-viewport"><div class="mm-world"></div>`
+    + `<div class="mm-hint">← → step · Esc out · click a card</div></div><aside class="mm-panel" aria-live="polite"></aside></div>`;
+  const nav = `<a href="index.html">gallery</a>` + (deck.source ? ` · <a href="${deck.source}">read the site</a>` : "");
+  return shell(`${deck.title} · mndmap`, config, nav, body, { kind: "deck", deck }, "mm-deck-page");
 }
 
 /** The gallery: every diagram as a thumbnail, with where it lives and how its links stand. */

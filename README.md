@@ -28,7 +28,11 @@ node dist/cli.js check <content>          # broken links, for CI
 
 `npm run demo` builds `docs/` into `dist/demo`; open `dist/demo/_assets/mndmap/index.html` for the gallery.
 
-`npm run try` builds mndsite's own docs (from `../mndsite`) with `samples/mndsite/` laid over them, the About page as a deck: open `dist/try/build/_assets/mndmap/about-1.html`.
+`npm run try` builds mndsite's own docs (read from `../mndsite/docs`, never written) with `samples/mndsite/` laid over them into `dist/try/build`, the site deck included.
+
+`npm run dev` does the same on every edit in `src/`, `samples/` or those docs, and serves the result: http://localhost:7342/build/_assets/mndmap/site.html is the site deck, `.../index.html` the gallery.
+
+`--cards` also writes the whole site as one deck, `<assets>/site.html`.
 
 
 ## Layout
@@ -41,15 +45,16 @@ node dist/cli.js check <content>          # broken links, for CI
 | `src/site.ts` | the content folder as a site: pages, urls, titles, words, sections |
 | `src/fences.ts` | finding diagram fences in a page and swapping them out |
 | `src/diagrams.ts` | each fence as a diagram, drawable from wherever it lands |
-| `src/cards.ts` | a page's headings as a deck of cards, links between them as relationships |
+| `src/cards.ts` | a page as a deck: headings and lists as cards and parts, links and mentions as relationships |
+| `src/site-deck.ts` | the whole site as one deck: folders, pages, and each page's cards |
 | `src/mermaid.ts` | flowcharts read with Mermaid's own parser (in a jsdom window) |
 | `src/links.ts` | references to pages: lookup, checking, relative hrefs |
 | `src/flow.ts` | a flow laid out by dagre, drawn as SVG |
 | `src/pages.ts`, `src/deck-style.ts` | each diagram's own page (a deck's stage and panel), and the gallery |
 | `src/render/` | shared by build and page script: deck layout, the treemap, the theme, text fitting, icons |
 | `src/runtime/` | the script inside each diagram page: the deck (camera, lines, panel), theme, map, flow |
-| `samples/mndsite/` | pages laid over mndsite's docs by `npm run try`: the About page as a deck |
-| `scripts/try.mjs` | builds mndsite's docs with the samples |
+| `samples/mndsite/` | pages laid over mndsite's docs by `npm run try`: About as written (the target) and rewritten, and the site map |
+| `scripts/try.mjs`, `scripts/dev.mjs` | build mndsite's docs with the samples; and that, served and rebuilt on edit |
 | `docs/` | the guide, and the demo content |
 
 
@@ -58,4 +63,4 @@ node dist/cli.js check <content>          # broken links, for CI
 | Project | Role |
 |---|---|
 | **mndflow** | the look: colour ramp, monospace type, chips, cards and boxes follow its design language |
-| **mndsite** | publishes mndmap's output as any other content; nothing in it changes |
+| **mndsite** | a shell: publishes mndmap's output as any other content; mndmap never edits it |

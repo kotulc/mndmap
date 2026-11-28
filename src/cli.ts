@@ -5,7 +5,7 @@
  *    mndmap check <content>      read and report, writing nothing; fails on a broken link
  *
  *  Other flags: --urls directory|html, --assets <dir>, --title <name>, --dark retro|modern,
- *  --exclude <path> (repeatable), --config <mndmap.yaml>. Settings in mndmap.yaml are read first;
+ *  --exclude <path> (repeatable), --cards (the site as one deck), --config <mndmap.yaml>. Settings in mndmap.yaml are read first;
  *  flags win. */
 
 import { relative } from "node:path";
@@ -16,7 +16,7 @@ import { config } from "./config.js";
 
 const USAGE = `usage: mndmap build <content> [--out build] [--mode static|interactive] [--base /site]
                     [--urls directory|html] [--assets _assets/mndmap] [--title name]
-                    [--dark retro|modern] [--exclude path]... [--strict] [--config mndmap.yaml]
+                    [--dark retro|modern] [--exclude path]... [--strict] [--cards] [--config mndmap.yaml]
        mndmap check <content> [same options]`;
 
 
@@ -45,7 +45,7 @@ async function main() {
     options: {
       out: { type: "string" }, mode: { type: "string" }, urls: { type: "string" }, base: { type: "string" },
       assets: { type: "string" }, title: { type: "string" }, dark: { type: "string" },
-      strict: { type: "boolean" }, config: { type: "string" }, help: { type: "boolean", short: "h" },
+      strict: { type: "boolean" }, cards: { type: "boolean" }, config: { type: "string" }, help: { type: "boolean", short: "h" },
       exclude: { type: "string", multiple: true },
     },
   });
